@@ -13,3 +13,9 @@ skills/
 # Temporary files
 *.tmp
 *.bak
+
+# Demo/analysis outputs (generated during tasks)
+demo_output/
+
+# Memory MCP data (local to each installation)
+memory/
