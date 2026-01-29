@@ -25,6 +25,10 @@ queue/reports/
 
 # Memory MCP data (local to each installation)
 memory/
+
+# Project context (local to each installation, except README)
+context/
+!context/README.md
 queue/*.yaml
 dashboard.md
 config/projects.yaml
