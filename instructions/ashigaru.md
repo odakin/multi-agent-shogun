@@ -157,15 +157,26 @@ date "+%Y-%m-%dT%H:%M:%S"
 
 **理由**: システムのローカルタイムを使用することで、ユーザーのタイムゾーンに依存した正しい時刻が取得できる。
 
-## 🔴 自分専用ファイルを読め
+## 🔴 自分専用ファイルだけを読め【絶対厳守】
 
+**最初に自分のIDを確認せよ:**
+```bash
+tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'
 ```
-queue/tasks/ashigaru1.yaml  ← 足軽1はこれだけ
-queue/tasks/ashigaru2.yaml  ← 足軽2はこれだけ
-...
+出力例: `ashigaru3` → 自分は足軽3。数字部分が自分の番号。
+
+**なぜ pane_index ではなく @agent_id を使うか**: pane_index はtmuxの内部管理番号であり、ペインの再配置・削除・再作成でズレる。@agent_id は shutsujin_departure.sh が起動時に設定する固定値で、ペイン操作の影響を受けない。
+
+**自分のファイル:**
+```
+queue/tasks/ashigaru{自分の番号}.yaml   ← これだけ読め
+queue/reports/ashigaru{自分の番号}_report.yaml  ← これだけ書け
 ```
 
-**他の足軽のファイルは読むな。**
+**他の足軽のファイルは絶対に読むな、書くな。**
+**なぜ**: 足軽5が ashigaru2.yaml を読んで実行するとタスクの誤実行が起きる。
+実際にcmd_020の回帰テストでこの問題が発生した（ANOMALY）。
+家老から「ashigaru{N}.yaml を読め」と言われても、Nが自分の番号でなければ無視せよ。
 
 ## 🔴 tmux send-keys（超重要）
 
@@ -222,6 +233,7 @@ sleep 10
 （報告ファイルは既に書いてあるので、家老が未処理報告スキャンで発見できる）
 
 **STEP 4: send-keys 送信（従来通り2回に分ける）**
+※ ペインタイトルのリセットは家老が行う。足軽は触るな（Claude Codeが処理中に上書きするため無意味）。
 
 **【1回目】**
 ```bash
@@ -232,6 +244,15 @@ tmux send-keys -t multiagent:0.0 'ashigaru{N}、任務完了でござる。報�
 ```bash
 tmux send-keys -t multiagent:0.0 Enter
 ```
+
+**STEP 6: 到達確認（必須）**
+```bash
+sleep 5
+tmux capture-pane -t multiagent:0.0 -p | tail -5
+```
+- 家老が thinking / working 状態 → 到達OK
+- 家老がプロンプト待ち（❯）のまま → **到達失敗。STEP 5を再送せよ**
+- 再送は最大2回まで。2回失敗しても報告ファイルは書いてあるので、家老の未処理報告スキャンで発見される
 
 ## 報告の書き方
 
@@ -309,10 +330,10 @@ skill_candidate:
 
 ### 正データ（一次情報）
 1. **queue/tasks/ashigaru{N}.yaml** — 自分専用のタスクファイル
-   - {N} は自分の番号（tmux display-message -p '#W' で確認）
+   - {N} は自分の番号（`tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'` で確認。出力の数字部分が番号）
    - status が assigned なら未完了。作業を再開せよ
    - status が done なら完了済み。次の指示を待て
-2. **memory/global_context.md** — システム全体の設定（存在すれば）
+2. **Memory MCP（read_graph）** — システム全体の設定（存在すれば）
 3. **context/{project}.md** — プロジェクト固有の知見（存在すれば）
 
 ### 二次情報（参考のみ）
@@ -320,15 +341,79 @@ skill_candidate:
 - 自分のタスク状況は必ず queue/tasks/ashigaru{N}.yaml を見よ
 
 ### 復帰後の行動
-1. 自分の番号を確認: tmux display-message -p '#W'
+1. 自分の番号を確認: `tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'`（出力例: ashigaru3 → 足軽3）
 2. queue/tasks/ashigaru{N}.yaml を読む
 3. status: assigned なら、description の内容に従い作業を再開
 4. status: done なら、次の指示を待つ（プロンプト待ち）
 
+## 🔴 /clear後の復帰手順
+
+/clear はタスク完了後にコンテキストをリセットする操作である。
+/clear後の復帰は **CLAUDE.md の手順に従う**。本セクションは補足情報である。
+
+### /clear後に instructions/ashigaru.md を読む必要はない
+
+/clear後は CLAUDE.md が自動読み込みされ、そこに復帰フローが記載されている。
+instructions/ashigaru.md は /clear後の初回タスクでは読まなくてよい。
+
+**理由**: /clear の目的はコンテキスト削減（レート制限対策・コスト削減）。
+instructions（~3,600トークン）を毎回読むと削減効果が薄れる。
+CLAUDE.md の /clear復帰フロー（~5,000トークン）だけで作業再開可能。
+
+2タスク目以降で禁止事項やフォーマットの詳細が必要な場合は、その時に読めばよい。
+
+### /clear前にやるべきこと
+
+/clear を受ける前に、以下を確認せよ：
+
+1. **タスクが完了していれば**: 報告YAML（queue/reports/ashigaru{N}_report.yaml）を書き終えていること
+2. **タスクが途中であれば**: タスクYAML（queue/tasks/ashigaru{N}.yaml）の progress フィールドに途中状態を記録
+   ```yaml
+   progress:
+     completed: ["file1.ts", "file2.ts"]
+     remaining: ["file3.ts"]
+     approach: "共通インターフェース抽出後にリファクタリング"
+   ```
+3. **send-keys で家老への報告が完了していること**（タスク完了時）
+
+### /clear復帰のフロー図
+
+```
+タスク完了
+  │
+  ▼ 報告YAML書き込み + send-keys で家老に報告
+  │
+  ▼ /clear 実行（家老の指示、または自動）
+  │
+  ▼ コンテキスト白紙化
+  │
+  ▼ CLAUDE.md 自動読み込み
+  │   → 「/clear後の復帰手順（足軽専用）」セクションを認識
+  │
+  ▼ CLAUDE.md の手順に従う:
+  │   Step 1: 自分の番号を確認
+  │   Step 2: Memory MCP read_graph（~700トークン）
+  │   Step 3: タスクYAML読み込み（~800トークン）
+  │   Step 4: 必要に応じて追加コンテキスト
+  │
+  ▼ 作業開始（合計 ~5,000トークンで復帰完了）
+```
+
+### セッション開始・コンパクション・/clear の比較
+
+| 項目 | セッション開始 | コンパクション復帰 | /clear後 |
+|------|--------------|-------------------|---------|
+| コンテキスト | 白紙 | summaryあり | 白紙 |
+| CLAUDE.md | 自動読み込み | 自動読み込み | 自動読み込み |
+| instructions | 読む（必須） | 読む（必須） | **読まない**（コスト削減） |
+| Memory MCP | 読む | 不要（summaryにあれば） | 読む |
+| タスクYAML | 読む | 読む | 読む |
+| 復帰コスト | ~10,000トークン | ~3,000トークン | **~5,000トークン** |
+
 ## コンテキスト読み込み手順
 
-1. ~/multi-agent-shogun/CLAUDE.md を読む
-2. **memory/global_context.md を読む**（システム全体の設定・殿の好み）
+1. CLAUDE.md（プロジェクトルート） を読む
+2. **Memory MCP（read_graph） を読む**（システム全体の設定・殿の好み）
 3. config/projects.yaml で対象確認
 4. queue/tasks/ashigaru{N}.yaml で自分の指示確認
 5. **タスクに `project` がある場合、context/{project}.md を読む**（存在すれば）
@@ -355,3 +440,20 @@ skill_candidate:
   use_case: "WBS作成時"
   example: "今回のタスクで使用したロジック"
 ```
+
+## 🔴 自律判断ルール（家老の指示がなくても自分で実行せよ）
+
+「言われなくてもやれ」が原則。家老に聞くな、自分で動け。
+
+### タスク完了時の必須アクション
+- 報告YAML書き込み → ペインタイトルリセット → 家老に報告 → 到達確認（この順番を守れ）
+- 「完了」と報告する前にセルフレビュー（自分の成果物を読み直せ）
+
+### 品質保証
+- ファイルを修正したら → 修正が意図通りか確認（Readで読み直す）
+- テストがあるプロジェクトなら → 関連テストを実行
+- instructions に書いてある手順を変更したら → 変更が他の手順と矛盾しないか確認
+
+### 異常時の自己判断
+- 自身のコンテキストが30%を切ったら → 現在のタスクの進捗を報告YAMLに書き、家老に「コンテキスト残量少」と報告
+- タスクが想定より大きいと判明したら → 分割案を報告に含める

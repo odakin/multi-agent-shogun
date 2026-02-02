@@ -3,7 +3,8 @@
 # Daily Deployment Script for Multi-Agent Orchestration System
 #
 # 使用方法:
-#   ./shutsujin_departure.sh           # 全エージェント起動（通常）
+#   ./shutsujin_departure.sh           # 全エージェント起動（前回の状態を維持）
+#   ./shutsujin_departure.sh -c        # キューをリセットして起動（クリーンスタート）
 #   ./shutsujin_departure.sh -s        # セットアップのみ（Claude起動なし）
 #   ./shutsujin_departure.sh -h        # ヘルプ表示
 
@@ -73,12 +74,22 @@ generate_prompt() {
 # ═══════════════════════════════════════════════════════════════════════════════
 SETUP_ONLY=false
 OPEN_TERMINAL=false
+CLEAN_MODE=false
+KESSEN_MODE=false
 SHELL_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         -s|--setup-only)
             SETUP_ONLY=true
+            shift
+            ;;
+        -c|--clean)
+            CLEAN_MODE=true
+            shift
+            ;;
+        -k|--kessen)
+            KESSEN_MODE=true
             shift
             ;;
         -t|--terminal)
@@ -101,6 +112,10 @@ while [[ $# -gt 0 ]]; do
             echo "使用方法: ./shutsujin_departure.sh [オプション]"
             echo ""
             echo "オプション:"
+            echo "  -c, --clean         キューとダッシュボードをリセットして起動（クリーンスタート）"
+            echo "                      未指定時は前回の状態を維持して起動"
+            echo "  -k, --kessen        決戦の陣（全足軽をOpus Thinkingで起動）"
+            echo "                      未指定時は平時の陣（足軽1-4=Sonnet, 足軽5-8=Opus）"
             echo "  -s, --setup-only    tmuxセッションのセットアップのみ（Claude起動なし）"
             echo "  -t, --terminal      Windows Terminal で新しいタブを開く"
             echo "  -shell, --shell SH  シェルを指定（bash または zsh）"
@@ -108,11 +123,24 @@ while [[ $# -gt 0 ]]; do
             echo "  -h, --help          このヘルプを表示"
             echo ""
             echo "例:"
-            echo "  ./shutsujin_departure.sh              # 全エージェント起動（通常の出陣）"
+            echo "  ./shutsujin_departure.sh              # 前回の状態を維持して出陣"
+            echo "  ./shutsujin_departure.sh -c           # クリーンスタート（キューリセット）"
             echo "  ./shutsujin_departure.sh -s           # セットアップのみ（手動でClaude起動）"
             echo "  ./shutsujin_departure.sh -t           # 全エージェント起動 + ターミナルタブ展開"
             echo "  ./shutsujin_departure.sh -shell bash  # bash用プロンプトで起動"
+            echo "  ./shutsujin_departure.sh -k           # 決戦の陣（全足軽Opus Thinking）"
+            echo "  ./shutsujin_departure.sh -c -k         # クリーンスタート＋決戦の陣"
             echo "  ./shutsujin_departure.sh -shell zsh   # zsh用プロンプトで起動"
+            echo ""
+            echo "モデル構成:"
+            echo "  将軍:      Opus（thinking無効）"
+            echo "  家老:      Opus Thinking"
+            echo "  足軽1-4:   Sonnet Thinking"
+            echo "  足軽5-8:   Opus Thinking"
+            echo ""
+            echo "陣形:"
+            echo "  平時の陣（デフォルト）: 足軽1-4=Sonnet Thinking, 足軽5-8=Opus Thinking"
+            echo "  決戦の陣（--kessen）:   全足軽=Opus Thinking"
             echo ""
             echo "エイリアス:"
             echo "  csst  → cd /mnt/c/tools/multi-agent-shogun && ./shutsujin_departure.sh"
@@ -211,38 +239,42 @@ tmux kill-session -t multiagent 2>/dev/null && log_info "  └─ multiagent陣�
 tmux kill-session -t shogun 2>/dev/null && log_info "  └─ shogun本陣、撤収完了" || log_info "  └─ shogun本陣は存在せず"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEP 1.5: 前回記録のバックアップ（内容がある場合のみ）
+# STEP 1.5: 前回記録のバックアップ（--clean時のみ、内容がある場合）
 # ═══════════════════════════════════════════════════════════════════════════════
-BACKUP_DIR="./logs/backup_$(date '+%Y%m%d_%H%M%S')"
-NEED_BACKUP=false
+if [ "$CLEAN_MODE" = true ]; then
+    BACKUP_DIR="./logs/backup_$(date '+%Y%m%d_%H%M%S')"
+    NEED_BACKUP=false
 
-if [ -f "./dashboard.md" ]; then
-    if grep -q "cmd_" "./dashboard.md" 2>/dev/null; then
-        NEED_BACKUP=true
+    if [ -f "./dashboard.md" ]; then
+        if grep -q "cmd_" "./dashboard.md" 2>/dev/null; then
+            NEED_BACKUP=true
+        fi
+    fi
+
+    if [ "$NEED_BACKUP" = true ]; then
+        mkdir -p "$BACKUP_DIR" || true
+        cp "./dashboard.md" "$BACKUP_DIR/" 2>/dev/null || true
+        cp -r "./queue/reports" "$BACKUP_DIR/" 2>/dev/null || true
+        cp -r "./queue/tasks" "$BACKUP_DIR/" 2>/dev/null || true
+        cp "./queue/shogun_to_karo.yaml" "$BACKUP_DIR/" 2>/dev/null || true
+        log_info "📦 前回の記録をバックアップ: $BACKUP_DIR"
     fi
 fi
 
-if [ "$NEED_BACKUP" = true ]; then
-    mkdir -p "$BACKUP_DIR" || true
-    cp "./dashboard.md" "$BACKUP_DIR/" 2>/dev/null || true
-    cp -r "./queue/reports" "$BACKUP_DIR/" 2>/dev/null || true
-    cp -r "./queue/tasks" "$BACKUP_DIR/" 2>/dev/null || true
-    cp "./queue/shogun_to_karo.yaml" "$BACKUP_DIR/" 2>/dev/null || true
-    log_info "📦 前回の記録をバックアップ: $BACKUP_DIR"
-fi
-
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEP 2: 報告ファイルリセット
+# STEP 2: キューディレクトリ確保 + リセット（--clean時のみリセット）
 # ═══════════════════════════════════════════════════════════════════════════════
-log_info "📜 前回の軍議記録を破棄中..."
 
-# queue ディレクトリが存在しない場合は作成
+# queue ディレクトリが存在しない場合は作成（初回起動時に必要）
 [ -d ./queue/reports ] || mkdir -p ./queue/reports
 [ -d ./queue/tasks ] || mkdir -p ./queue/tasks
 
-# 足軽タスクファイルリセット
-for i in {1..8}; do
-    cat > ./queue/tasks/ashigaru${i}.yaml << EOF
+if [ "$CLEAN_MODE" = true ]; then
+    log_info "📜 前回の軍議記録を破棄中..."
+
+    # 足軽タスクファイルリセット
+    for i in {1..8}; do
+        cat > ./queue/tasks/ashigaru${i}.yaml << EOF
 # 足軽${i}専用タスクファイル
 task:
   task_id: null
@@ -252,25 +284,25 @@ task:
   status: idle
   timestamp: ""
 EOF
-done
+    done
 
-# 足軽レポートファイルリセット
-for i in {1..8}; do
-    cat > ./queue/reports/ashigaru${i}_report.yaml << EOF
+    # 足軽レポートファイルリセット
+    for i in {1..8}; do
+        cat > ./queue/reports/ashigaru${i}_report.yaml << EOF
 worker_id: ashigaru${i}
 task_id: null
 timestamp: ""
 status: idle
 result: null
 EOF
-done
+    done
 
-# キューファイルリセット
-cat > ./queue/shogun_to_karo.yaml << 'EOF'
+    # キューファイルリセット
+    cat > ./queue/shogun_to_karo.yaml << 'EOF'
 queue: []
 EOF
 
-cat > ./queue/karo_to_ashigaru.yaml << 'EOF'
+    cat > ./queue/karo_to_ashigaru.yaml << 'EOF'
 assignments:
   ashigaru1:
     task_id: null
@@ -314,17 +346,22 @@ assignments:
     status: idle
 EOF
 
-log_success "✅ 陣払い完了"
+    log_success "✅ 陣払い完了"
+else
+    log_info "📜 前回の陣容を維持して出陣..."
+    log_success "✅ キュー・報告ファイルはそのまま継続"
+fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEP 3: ダッシュボード初期化
+# STEP 3: ダッシュボード初期化（--clean時のみ）
 # ═══════════════════════════════════════════════════════════════════════════════
-log_info "📊 戦況報告板を初期化中..."
-TIMESTAMP=$(date "+%Y-%m-%d %H:%M")
+if [ "$CLEAN_MODE" = true ]; then
+    log_info "📊 戦況報告板を初期化中..."
+    TIMESTAMP=$(date "+%Y-%m-%d %H:%M")
 
-if [ "$LANG_SETTING" = "ja" ]; then
-    # 日本語のみ
-    cat > ./dashboard.md << EOF
+    if [ "$LANG_SETTING" = "ja" ]; then
+        # 日本語のみ
+        cat > ./dashboard.md << EOF
 # 📊 戦況報告
 最終更新: ${TIMESTAMP}
 
@@ -350,9 +387,9 @@ if [ "$LANG_SETTING" = "ja" ]; then
 ## ❓ 伺い事項
 なし
 EOF
-else
-    # 日本語 + 翻訳併記
-    cat > ./dashboard.md << EOF
+    else
+        # 日本語 + 翻訳併記
+        cat > ./dashboard.md << EOF
 # 📊 戦況報告 (Battle Status Report)
 最終更新 (Last Updated): ${TIMESTAMP}
 
@@ -378,9 +415,12 @@ else
 ## ❓ 伺い事項 (Questions for Lord)
 なし (None)
 EOF
-fi
+    fi
 
-log_success "  └─ ダッシュボード初期化完了 (言語: $LANG_SETTING, シェル: $SHELL_SETTING)"
+    log_success "  └─ ダッシュボード初期化完了 (言語: $LANG_SETTING, シェル: $SHELL_SETTING)"
+else
+    log_info "📊 前回のダッシュボードを維持"
+fi
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -415,6 +455,7 @@ fi
 SHOGUN_PROMPT=$(generate_prompt "将軍" "magenta" "$SHELL_SETTING")
 tmux send-keys -t shogun:main "cd \"$(pwd)\" && export PS1='${SHOGUN_PROMPT}' && clear" Enter
 tmux select-pane -t shogun:main -P 'bg=#002b36'  # 将軍の Solarized Dark
+tmux set-option -p -t shogun:main @agent_id "shogun"
 
 log_success "  └─ 将軍の本陣、構築完了"
 echo ""
@@ -463,17 +504,38 @@ tmux select-pane -t "multiagent:agents.$((PANE_BASE+6))"
 tmux split-window -v
 tmux split-window -v
 
-# ペインタイトル設定（0: karo, 1-8: ashigaru1-8）
-PANE_TITLES=("karo" "ashigaru1" "ashigaru2" "ashigaru3" "ashigaru4" "ashigaru5" "ashigaru6" "ashigaru7" "ashigaru8")
+# ペインラベル設定（プロンプト用: モデル名なし）
+PANE_LABELS=("karo" "ashigaru1" "ashigaru2" "ashigaru3" "ashigaru4" "ashigaru5" "ashigaru6" "ashigaru7" "ashigaru8")
+# ペインタイトル設定（tmuxタイトル用: モデル名付き）
+if [ "$KESSEN_MODE" = true ]; then
+    PANE_TITLES=("karo(Opus)" "ashigaru1(Opus)" "ashigaru2(Opus)" "ashigaru3(Opus)" "ashigaru4(Opus)" "ashigaru5(Opus)" "ashigaru6(Opus)" "ashigaru7(Opus)" "ashigaru8(Opus)")
+else
+    PANE_TITLES=("karo(Opus)" "ashigaru1(Sonnet)" "ashigaru2(Sonnet)" "ashigaru3(Sonnet)" "ashigaru4(Sonnet)" "ashigaru5(Opus)" "ashigaru6(Opus)" "ashigaru7(Opus)" "ashigaru8(Opus)")
+fi
 # 色設定（karo: 赤, ashigaru: 青）
 PANE_COLORS=("red" "blue" "blue" "blue" "blue" "blue" "blue" "blue" "blue")
+
+AGENT_IDS=("karo" "ashigaru1" "ashigaru2" "ashigaru3" "ashigaru4" "ashigaru5" "ashigaru6" "ashigaru7" "ashigaru8")
+
+# モデル名設定（pane-border-format で常時表示するため）
+if [ "$KESSEN_MODE" = true ]; then
+    MODEL_NAMES=("Opus Thinking" "Opus Thinking" "Opus Thinking" "Opus Thinking" "Opus Thinking" "Opus Thinking" "Opus Thinking" "Opus Thinking" "Opus Thinking")
+else
+    MODEL_NAMES=("Opus Thinking" "Sonnet Thinking" "Sonnet Thinking" "Sonnet Thinking" "Sonnet Thinking" "Opus Thinking" "Opus Thinking" "Opus Thinking" "Opus Thinking")
+fi
 
 for i in {0..8}; do
     p=$((PANE_BASE + i))
     tmux select-pane -t "multiagent:agents.${p}" -T "${PANE_TITLES[$i]}"
-    PROMPT_STR=$(generate_prompt "${PANE_TITLES[$i]}" "${PANE_COLORS[$i]}" "$SHELL_SETTING")
+    tmux set-option -p -t "multiagent:agents.${p}" @agent_id "${AGENT_IDS[$i]}"
+    tmux set-option -p -t "multiagent:agents.${p}" @model_name "${MODEL_NAMES[$i]}"
+    PROMPT_STR=$(generate_prompt "${PANE_LABELS[$i]}" "${PANE_COLORS[$i]}" "$SHELL_SETTING")
     tmux send-keys -t "multiagent:agents.${p}" "cd \"$(pwd)\" && export PS1='${PROMPT_STR}' && clear" Enter
 done
+
+# pane-border-format でモデル名を常時表示（Claude Codeがペインタイトルを上書きしても消えない）
+tmux set-option -t multiagent -w pane-border-status top
+tmux set-option -t multiagent -w pane-border-format '#{pane_index} #{@agent_id} (#{?#{==:#{@model_name},},unknown,#{@model_name}})'
 
 log_success "  └─ 家老・足軽の陣、構築完了"
 echo ""
@@ -500,15 +562,42 @@ if [ "$SETUP_ONLY" = false ]; then
     # 少し待機（安定のため）
     sleep 1
 
-    # 家老 + 足軽（9ペイン）
-    for i in {0..8}; do
-        p=$((PANE_BASE + i))
-        tmux send-keys -t "multiagent:agents.${p}" "claude --dangerously-skip-permissions"
-        tmux send-keys -t "multiagent:agents.${p}" Enter
-    done
-    log_info "  └─ 家老・足軽、召喚完了"
+    # 家老（pane 0）: Opus Thinking
+    p=$((PANE_BASE + 0))
+    tmux send-keys -t "multiagent:agents.${p}" "claude --model opus --dangerously-skip-permissions"
+    tmux send-keys -t "multiagent:agents.${p}" Enter
+    log_info "  └─ 家老（Opus Thinking）、召喚完了"
 
-    log_success "✅ 全軍 Claude Code 起動完了"
+    if [ "$KESSEN_MODE" = true ]; then
+        # 決戦の陣: 全足軽 Opus Thinking
+        for i in {1..8}; do
+            p=$((PANE_BASE + i))
+            tmux send-keys -t "multiagent:agents.${p}" "claude --model opus --dangerously-skip-permissions"
+            tmux send-keys -t "multiagent:agents.${p}" Enter
+        done
+        log_info "  └─ 足軽1-8（Opus Thinking）、決戦の陣で召喚完了"
+    else
+        # 平時の陣: 足軽1-4=Sonnet, 足軽5-8=Opus
+        for i in {1..4}; do
+            p=$((PANE_BASE + i))
+            tmux send-keys -t "multiagent:agents.${p}" "claude --model sonnet --dangerously-skip-permissions"
+            tmux send-keys -t "multiagent:agents.${p}" Enter
+        done
+        log_info "  └─ 足軽1-4（Sonnet Thinking）、召喚完了"
+
+        for i in {5..8}; do
+            p=$((PANE_BASE + i))
+            tmux send-keys -t "multiagent:agents.${p}" "claude --model opus --dangerously-skip-permissions"
+            tmux send-keys -t "multiagent:agents.${p}" Enter
+        done
+        log_info "  └─ 足軽5-8（Opus Thinking）、召喚完了"
+    fi
+
+    if [ "$KESSEN_MODE" = true ]; then
+        log_success "✅ 決戦の陣で出陣！全軍Opus！"
+    else
+        log_success "✅ 平時の陣で出陣"
+    fi
     echo ""
 
     # ═══════════════════════════════════════════════════════════════════════════

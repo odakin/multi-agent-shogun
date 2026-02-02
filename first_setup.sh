@@ -574,6 +574,61 @@ fi
 RESULTS+=("alias設定: OK")
 
 # ============================================================
+# STEP 10.5: WSL メモリ最適化設定
+# ============================================================
+if [ "$IS_WSL" = true ]; then
+    log_step "STEP 10.5: WSL メモリ最適化設定"
+
+    # .wslconfig の確認・設定（Windows側のユーザーディレクトリに配置）
+    WIN_USER_DIR=$(cmd.exe /C "echo %USERPROFILE%" 2>/dev/null | tr -d '\r')
+    if [ -n "$WIN_USER_DIR" ]; then
+        # Windows パスを WSL パスに変換
+        WSLCONFIG_PATH=$(wslpath "$WIN_USER_DIR")/.wslconfig
+
+        if [ -f "$WSLCONFIG_PATH" ]; then
+            if grep -q "autoMemoryReclaim" "$WSLCONFIG_PATH" 2>/dev/null; then
+                log_info ".wslconfig に autoMemoryReclaim は既に設定済みです"
+            else
+                log_info ".wslconfig に autoMemoryReclaim=gradual を追加中..."
+                # [experimental] セクションがあるか確認
+                if grep -q "\[experimental\]" "$WSLCONFIG_PATH" 2>/dev/null; then
+                    # [experimental] セクションの直後に追加
+                    sed -i '/\[experimental\]/a autoMemoryReclaim=gradual' "$WSLCONFIG_PATH"
+                else
+                    echo "" >> "$WSLCONFIG_PATH"
+                    echo "[experimental]" >> "$WSLCONFIG_PATH"
+                    echo "autoMemoryReclaim=gradual" >> "$WSLCONFIG_PATH"
+                fi
+                log_success ".wslconfig に autoMemoryReclaim=gradual を追加しました"
+                log_warn "反映には 'wsl --shutdown' 後の再起動が必要です"
+            fi
+        else
+            log_info ".wslconfig を新規作成中..."
+            cat > "$WSLCONFIG_PATH" << 'EOF'
+[experimental]
+autoMemoryReclaim=gradual
+EOF
+            log_success ".wslconfig を作成しました (autoMemoryReclaim=gradual)"
+            log_warn "反映には 'wsl --shutdown' 後の再起動が必要です"
+        fi
+
+        RESULTS+=("WSL メモリ最適化: OK (.wslconfig設定済み)")
+    else
+        log_warn "Windowsユーザーディレクトリの取得に失敗しました"
+        log_info "手動で %USERPROFILE%\\.wslconfig に以下を追加してください:"
+        echo "  [experimental]"
+        echo "  autoMemoryReclaim=gradual"
+        RESULTS+=("WSL メモリ最適化: 手動設定必要")
+    fi
+
+    # 即時キャッシュクリアの案内
+    log_info "メモリキャッシュを即時クリアするには以下を実行:"
+    echo "  sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'"
+else
+    log_info "WSL環境ではないため、メモリ最適化設定をスキップ"
+fi
+
+# ============================================================
 # STEP 11: Memory MCP セットアップ
 # ============================================================
 log_step "STEP 11: Memory MCP セットアップ"

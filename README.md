@@ -351,26 +351,44 @@ Perfect for:
 | Agent | Model | Thinking | Reason |
 |-------|-------|----------|--------|
 | Shogun | Opus | Disabled | Delegation & dashboard updates don't need deep reasoning |
-| Karo | Default | Enabled | Task distribution requires careful judgment |
-| Ashigaru | Default | Enabled | Actual implementation needs full capabilities |
+| Karo | Opus | Enabled | Task distribution requires careful judgment |
+| Ashigaru 1-4 | Sonnet | Enabled | Cost-effective for standard tasks |
+| Ashigaru 5-8 | Opus | Enabled | Full capabilities for complex tasks |
 
 The Shogun uses `MAX_THINKING_TOKENS=0` to disable extended thinking, reducing latency and cost while maintaining Opus-level judgment for high-level decisions.
 
+#### Formation Modes
+
+| Formation | Ashigaru 1-4 | Ashigaru 5-8 | Command |
+|-----------|-------------|-------------|---------|
+| **Normal** (default) | Sonnet Thinking | Opus Thinking | `./shutsujin_departure.sh` |
+| **Battle** (all-out) | Opus Thinking | Opus Thinking | `./shutsujin_departure.sh -k` |
+
+In Normal formation, half the workers use the cheaper Sonnet model. Switch to Battle formation (`-k` / `--kessen`) for critical tasks requiring maximum capability. Karo can also temporarily promote individual Ashigaru with `/model opus` during a session.
+
 ### 📁 Context Management
 
-The system uses a three-layer context structure for efficient knowledge sharing:
+The system uses a four-layer context structure:
 
-| Layer | Location | Purpose |
-|-------|----------|---------|
-| Memory MCP | `memory/shogun_memory.jsonl` | Persistent memory across sessions (preferences, decisions) |
-| Global | `memory/global_context.md` | System-wide settings, user preferences |
-| Project | `context/{project}.md` | Project-specific knowledge and state |
+| Layer | Location | Purpose | Persistence |
+|-------|----------|---------|-------------|
+| Layer 1: Memory MCP | `memory/shogun_memory.jsonl` | Preferences, rules, cross-project knowledge | Permanent (across sessions) |
+| Layer 2: Project | `config/projects.yaml`, `context/{project}.md` | Project-specific knowledge and state | Permanent (per project) |
+| Layer 3: YAML Queue | `queue/tasks/`, `queue/reports/` | Task assignments and reports (source of truth) | Permanent (file-based) |
+| Layer 4: Session | CLAUDE.md, instructions/*.md | Working context | Volatile (`/clear` wipes it) |
 
-This design allows:
-- Any Ashigaru to pick up work on any project
-- Consistent context across agent switches
-- Clear separation of concerns
-- Knowledge persistence across sessions
+#### /clear Protocol (Cost Optimization)
+
+Long-running agents accumulate context, increasing API costs with every request. The `/clear` command wipes session memory (Layer 4), but Layers 1-3 survive as files.
+
+After `/clear`, an Ashigaru recovers in **~1,950 tokens** (target was 5,000):
+
+1. CLAUDE.md auto-loads → knows it's part of the shogun system
+2. `tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'` → knows its own identity
+3. Memory MCP → recalls user preferences (~700 tokens)
+4. Task YAML → picks up next task (~800 tokens)
+
+This design allows cost control without losing critical state.
 
 ### Universal Context Template
 
@@ -420,6 +438,19 @@ The Shogun → Karo → Ashigaru hierarchy exists for:
 - **send-keys**: Event-driven wakeups (no polling = no wasted API calls)
 - **No direct calls**: Agents can't interrupt each other or your input
 - **Conflict avoidance**: Each Ashigaru has dedicated files, preventing race conditions
+- **2-second interval**: When sending to multiple Ashigaru, Karo inserts `sleep 2` between each send to prevent input buffer overflow (tested: 14% → 87.5% delivery rate)
+
+### Agent Identity (@agent_id)
+
+Each pane has a permanent `@agent_id` tmux user option (e.g., `karo`, `ashigaru1`). Unlike `pane_index` which can shift when panes are rearranged, `@agent_id` is fixed at startup by `shutsujin_departure.sh`.
+
+Agents identify themselves with:
+```bash
+tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'
+```
+The `-t "$TMUX_PANE"` is required — without it, tmux returns the **active** pane's value, not the calling pane's.
+
+Model names are also stored as `@model_name` and displayed via `pane-border-format`, so they remain visible even when Claude Code overwrites pane titles.
 
 ### Why Only Karo Updates Dashboard?
 
@@ -597,6 +628,10 @@ language: en   # Japanese + English translation
 ./shutsujin_departure.sh -s
 ./shutsujin_departure.sh --setup-only
 
+# Battle formation: all Ashigaru use Opus (max capability, higher cost)
+./shutsujin_departure.sh -k
+./shutsujin_departure.sh --kessen
+
 # Full startup + open Windows Terminal tabs
 ./shutsujin_departure.sh -t
 ./shutsujin_departure.sh --terminal
@@ -773,6 +808,28 @@ Check the worker's pane:
 tmux attach-session -t multiagent
 # Use Ctrl+B then number to switch panes
 ```
+
+</details>
+
+<details>
+<summary><b>Shogun/agent crashed? (Claude Code process killed)</b></summary>
+
+**Do NOT use `css` or any tmux session alias to restart.** These aliases create tmux sessions, and running them inside an existing tmux pane causes nested sessions (session-within-a-session), which corrupts input and makes the pane unusable.
+
+**Correct restart method:**
+
+```bash
+# Option 1: Run claude directly in the pane
+claude --model opus --dangerously-skip-permissions
+
+# Option 2: Karo can force-restart via respawn-pane (kills nested sessions too)
+tmux respawn-pane -t shogun:0.0 -k 'claude --model opus --dangerously-skip-permissions'
+```
+
+**If you accidentally nested tmux:**
+1. Press `Ctrl+B` then `d` to detach from the inner session
+2. Then run `claude` directly (not `css`)
+3. If detach doesn't work, use `tmux respawn-pane -k` from another pane
 
 </details>
 

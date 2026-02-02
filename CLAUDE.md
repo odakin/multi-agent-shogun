@@ -1,7 +1,7 @@
 # multi-agent-shogun システム構成
 
-> **Version**: 1.0.0
-> **Last Updated**: 2026-01-27
+> **Version**: 2.0
+> **Last Updated**: 2026-02-02
 
 ## 概要
 multi-agent-shogunは、Claude Code + tmux を使ったマルチエージェント並列開発基盤である。
@@ -30,10 +30,10 @@ Memory MCPには、コンパクションを超えて永続化すべきルール�
 
 コンパクション後は作業前に必ず以下を実行せよ：
 
-1. **自分の位置を確認**: `tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}'`
-   - `shogun:0.0` → 将軍
-   - `multiagent:0.0` → 家老
-   - `multiagent:0.1` ～ `multiagent:0.8` → 足軽1～8
+1. **自分のIDを確認**: `tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'`
+   - `shogun` → 将軍
+   - `karo` → 家老
+   - `ashigaru1` ～ `ashigaru8` → 足軽1～8
 2. **対応する instructions を読む**:
    - 将軍 → instructions/shogun.md
    - 家老 → instructions/karo.md
@@ -46,6 +46,83 @@ summaryの「次のステップ」を見てすぐ作業してはならぬ。ま�
 > **重要**: dashboard.md は二次情報（家老が整形した要約）であり、正データではない。
 > 正データは各YAMLファイル（queue/shogun_to_karo.yaml, queue/tasks/, queue/reports/）である。
 > コンパクション復帰時は必ず正データを参照せよ。
+
+## /clear後の復帰手順（足軽専用）
+
+/clear を受けた足軽は、以下の手順で最小コストで復帰せよ。
+この手順は CLAUDE.md（自動読み込み）のみで完結する。instructions/ashigaru.md は読まなくてよい。
+
+> **セッション開始・コンパクション復帰との違い**:
+> - **セッション開始**: 白紙状態。Memory MCP + instructions + YAML を全て読む（フルロード）
+> - **コンパクション復帰**: summaryが残っている。正データから再確認
+> - **/clear後**: 白紙状態だが、最小限の読み込みで復帰可能（ライトロード）
+
+### /clear後の復帰フロー（~5,000トークンで復帰）
+
+```
+/clear実行
+  │
+  ▼ CLAUDE.md 自動読み込み（本セクションを認識）
+  │
+  ▼ Step 1: 自分のIDを確認
+  │   tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'
+  │   → 出力例: ashigaru3 → 自分は足軽3（数字部分が番号）
+  │
+  ▼ Step 2: Memory MCP 読み込み（~700トークン）
+  │   ToolSearch("select:mcp__memory__read_graph")
+  │   mcp__memory__read_graph()
+  │   → 殿の好み・ルール・教訓を復元
+  │   ※ 失敗時もStep 3以降を続行せよ（タスク実行は可能。殿の好みは一時的に不明になるのみ）
+  │
+  ▼ Step 3: 自分のタスクYAML読み込み（~800トークン）
+  │   queue/tasks/ashigaru{N}.yaml を読む
+  │   → status: assigned なら作業再開
+  │   → status: idle なら次の指示を待つ
+  │
+  ▼ Step 4: プロジェクト固有コンテキストの読み込み（条件必須）
+  │   タスクYAMLに project フィールドがある場合 → context/{project}.md を必ず読む
+  │   タスクYAMLに target_path がある場合 → 対象ファイルを読む
+  │   ※ projectフィールドがなければスキップ可
+  │
+  ▼ 作業開始
+```
+
+### /clear復帰の禁止事項
+- instructions/ashigaru.md を読む必要はない（コスト節約。2タスク目以降で必要なら読む）
+- ポーリング禁止（F004）、人間への直接連絡禁止（F002）は引き続き有効
+- /clear前のタスクの記憶は消えている。タスクYAMLだけを信頼せよ
+
+## コンテキスト保持の四層モデル
+
+```
+Layer 1: Memory MCP（永続・セッション跨ぎ）
+  └─ 殿の好み・ルール、プロジェクト横断知見
+  └─ 保存条件: ①gitに書けない/未反映 ②毎回必要 ③非冗長
+
+Layer 2: Project（永続・プロジェクト固有）
+  └─ config/projects.yaml: プロジェクト一覧・ステータス（軽量、頻繁に参照）
+  └─ projects/<id>.yaml: プロジェクト詳細（重量、必要時のみ。Git管理外・機密情報含む）
+  └─ context/{project}.md: PJ固有の技術知見・注意事項（足軽が参照する要約情報）
+
+Layer 3: YAML Queue（永続・ファイルシステム）
+  └─ queue/shogun_to_karo.yaml, queue/tasks/, queue/reports/
+  └─ タスクの正データ源
+
+Layer 4: Session（揮発・コンテキスト内）
+  └─ CLAUDE.md（自動読み込み）, instructions/*.md
+  └─ /clearで全消失、コンパクションでsummary化
+```
+
+### 各レイヤーの参照者
+
+| レイヤー | 将軍 | 家老 | 足軽 |
+|---------|------|------|------|
+| Layer 1: Memory MCP | read_graph | read_graph | read_graph（/clear復帰時） |
+| Layer 2: config/projects.yaml | プロジェクト一覧確認 | タスク割当時に参照 | 参照しない |
+| Layer 2: projects/<id>.yaml | プロジェクト全体像把握 | タスク分解時に参照 | 参照しない |
+| Layer 2: context/{project}.md | 参照しない | 参照しない | タスクにproject指定時に読む |
+| Layer 3: YAML Queue | shogun_to_karo.yaml | 全YAML | 自分のashigaru{N}.yaml |
+| Layer 4: Session | instructions/shogun.md | instructions/karo.md | instructions/ashigaru.md |
 
 ## 階層構造
 
