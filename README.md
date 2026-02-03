@@ -1,802 +1,355 @@
-# multi-agent-shogun
-
 <div align="center">
 
-**Multi-Agent Orchestration System for Claude Code**
+# multi-agent-shogun
 
-*One command. Eight AI agents working in parallel.*
+**Command your AI army like a feudal warlord.**
 
+Run 8 Claude Code agents in parallel — orchestrated through a samurai-inspired hierarchy with zero coordination overhead.
+
+[![GitHub Stars](https://img.shields.io/github/stars/yohey-w/multi-agent-shogun?style=social)](https://github.com/yohey-w/multi-agent-shogun)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Claude Code](https://img.shields.io/badge/Claude-Code-blueviolet)](https://claude.ai)
-[![tmux](https://img.shields.io/badge/tmux-required-green)](https://github.com/tmux/tmux)
+[![Claude Code](https://img.shields.io/badge/Built_for-Claude_Code-blueviolet)](https://code.claude.com)
+[![Shell](https://img.shields.io/badge/Shell%2FBash-100%25-green)]()
 
-[English](README.md) | [Japanese / 日本語](README_ja.md)
+[English](README.md) | [日本語](README_ja.md)
 
 </div>
 
+<p align="center">
+  <img src="assets/screenshots/tmux_multiagent_9panes.png" alt="multi-agent-shogun: 9 panes running in parallel" width="800">
+</p>
+
+<p align="center"><i>One Karo (manager) coordinating 8 Ashigaru (workers) — real session, no mock data.</i></p>
+
 ---
 
-## What is this?
+Give a single command. The **Shogun** (general) delegates to the **Karo** (steward), who distributes work across up to **8 Ashigaru** (foot soldiers) — all running as independent Claude Code processes in tmux. Communication flows through YAML files and tmux `send-keys`, meaning **zero extra API calls** for agent coordination.
 
-**multi-agent-shogun** is a system that runs multiple Claude Code instances simultaneously, organized like a feudal Japanese army.
+<!-- TODO: add demo.gif — record with asciinema or vhs -->
 
-**Why use this?**
-- Give one command, get 8 AI workers executing in parallel
-- No waiting - you can keep giving commands while tasks run in background
-- AI remembers your preferences across sessions (Memory MCP)
-- Real-time progress tracking via dashboard
+## Why Shogun?
+
+Most multi-agent frameworks burn API tokens on coordination. Shogun doesn't.
+
+| | Claude Code `Task` tool | LangGraph | CrewAI | **multi-agent-shogun** |
+|---|---|---|---|---|
+| **Architecture** | Subagents inside one process | Graph-based state machine | Role-based agents | Feudal hierarchy via tmux |
+| **Parallelism** | Sequential (one at a time) | Parallel nodes (v0.2+) | Limited | **8 independent agents** |
+| **Coordination cost** | API calls per Task | API + infra (Postgres/Redis) | API + CrewAI platform | **Zero** (YAML + tmux) |
+| **Observability** | Claude logs only | LangSmith integration | OpenTelemetry | **Live tmux panes** + dashboard |
+| **Skill discovery** | None | None | None | **Bottom-up auto-proposal** |
+| **Setup** | Built into Claude Code | Heavy (infra required) | pip install | Shell scripts |
+
+### What makes this different
+
+**Zero coordination overhead** — Agents talk through YAML files on disk. The only API calls are for actual work, not orchestration. Run 8 agents and pay only for 8 agents' work.
+
+**Full transparency** — Every agent runs in a visible tmux pane. Every instruction, report, and decision is a plain YAML file you can read, diff, and version-control. No black boxes.
+
+**Battle-tested hierarchy** — The Shogun → Karo → Ashigaru chain of command prevents conflicts by design: clear ownership, dedicated files per agent, event-driven communication, no polling.
+
+---
+
+## Bottom-Up Skill Discovery
+
+This is the feature no other framework has.
+
+As Ashigaru execute tasks, they **automatically identify reusable patterns** and propose them as skill candidates. The Karo aggregates these proposals in `dashboard.md`, and you — the Lord — decide what gets promoted to a permanent skill.
 
 ```
-        You (The Lord)
+Ashigaru finishes a task
+    ↓
+Notices: "I've done this pattern 3 times across different projects"
+    ↓
+Reports in YAML:  skill_candidate:
+                     found: true
+                     name: "api-endpoint-scaffold"
+                     reason: "Same REST scaffold pattern used in 3 projects"
+    ↓
+Appears in dashboard.md → You approve → Skill created in .claude/commands/
+    ↓
+Any agent can now invoke /api-endpoint-scaffold
+```
+
+Skills grow organically from real work — not from a predefined template library. Your skill set becomes a reflection of **your** workflow.
+
+---
+
+## Architecture
+
+```
+        You (上様 / The Lord)
              │
-             ▼ Give orders
+             ▼  Give orders
       ┌─────────────┐
-      │   SHOGUN    │  ← Receives your command, delegates immediately
+      │   SHOGUN    │  Receives your command, plans strategy
+      │    (将軍)    │  Session: shogun
       └──────┬──────┘
-             │ YAML files + tmux
+             │  YAML + send-keys
       ┌──────▼──────┐
-      │    KARO     │  ← Distributes tasks to workers
+      │    KARO     │  Breaks tasks down, assigns to workers
+      │    (家老)    │  Session: multiagent, pane 0
       └──────┬──────┘
-             │
+             │  YAML + send-keys
     ┌─┬─┬─┬─┴─┬─┬─┬─┐
-    │1│2│3│4│5│6│7│8│  ← 8 workers execute in parallel
+    │1│2│3│4│5│6│7│8│  Execute in parallel
     └─┴─┴─┴─┴─┴─┴─┴─┘
-        ASHIGARU
+         ASHIGARU (足軽)
+         Panes 1-8
 ```
 
----
+**Communication protocol:**
+- **Downward** (orders): Write YAML → wake target with `tmux send-keys`
+- **Upward** (reports): Write YAML only (no send-keys to avoid interrupting your input)
+- **Polling**: Forbidden. Event-driven only. Your API bill stays predictable.
 
-## 🚀 Quick Start
+**Context persistence (4 layers):**
 
-### 🪟 Windows Users (Most Common)
-
-<table>
-<tr>
-<td width="60">
-
-**Step 1**
-
-</td>
-<td>
-
-📥 **Download this repository**
-
-[Download ZIP](https://github.com/yohey-w/multi-agent-shogun/archive/refs/heads/main.zip) and extract to `C:\tools\multi-agent-shogun`
-
-*Or use git:* `git clone https://github.com/yohey-w/multi-agent-shogun.git C:\tools\multi-agent-shogun`
-
-</td>
-</tr>
-<tr>
-<td>
-
-**Step 2**
-
-</td>
-<td>
-
-🖱️ **Run `install.bat`**
-
-Right-click and select **"Run as administrator"** (required if WSL2 is not yet installed). The installer will guide you through each step — you may need to restart your PC or set up Ubuntu before re-running.
-
-</td>
-</tr>
-<tr>
-<td>
-
-**Step 3**
-
-</td>
-<td>
-
-🐧 **Open Ubuntu and run** (first time only)
-
-```bash
-cd /mnt/c/tools/multi-agent-shogun
-./first_setup.sh
-```
-
-</td>
-</tr>
-<tr>
-<td>
-
-**Step 4**
-
-</td>
-<td>
-
-✅ **Deploy!**
-
-```bash
-./shutsujin_departure.sh
-```
-
-</td>
-</tr>
-</table>
-
-#### 📅 Daily Startup (After First Install)
-
-Open **Ubuntu terminal** (WSL) and run:
-
-```bash
-cd /mnt/c/tools/multi-agent-shogun
-./shutsujin_departure.sh
-```
-
----
-
-<details>
-<summary>🐧 <b>Linux / Mac Users</b> (Click to expand)</summary>
-
-### First-Time Setup
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/yohey-w/multi-agent-shogun.git ~/multi-agent-shogun
-cd ~/multi-agent-shogun
-
-# 2. Make scripts executable
-chmod +x *.sh
-
-# 3. Run first-time setup
-./first_setup.sh
-```
-
-### Daily Startup
-
-```bash
-cd ~/multi-agent-shogun
-./shutsujin_departure.sh
-```
-
-</details>
-
----
-
-<details>
-<summary>❓ <b>What is WSL2? Why do I need it?</b> (Click to expand)</summary>
-
-### About WSL2
-
-**WSL2 (Windows Subsystem for Linux)** lets you run Linux inside Windows. This system uses `tmux` (a Linux tool) to manage multiple AI agents, so WSL2 is required on Windows.
-
-### Don't have WSL2 yet?
-
-No problem! When you run `install.bat`, it will:
-1. Check if WSL2 is installed (auto-install if missing)
-2. Check if Ubuntu is installed (auto-install if missing)
-3. Guide you to the next steps (`first_setup.sh`)
-
-**Quick install command** (run in PowerShell as Administrator):
-```powershell
-wsl --install
-```
-
-Then restart your computer and run `install.bat` again.
-
-</details>
-
----
-
-<details>
-<summary>📋 <b>Script Reference</b> (Click to expand)</summary>
-
-| Script | Purpose | When to Run |
-|--------|---------|-------------|
-| `install.bat` | Windows: WSL2 + Ubuntu setup | First time only |
-| `first_setup.sh` | Installs tmux, Node.js, Claude Code CLI + configures Memory MCP | First time only |
-| `shutsujin_departure.sh` | Creates tmux sessions + starts Claude Code + loads instructions | Every day |
-
-### What `install.bat` does automatically:
-- ✅ Checks if WSL2 is installed (auto-install if missing)
-- ✅ Checks if Ubuntu is installed (auto-install if missing)
-- ✅ Guides you to the next steps (`first_setup.sh`)
-
-### What `shutsujin_departure.sh` does:
-- ✅ Creates tmux sessions (shogun + multiagent)
-- ✅ Launches Claude Code on all agents
-- ✅ Automatically loads instruction files for each agent
-- ✅ Resets queue files for a fresh start
-
-**After running, all agents are ready to receive commands immediately!**
-
-</details>
-
----
-
-<details>
-<summary>🔧 <b>Prerequisites (for manual setup)</b> (Click to expand)</summary>
-
-If you prefer to install dependencies manually:
-
-| Requirement | How to install | Notes |
-|-------------|----------------|-------|
-| WSL2 + Ubuntu | `wsl --install` in PowerShell | Windows only |
-| Set Ubuntu as default | `wsl --set-default Ubuntu` | Required for scripts to work |
-| tmux | `sudo apt install tmux` | Terminal multiplexer |
-| Node.js v20+ | `nvm install 20` | Required for Claude Code CLI |
-| Claude Code CLI | `npm install -g @anthropic-ai/claude-code` | Anthropic's official CLI |
-
-</details>
-
----
-
-### ✅ What Happens After Setup
-
-After running either option, **AI agents** will start automatically:
-
-| Agent | Role | Quantity |
+| Layer | What | Survives |
 |-------|------|----------|
-| 🏯 Shogun | Commander - receives your orders | 1 |
-| 📋 Karo | Manager - distributes tasks | 1 |
-| ⚔️ Ashigaru | Workers - execute tasks in parallel | 8 |
+| Memory MCP | Preferences, rules, cross-project knowledge | Everything |
+| Project files | `config/projects.yaml`, `context/*.md` | Everything |
+| YAML Queue | Tasks, reports (source of truth) | Everything |
+| Session | `CLAUDE.md`, instructions | `/clear` wipes it |
 
-You'll see tmux sessions created:
-- `shogun` - Connect here to give commands
-- `multiagent` - Workers running in background
+After `/clear`, an agent recovers in **~2,000 tokens** by reading Memory MCP + its task YAML. No expensive re-prompting.
 
 ---
 
-## 📖 Basic Usage
+## Battle Formations
 
-### Step 1: Connect to Shogun
+Agents can be deployed in different **formations** (陣形 / *jindate*) depending on the task:
 
-After running `shutsujin_departure.sh`, all agents automatically load their instructions and are ready to work.
-
-Open a new terminal and connect to the Shogun:
+| Formation | Ashigaru 1–4 | Ashigaru 5–8 | Best for |
+|-----------|-------------|-------------|----------|
+| **Normal** (default) | Sonnet | Opus | Everyday tasks — cost-efficient |
+| **Battle** (`-k` flag) | Opus | Opus | Critical tasks — maximum capability |
 
 ```bash
-tmux attach-session -t shogun
+./shutsujin_departure.sh          # Normal formation
+./shutsujin_departure.sh -k       # Battle formation (all Opus)
 ```
 
-### Step 2: Give Your First Order
-
-The Shogun is already initialized! Just give your command:
-
-```
-Investigate the top 5 JavaScript frameworks and create a comparison table.
-```
-
-The Shogun will:
-1. Write the task to a YAML file
-2. Notify the Karo (manager)
-3. Return control to you immediately (you don't have to wait!)
-
-Meanwhile, the Karo distributes the work to Ashigaru workers who execute in parallel.
-
-### Step 3: Check Progress
-
-Open `dashboard.md` in your editor to see real-time status:
-
-```markdown
-## In Progress
-| Worker | Task | Status |
-|--------|------|--------|
-| Ashigaru 1 | React research | Running |
-| Ashigaru 2 | Vue research | Running |
-| Ashigaru 3 | Angular research | Done |
-```
+The Karo can also promote individual Ashigaru mid-session with `/model opus` when a specific task demands it.
 
 ---
 
-## ✨ Key Features
+## Quick Start
 
-### ⚡ 1. Parallel Execution
-
-One command can spawn up to 8 parallel tasks:
-
-```
-You: "Research 5 MCP servers"
-→ 5 Ashigaru start researching simultaneously
-→ Results ready in minutes, not hours
-```
-
-### 🔄 2. Non-Blocking Workflow
-
-The Shogun delegates immediately and returns control to you:
-
-```
-You: Give order → Shogun: Delegates → You: Can give next order immediately
-                                           ↓
-                         Workers: Execute in background
-                                           ↓
-                         Dashboard: Shows results
-```
-
-You never have to wait for long tasks to complete.
-
-### 🧠 3. Memory Across Sessions (Memory MCP)
-
-The AI remembers your preferences:
-
-```
-Session 1: You say "I prefer simple solutions"
-           → Saved to Memory MCP
-
-Session 2: AI reads memory at startup
-           → Won't suggest over-engineered solutions
-```
-
-### 📡 4. Event-Driven (No Polling)
-
-Agents communicate via YAML files and wake each other with tmux send-keys.
-**No API calls are wasted on polling loops.**
-
-### 📸 5. Screenshot Support
-
-VSCode's Claude Code extension lets you paste screenshots to explain issues. This CLI system brings the same capability:
-
-```
-# Configure your screenshot folder in config/settings.yaml
-screenshot:
-  path: "/mnt/c/Users/YourName/Pictures/Screenshots"
-
-# Then just tell the Shogun:
-You: "Check the latest screenshot"
-You: "Look at the last 2 screenshots"
-→ AI reads and analyzes your screenshots instantly
-```
-
-**💡 Windows Tip:** Press `Win + Shift + S` to take a screenshot. Configure the save location to match your `settings.yaml` path for seamless integration.
-
-Perfect for:
-- Explaining UI bugs visually
-- Showing error messages
-- Comparing before/after states
-
-### 🧠 Model Configuration
-
-| Agent | Model | Thinking | Reason |
-|-------|-------|----------|--------|
-| Shogun | Opus | Disabled | Delegation & dashboard updates don't need deep reasoning |
-| Karo | Opus | Enabled | Task distribution requires careful judgment |
-| Ashigaru 1-4 | Sonnet | Enabled | Cost-effective for standard tasks |
-| Ashigaru 5-8 | Opus | Enabled | Full capabilities for complex tasks |
-
-The Shogun uses `MAX_THINKING_TOKENS=0` to disable extended thinking, reducing latency and cost while maintaining Opus-level judgment for high-level decisions.
-
-#### Formation Modes
-
-| Formation | Ashigaru 1-4 | Ashigaru 5-8 | Command |
-|-----------|-------------|-------------|---------|
-| **Normal** (default) | Sonnet Thinking | Opus Thinking | `./shutsujin_departure.sh` |
-| **Battle** (all-out) | Opus Thinking | Opus Thinking | `./shutsujin_departure.sh -k` |
-
-In Normal formation, half the workers use the cheaper Sonnet model. Switch to Battle formation (`-k` / `--kessen`) for critical tasks requiring maximum capability. Karo can also temporarily promote individual Ashigaru with `/model opus` during a session.
-
-### 📁 Context Management
-
-The system uses a four-layer context structure:
-
-| Layer | Location | Purpose | Persistence |
-|-------|----------|---------|-------------|
-| Layer 1: Memory MCP | `memory/shogun_memory.jsonl` | Preferences, rules, cross-project knowledge | Permanent (across sessions) |
-| Layer 2: Project | `config/projects.yaml`, `context/{project}.md` | Project-specific knowledge and state | Permanent (per project) |
-| Layer 3: YAML Queue | `queue/tasks/`, `queue/reports/` | Task assignments and reports (source of truth) | Permanent (file-based) |
-| Layer 4: Session | CLAUDE.md, instructions/*.md | Working context | Volatile (`/clear` wipes it) |
-
-#### /clear Protocol (Cost Optimization)
-
-Long-running agents accumulate context, increasing API costs with every request. The `/clear` command wipes session memory (Layer 4), but Layers 1-3 survive as files.
-
-After `/clear`, an Ashigaru recovers in **~1,950 tokens** (target was 5,000):
-
-1. CLAUDE.md auto-loads → knows it's part of the shogun system
-2. `tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'` → knows its own identity
-3. Memory MCP → recalls user preferences (~700 tokens)
-4. Task YAML → picks up next task (~800 tokens)
-
-This design allows cost control without losing critical state.
-
-### Universal Context Template
-
-All projects use the same 7-section template:
-
-| Section | Purpose |
-|---------|---------|
-| What | Brief description of the project |
-| Why | Goals and success criteria |
-| Who | Stakeholders and responsibilities |
-| Constraints | Deadlines, budget, limitations |
-| Current State | Progress, next actions, blockers |
-| Decisions | Decision log with rationale |
-| Notes | Free-form notes and insights |
-
-This standardized structure ensures:
-- Quick onboarding for any agent
-- Consistent information across all projects
-- Easy handoffs between Ashigaru workers
-
-### 🛠️ Skills
-
-Skills are not included in this repository by default.
-As you use the system, skill candidates will appear in `dashboard.md`.
-Review and approve them to grow your personal skill library.
-
-Skills can be invoked with `/skill-name`. Just tell the Shogun: "run `/skill-name`".
-
----
-
-## 🏛️ Design Philosophy
-
-### Why Hierarchical Structure?
-
-The Shogun → Karo → Ashigaru hierarchy exists for:
-
-1. **Immediate Response**: Shogun delegates instantly and returns control to you
-2. **Parallel Execution**: Karo distributes to multiple Ashigaru simultaneously
-3. **Separation of Concerns**: Each role is clearly defined — Shogun decides "what", Karo decides "who"
-4. **Scalability**: Adding more Ashigaru doesn't break the structure
-5. **Fault Isolation**: One Ashigaru failing doesn't affect others
-6. **Centralized Reporting**: Only Shogun communicates with you, keeping information organized
-
-### Why YAML + send-keys?
-
-- **YAML files**: Structured communication that survives agent restarts and is human-readable for debugging
-- **send-keys**: Event-driven wakeups (no polling = no wasted API calls)
-- **No direct calls**: Agents can't interrupt each other or your input
-- **Conflict avoidance**: Each Ashigaru has dedicated files, preventing race conditions
-- **2-second interval**: When sending to multiple Ashigaru, Karo inserts `sleep 2` between each send to prevent input buffer overflow (tested: 14% → 87.5% delivery rate)
-
-### Agent Identity (@agent_id)
-
-Each pane has a permanent `@agent_id` tmux user option (e.g., `karo`, `ashigaru1`). Unlike `pane_index` which can shift when panes are rearranged, `@agent_id` is fixed at startup by `shutsujin_departure.sh`.
-
-Agents identify themselves with:
-```bash
-tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'
-```
-The `-t "$TMUX_PANE"` is required — without it, tmux returns the **active** pane's value, not the calling pane's.
-
-Model names are also stored as `@model_name` and displayed via `pane-border-format`, so they remain visible even when Claude Code overwrites pane titles.
-
-### Why Only Karo Updates Dashboard?
-
-- **Single responsibility**: One writer = no conflicts
-- **Information hub**: Karo receives all reports, knows the full picture
-- **Consistency**: All updates go through one quality gate
-- **No interruptions**: Prevents disrupting your input when Shogun would otherwise update the dashboard
-
-### How Skills Work
-
-Skills (`.claude/commands/`) are **not committed to this repository** by design.
-
-**Why?**
-- Each user's workflow is different
-- Skills should grow organically based on your needs
-- No one-size-fits-all solution
-
-**How to create new skills:**
-
-```
-Ashigaru notices a repeatable pattern during work
-    ↓
-Candidate appears in dashboard.md under "Skill Candidates"
-    ↓
-You (the Lord) review the candidate
-    ↓
-If approved, Karo creates the skill
-```
-
-Skills are **user-driven** — they only grow when you decide they're useful. Automatic growth would make them unmanageable, so only what you explicitly approve gets added.
-
----
-
-## 🔌 MCP Setup Guide
-
-MCP (Model Context Protocol) servers extend Claude's capabilities. Here's how to set them up:
-
-### What is MCP?
-
-MCP servers give Claude access to external tools:
-- **Notion MCP** → Read/write Notion pages
-- **GitHub MCP** → Create PRs, manage issues
-- **Memory MCP** → Remember things across sessions
-
-### Installing MCP Servers
-
-Run these commands to add MCP servers:
+### Windows (WSL2)
 
 ```bash
-# 1. Notion - Connect to your Notion workspace
-claude mcp add notion -e NOTION_TOKEN=your_token_here -- npx -y @notionhq/notion-mcp-server
+# 1. Clone
+git clone https://github.com/yohey-w/multi-agent-shogun.git C:\tools\multi-agent-shogun
 
-# 2. Playwright - Browser automation
-claude mcp add playwright -- npx @playwright/mcp@latest
-# Note: Run `npx playwright install chromium` first
+# 2. Run installer (right-click → Run as Administrator)
+#    → install.bat handles WSL2 + Ubuntu setup automatically
 
-# 3. GitHub - Repository operations
-claude mcp add github -e GITHUB_PERSONAL_ACCESS_TOKEN=your_pat_here -- npx -y @modelcontextprotocol/server-github
-
-# 4. Sequential Thinking - Step-by-step reasoning for complex problems
-claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking
-
-# 5. Memory - Long-term memory across sessions (Recommended!)
-# ✅ Automatically configured by first_setup.sh
-# To reconfigure manually:
-claude mcp add memory -e MEMORY_FILE_PATH="$PWD/memory/shogun_memory.jsonl" -- npx -y @modelcontextprotocol/server-memory
+# 3. In Ubuntu terminal:
+cd /mnt/c/tools/multi-agent-shogun
+./first_setup.sh          # One-time: installs tmux, Node.js, Claude Code CLI
+./shutsujin_departure.sh  # Deploy your army
 ```
 
-### Verify Installation
+### Linux / macOS
 
 ```bash
-claude mcp list
+# 1. Clone
+git clone https://github.com/yohey-w/multi-agent-shogun.git ~/multi-agent-shogun
+cd ~/multi-agent-shogun && chmod +x *.sh
+
+# 2. Setup + Deploy
+./first_setup.sh          # One-time: installs dependencies
+./shutsujin_departure.sh  # Deploy your army
 ```
 
-You should see all servers with "Connected" status.
-
----
-
-## 🌍 Real-World Use Cases
-
-### Example 1: Research Task
-
-```
-You: "Research the top 5 AI coding assistants and compare them"
-
-What happens:
-1. Shogun delegates to Karo
-2. Karo assigns:
-   - Ashigaru 1: Research GitHub Copilot
-   - Ashigaru 2: Research Cursor
-   - Ashigaru 3: Research Claude Code
-   - Ashigaru 4: Research Codeium
-   - Ashigaru 5: Research Amazon CodeWhisperer
-3. All 5 research simultaneously
-4. Results compiled in dashboard.md
-```
-
-### Example 2: PoC Preparation
-
-```
-You: "Prepare a PoC for the project in this Notion page: [URL]"
-
-What happens:
-1. Karo fetches Notion content via MCP
-2. Ashigaru 2: Lists items to clarify
-3. Ashigaru 3: Researches technical feasibility
-4. Ashigaru 4: Creates PoC plan document
-5. All results in dashboard.md, ready for your meeting
-```
-
----
-
-## ⚙️ Configuration
-
-### Language Setting
-
-Edit `config/settings.yaml`:
-
-```yaml
-language: ja   # Japanese only
-language: en   # Japanese + English translation
-```
-
----
-
-## 🛠️ Advanced Usage
-
-<details>
-<summary><b>Script Architecture</b> (Click to expand)</summary>
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                      FIRST-TIME SETUP (Run Once)                    │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  install.bat (Windows)                                              │
-│      │                                                              │
-│      ├── Check/Install WSL2                                         │
-│      └── Check/Install Ubuntu                                       │
-│                                                                     │
-│  first_setup.sh (run manually in Ubuntu/WSL)                        │
-│      │                                                              │
-│      ├── Check/Install tmux                                         │
-│      ├── Check/Install Node.js v20+ (via nvm)                      │
-│      ├── Check/Install Claude Code CLI                              │
-│      └── Configure Memory MCP server                                │
-│                                                                     │
-├─────────────────────────────────────────────────────────────────────┤
-│                      DAILY STARTUP (Run Every Day)                  │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  shutsujin_departure.sh                                             │
-│      │                                                              │
-│      ├──▶ Create tmux sessions                                      │
-│      │         • "shogun" session (1 pane)                          │
-│      │         • "multiagent" session (9 panes, 3x3 grid)           │
-│      │                                                              │
-│      ├──▶ Reset queue files and dashboard                           │
-│      │                                                              │
-│      └──▶ Launch Claude Code on all agents                          │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-</details>
-
-<details>
-<summary><b>shutsujin_departure.sh Options</b> (Click to expand)</summary>
+### Daily startup
 
 ```bash
-# Default: Full startup (tmux sessions + Claude Code launch)
+cd /path/to/multi-agent-shogun
 ./shutsujin_departure.sh
-
-# Session setup only (without launching Claude Code)
-./shutsujin_departure.sh -s
-./shutsujin_departure.sh --setup-only
-
-# Battle formation: all Ashigaru use Opus (max capability, higher cost)
-./shutsujin_departure.sh -k
-./shutsujin_departure.sh --kessen
-
-# Full startup + open Windows Terminal tabs
-./shutsujin_departure.sh -t
-./shutsujin_departure.sh --terminal
-
-# Show help
-./shutsujin_departure.sh -h
-./shutsujin_departure.sh --help
+tmux attach-session -t shogun   # Connect and give orders
 ```
-
-</details>
 
 <details>
-<summary><b>Common Workflows</b> (Click to expand)</summary>
-
-**Normal Daily Usage:**
-```bash
-./shutsujin_departure.sh          # Start everything
-tmux attach-session -t shogun     # Connect to give commands
-```
-
-**Debug Mode (manual control):**
-```bash
-./shutsujin_departure.sh -s       # Create sessions only
-
-# Manually start Claude Code on specific agents
-tmux send-keys -t shogun:0 'claude --dangerously-skip-permissions' Enter
-tmux send-keys -t multiagent:0.0 'claude --dangerously-skip-permissions' Enter
-```
-
-**Restart After Crash:**
-```bash
-# Kill existing sessions
-tmux kill-session -t shogun
-tmux kill-session -t multiagent
-
-# Start fresh
-./shutsujin_departure.sh
-```
-
-</details>
-
-<details>
-<summary><b>Convenient Aliases</b> (Click to expand)</summary>
-
-Running `first_setup.sh` automatically adds these aliases to `~/.bashrc`:
+<summary><b>Convenient aliases</b> (added by first_setup.sh)</summary>
 
 ```bash
-alias csst='cd /mnt/c/tools/multi-agent-shogun && ./shutsujin_departure.sh'  # Setup + deploy
-alias css='tmux attach-session -t shogun'                                    # Attach to Shogun
-alias csm='tmux attach-session -t multiagent'                               # Attach to workers
-```
-
-*To apply aliases, run `source ~/.bashrc` or restart your terminal. On WSL, run `wsl --shutdown` in PowerShell first — simply closing the window does not terminate WSL. Use `csst` to deploy, then `css`/`csm` to attach.*
-
-</details>
-
----
-
-## 📁 File Structure
-
-<details>
-<summary><b>Click to expand file structure</b></summary>
-
-```
-multi-agent-shogun/
-│
-│  ┌─────────────────── SETUP SCRIPTS ───────────────────┐
-├── install.bat               # Windows: First-time setup
-├── first_setup.sh            # Ubuntu/Mac: First-time setup
-├── shutsujin_departure.sh    # Daily startup (auto-loads instructions)
-│  └────────────────────────────────────────────────────┘
-│
-├── instructions/             # Agent instruction files
-│   ├── shogun.md             # Commander instructions
-│   ├── karo.md               # Manager instructions
-│   └── ashigaru.md           # Worker instructions
-│
-├── config/
-│   └── settings.yaml         # Language and other settings
-│
-├── projects/                # Project details (git-ignored, contains client data)
-│   └── <project_id>.yaml   # Full project info (client, tasks, Notion links, etc.)
-│
-├── queue/                    # Communication files
-│   ├── shogun_to_karo.yaml   # Commands from Shogun to Karo
-│   ├── tasks/                # Individual worker task files
-│   └── reports/              # Worker reports
-│
-├── memory/                   # Memory MCP storage
-├── dashboard.md              # Real-time status overview
-└── CLAUDE.md                 # Project context for Claude
+alias csst='cd /mnt/c/tools/multi-agent-shogun && ./shutsujin_departure.sh'
+alias css='tmux attach-session -t shogun'
+alias csm='tmux attach-session -t multiagent'
 ```
 
 </details>
 
 ---
 
-## 📂 Project Management
+## How It Works
 
-This system manages **all white-collar tasks**, not just its own development. Projects can live anywhere on your filesystem — they don't need to be inside this repository.
-
-### How It Works
+### 1. Give an order
 
 ```
-config/projects.yaml          # Project registry (ID, name, path, status)
-projects/<project_id>.yaml    # Full project details (client info, tasks, Notion links, etc.)
+You: "Research the top 5 MCP servers and create a comparison table"
 ```
 
-- **`config/projects.yaml`**: Lists all projects with basic metadata (ID, name, path, status)
-- **`projects/<id>.yaml`**: Contains full details for each project (client info, contract, tasks, related files, Notion pages, etc.)
-- **Project files** (source code, docs, etc.) live at the `path` specified in the project entry — anywhere on the filesystem
-- **`projects/` is git-ignored** because it may contain confidential client information
+### 2. Shogun delegates instantly
 
-### Example
+The Shogun writes the task to `queue/shogun_to_karo.yaml` and wakes the Karo. Control returns to you immediately — no waiting.
+
+### 3. Karo distributes
+
+The Karo breaks the task into subtasks and assigns each to an Ashigaru:
+
+| Worker | Assignment |
+|--------|-----------|
+| Ashigaru 1 | Research Notion MCP |
+| Ashigaru 2 | Research GitHub MCP |
+| Ashigaru 3 | Research Playwright MCP |
+| Ashigaru 4 | Research Memory MCP |
+| Ashigaru 5 | Research Sequential Thinking MCP |
+
+### 4. Parallel execution
+
+All 5 Ashigaru research simultaneously. You can watch them work in real time:
+
+<p align="center">
+  <img src="assets/screenshots/tmux_multiagent_working.png" alt="Ashigaru agents working in parallel" width="700">
+</p>
+
+### 5. Results in dashboard
+
+Open `dashboard.md` to see aggregated results, skill candidates, and blockers — all maintained by the Karo.
+
+---
+
+## Real-World Use Cases
+
+This system manages **all white-collar tasks**, not just code. Projects can live anywhere on your filesystem.
 
 ```yaml
 # config/projects.yaml
 projects:
-  - id: my_client
+  - id: client_x
     name: "Client X Consulting"
     path: "/mnt/c/Consulting/client_x"
     status: active
-
-# projects/my_client.yaml
-id: my_client
-client:
-  name: "Client X"
-  company: "X Corp"
-contract:
-  fee: "monthly"
-current_tasks:
-  - id: task_001
-    name: "System architecture review"
-    status: in_progress
 ```
 
-This separation allows the Shogun system to orchestrate tasks across multiple external projects while keeping project details private and out of version control.
+**Research sprints** — 8 agents research different topics in parallel, results compiled in minutes.
+
+**Multi-project management** — Switch between client projects without losing context. Memory MCP preserves preferences across sessions.
+
+**Document generation** — Technical writing, test case reviews, comparison tables — distributed across agents and merged.
 
 ---
 
-## 🔧 Troubleshooting
+## Configuration
 
-<details>
-<summary><b>MCP tools not working?</b></summary>
+### Language
 
-MCP tools are "deferred" and need to be loaded first:
+```yaml
+# config/settings.yaml
+language: ja   # Samurai Japanese only
+language: en   # Samurai Japanese + English translation
+```
+
+### Model assignment
+
+| Agent | Default Model | Thinking |
+|-------|--------------|----------|
+| Shogun | Opus | Disabled (delegation doesn't need deep reasoning) |
+| Karo | Opus | Enabled |
+| Ashigaru 1–4 | Sonnet | Enabled |
+| Ashigaru 5–8 | Opus | Enabled |
+
+### MCP servers
+
+```bash
+# Memory (auto-configured by first_setup.sh)
+claude mcp add memory -e MEMORY_FILE_PATH="$PWD/memory/shogun_memory.jsonl" -- npx -y @modelcontextprotocol/server-memory
+
+# Notion
+claude mcp add notion -e NOTION_TOKEN=your_token -- npx -y @notionhq/notion-mcp-server
+
+# GitHub
+claude mcp add github -e GITHUB_PERSONAL_ACCESS_TOKEN=your_pat -- npx -y @modelcontextprotocol/server-github
+
+# Playwright (browser automation)
+claude mcp add playwright -- npx @playwright/mcp@latest
+```
+
+### Screenshot integration
+
+```yaml
+# config/settings.yaml
+screenshot:
+  path: "/mnt/c/Users/YourName/Pictures/Screenshots"
+```
+
+Tell the Shogun "check the latest screenshot" and it reads your screen captures for visual context. (`Win+Shift+S` on Windows.)
+
+---
+
+## File Structure
 
 ```
-# Wrong - tool not loaded
-mcp__memory__read_graph()  ← Error!
+multi-agent-shogun/
+├── install.bat                # Windows first-time setup
+├── first_setup.sh             # Linux/Mac first-time setup
+├── shutsujin_departure.sh     # Daily deployment script
+│
+├── instructions/              # Agent behavior definitions
+│   ├── shogun.md
+│   ├── karo.md
+│   └── ashigaru.md
+│
+├── config/
+│   ├── settings.yaml          # Language, model, screenshot settings
+│   └── projects.yaml          # Project registry
+│
+├── queue/                     # Communication (source of truth)
+│   ├── shogun_to_karo.yaml
+│   ├── tasks/ashigaru{1-8}.yaml
+│   └── reports/ashigaru{1-8}_report.yaml
+│
+├── memory/                    # Memory MCP persistent storage
+├── dashboard.md               # Human-readable status board
+└── CLAUDE.md                  # System instructions (auto-loaded)
+```
 
-# Correct - load first
+---
+
+## Troubleshooting
+
+<details>
+<summary><b>Agents asking for permissions?</b></summary>
+
+Agents should start with `--dangerously-skip-permissions`. This is handled automatically by `shutsujin_departure.sh`.
+
+</details>
+
+<details>
+<summary><b>MCP tools not loading?</b></summary>
+
+MCP tools are lazy-loaded. Search first, then use:
+```
 ToolSearch("select:mcp__memory__read_graph")
-mcp__memory__read_graph()  ← Works!
+mcp__memory__read_graph()
 ```
 
 </details>
 
 <details>
-<summary><b>Agents asking for permissions?</b></summary>
+<summary><b>Agent crashed?</b></summary>
 
-Make sure to start with `--dangerously-skip-permissions`:
+Don't use `css`/`csm` aliases inside an existing tmux session (causes nesting). Instead:
 
 ```bash
-claude --dangerously-skip-permissions --system-prompt "..."
+# From the crashed pane:
+claude --model opus --dangerously-skip-permissions
+
+# Or from another pane:
+tmux respawn-pane -t shogun:0.0 -k 'claude --model opus --dangerously-skip-permissions'
 ```
 
 </details>
@@ -804,77 +357,50 @@ claude --dangerously-skip-permissions --system-prompt "..."
 <details>
 <summary><b>Workers stuck?</b></summary>
 
-Check the worker's pane:
 ```bash
 tmux attach-session -t multiagent
-# Use Ctrl+B then number to switch panes
+# Ctrl+B then 0-8 to switch panes
 ```
-
-</details>
-
-<details>
-<summary><b>Shogun/agent crashed? (Claude Code process killed)</b></summary>
-
-**Do NOT use `css` or any tmux session alias to restart.** These aliases create tmux sessions, and running them inside an existing tmux pane causes nested sessions (session-within-a-session), which corrupts input and makes the pane unusable.
-
-**Correct restart method:**
-
-```bash
-# Option 1: Run claude directly in the pane
-claude --model opus --dangerously-skip-permissions
-
-# Option 2: Karo can force-restart via respawn-pane (kills nested sessions too)
-tmux respawn-pane -t shogun:0.0 -k 'claude --model opus --dangerously-skip-permissions'
-```
-
-**If you accidentally nested tmux:**
-1. Press `Ctrl+B` then `d` to detach from the inner session
-2. Then run `claude` directly (not `css`)
-3. If detach doesn't work, use `tmux respawn-pane -k` from another pane
 
 </details>
 
 ---
 
-## 📚 tmux Quick Reference
+## tmux Quick Reference
 
 | Command | Description |
 |---------|-------------|
-| `tmux attach -t shogun` | Connect to Shogun |
+| `tmux attach -t shogun` | Connect to the Shogun |
 | `tmux attach -t multiagent` | Connect to workers |
-| `Ctrl+B` then `0-8` | Switch between panes |
-| `Ctrl+B` then `d` | Detach (leave running) |
-| `tmux kill-session -t shogun` | Stop Shogun session |
-| `tmux kill-session -t multiagent` | Stop worker sessions |
+| `Ctrl+B` then `0`–`8` | Switch panes |
+| `Ctrl+B` then `d` | Detach (agents keep running) |
 
-### 🖱️ Mouse Support
-
-`first_setup.sh` automatically configures tmux mouse support (`set -g mouse on` in `~/.tmux.conf`). This enables the following mouse operations:
-
-| Action | Description |
-|--------|-------------|
-| Scroll wheel | Scroll within a pane |
-| Click on a pane | Switch focus between panes |
-| Drag pane border | Resize panes |
-
-> **Note:** If you set up tmux manually (without `first_setup.sh`), add `set -g mouse on` to your `~/.tmux.conf` to enable mouse support.
+Mouse support is enabled by default (`set -g mouse on` in `~/.tmux.conf`, configured by `first_setup.sh`). Scroll, click to focus, drag to resize.
 
 ---
 
-## 🙏 Credits
+## Contributing
+
+Issues and pull requests are welcome.
+
+- **Bug reports**: Open an issue with reproduction steps
+- **Feature ideas**: Open a discussion first
+- **Skills**: Skills are personal by design and not included in this repo
+
+## Credits
 
 Based on [Claude-Code-Communication](https://github.com/Akira-Papa/Claude-Code-Communication) by Akira-Papa.
 
----
+## License
 
-## 📄 License
-
-MIT License - See [LICENSE](LICENSE) for details.
+[MIT](LICENSE)
 
 ---
 
 <div align="center">
 
-**Command your AI army. Build faster.**
+**One command. Eight agents. Zero coordination cost.**
+
+⭐ Star this repo if you find it useful — it helps others discover it.
 
 </div>
