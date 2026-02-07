@@ -281,7 +281,14 @@ fi
 # queue ディレクトリが存在しない場合は作成（初回起動時に必要）
 [ -d ./queue/reports ] || mkdir -p ./queue/reports
 [ -d ./queue/tasks ] || mkdir -p ./queue/tasks
-[ -d ./queue/inbox ] || mkdir -p ./queue/inbox
+# inbox はLinux FSにシンボリックリンク（WSL2の/mnt/c/ではinotifywaitが動かないため）
+INBOX_LINUX_DIR="$HOME/.local/share/multi-agent-shogun/inbox"
+if [ ! -L ./queue/inbox ]; then
+    mkdir -p "$INBOX_LINUX_DIR"
+    [ -d ./queue/inbox ] && cp ./queue/inbox/*.yaml "$INBOX_LINUX_DIR/" 2>/dev/null && rm -rf ./queue/inbox
+    ln -sf "$INBOX_LINUX_DIR" ./queue/inbox
+    log_info "  └─ inbox → Linux FS ($INBOX_LINUX_DIR) にシンボリックリンク作成"
+fi
 
 if [ "$CLEAN_MODE" = true ]; then
     log_info "📜 前回の軍議記録を破棄中..."
@@ -667,15 +674,15 @@ NINJA_EOF
     # ═══════════════════════════════════════════════════════════════════
     log_info "📬 メールボックス監視を起動中..."
 
-    # inbox ディレクトリ初期化
-    mkdir -p "$SCRIPT_DIR/queue/inbox"
+    # inbox ディレクトリ初期化（シンボリックリンク先のLinux FSに作成）
     mkdir -p "$SCRIPT_DIR/logs"
     for agent in shogun karo ashigaru{1..8}; do
         [ -f "$SCRIPT_DIR/queue/inbox/${agent}.yaml" ] || echo "messages:" > "$SCRIPT_DIR/queue/inbox/${agent}.yaml"
     done
 
-    # 既存のwatcherをkill
+    # 既存のwatcherと孤児inotifywaitをkill
     pkill -f "inbox_watcher.sh" 2>/dev/null || true
+    pkill -f "inotifywait.*queue/inbox" 2>/dev/null || true
     sleep 1
 
     # 将軍のwatcher
@@ -698,29 +705,9 @@ NINJA_EOF
 
     log_success "  └─ 10エージェント分のinbox_watcher起動完了"
 
-    # ═══════════════════════════════════════════════════════════════════
-    # STEP 6.7 (旧6.5): 各エージェントに指示書を読み込ませる（inbox経由）
-    # ═══════════════════════════════════════════════════════════════════
-
-    # 将軍に指示書を読み込ませる（inbox経由）
-    log_info "  └─ 将軍に指示書を伝達中..."
-    bash "$SCRIPT_DIR/scripts/inbox_write.sh" shogun \
-        "instructions/shogun.md を読んで役割を理解せよ。" system_startup system
-
-    # 家老に指示書を読み込ませる
-    log_info "  └─ 家老に指示書を伝達中..."
-    bash "$SCRIPT_DIR/scripts/inbox_write.sh" karo \
-        "instructions/karo.md を読んで役割を理解せよ。" system_startup system
-
-    # 足軽に指示書を読み込ませる（1-8）
-    log_info "  └─ 足軽に指示書を伝達中..."
-    for i in {1..8}; do
-        bash "$SCRIPT_DIR/scripts/inbox_write.sh" "ashigaru${i}" \
-            "instructions/ashigaru.md を読んで役割を理解せよ。汝は足軽${i}号である。" \
-            system_startup system
-    done
-
-    log_success "✅ 全軍に指示書伝達完了"
+    # STEP 6.7 は廃止 — CLAUDE.md Session Start (step 1: tmux agent_id) で各自が自律的に
+    # 自分のinstructions/*.mdを読み込む。検証済み (2026-02-08)。
+    log_info "📜 指示書読み込みは各エージェントが自律実行（CLAUDE.md Session Start）"
     echo ""
 fi
 

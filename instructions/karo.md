@@ -59,14 +59,8 @@ workflow:
   - step: 8
     action: check_pending
     note: "If pending cmds remain in shogun_to_karo.yaml → loop to step 2. Otherwise stop."
-  - step: 8.5
-    action: launch_background_monitor
-    note: |
-      AFTER dispatching all subtasks of cmd_N, launch background monitor to detect completion.
-      This allows karo to process cmd_N+1 immediately while cmd_N runs in parallel.
-      Background Bash: sleep 30 → check statuses → repeat max 10 times → inbox_write when done.
-      See "Background Wait Pattern" section for implementation details.
-      WHY: Prevents blocking on cmd_N completion. Karo can immediately process pending cmds.
+  # NOTE: No background monitor needed. Ashigaru send inbox_write on completion.
+  # Karo wakes via inbox watcher nudge. Fully event-driven.
   # === Report Reception Phase ===
   - step: 9
     action: receive_wakeup
@@ -203,34 +197,34 @@ Report via dashboard.md update only. Reason: interrupt prevention during lord's 
 
 ## Foreground Block Prevention (24-min Freeze Lesson)
 
-**Karo blocking = entire army halts.** On 2026-02-06, foreground `sleep` during delivery checks froze karo for 24 minutes. cmds 009-012 queued, ashigaru 2-8 all idle.
+**Karo blocking = entire army halts.** On 2026-02-06, foreground `sleep` during delivery checks froze karo for 24 minutes.
+
+**Rule: NEVER use `sleep` in foreground.** After dispatching tasks → stop and wait for inbox wakeup.
 
 | Command Type | Execution Method | Reason |
 |-------------|-----------------|--------|
-| `sleep N` + any command | `run_in_background: true` | Prevent karo block |
 | Read / Write / Edit | Foreground | Completes instantly |
 | inbox_write.sh | Foreground | Completes instantly |
-| tmux capture-pane (no sleep) | Foreground | Completes instantly |
+| `sleep N` | **FORBIDDEN** | Use inbox event-driven instead |
+| tmux capture-pane | **FORBIDDEN** | Read report YAML instead |
 
-**Exception**: Foreground sleep allowed if ALL cmds dispatched and no pending cmds remain.
-
-### Dispatch-then-Next Pattern
+### Dispatch-then-Stop Pattern
 
 ```
-❌ Serial (caused 24-min freeze):
-  cmd_008 dispatch → sleep 5 → capture → cmd_009 dispatch → sleep 5 ...
+✅ Correct (event-driven):
+  cmd_008 dispatch → inbox_write ashigaru → stop (await inbox wakeup)
+  → ashigaru completes → inbox_write karo → karo wakes → process report
 
-✅ Parallel (correct):
-  cmd_008 dispatch → cmd_009 dispatch → cmd_010 dispatch → batch confirm → stop
+❌ Wrong (polling):
+  cmd_008 dispatch → sleep 30 → capture-pane → check status → sleep 30 ...
 ```
 
 ### Multiple Pending Cmds Processing
 
 1. List all pending cmds in `queue/shogun_to_karo.yaml`
-2. For each cmd: decompose → write YAML → inbox_write → **no confirmation needed, next cmd**
-3. After all cmds processed: verify inbox writes, then stop
-4. Step 8 (check_pending) for final verification
-5. No pending → stop
+2. For each cmd: decompose → write YAML → inbox_write → **next cmd immediately**
+3. After all cmds dispatched: **stop** (await inbox wakeup from ashigaru)
+4. On wakeup: scan reports → process → check for more pending cmds → stop
 
 ## Task Design: Five Questions
 
@@ -290,86 +284,21 @@ Claude Code cannot "wait". Prompt-wait = stopped.
 4. Scan ALL report files (not just the reporting one)
 5. Assess situation, then act
 
-## Background Wait Pattern (Step 8.5)
+## Event-Driven Wait Pattern (replaces old Background Monitor)
 
-**Purpose**: Allow karo to process cmd_N+1 while cmd_N's ashigaru are still working. Prevents blocking on cmd_N completion.
-
-### When to Use
-
-After dispatching all subtasks of cmd_N (Step 7 complete):
-- If pending cmds exist → process next cmd immediately (Step 8 → Step 2)
-- **Additionally**, launch background monitor for cmd_N completion detection
-
-### Implementation Pattern
-
-```bash
-# Launch background monitor (run_in_background: true)
-# This script runs independently, does NOT block karo's main flow
-
-for i in {1..10}; do
-  sleep 30
-
-  # Check if all cmd_N subtasks are done or failed
-  parent_cmd="cmd_XXX"
-  total=$(grep -l "parent_cmd: $parent_cmd" queue/tasks/ashigaru*.yaml | wc -l)
-  completed=$(grep -l "parent_cmd: $parent_cmd" queue/tasks/ashigaru*.yaml | xargs grep -l "status: done\|status: failed" | wc -l)
-
-  if [ "$completed" -eq "$total" ]; then
-    # All subtasks complete → notify karo via inbox
-    bash "$SCRIPT_DIR/scripts/inbox_write.sh" karo "$parent_cmd reports ready — background monitor" cmd_complete system
-    exit 0
-  fi
-done
-
-# Timeout after 10 iterations (5 minutes)
-bash "$SCRIPT_DIR/scripts/inbox_write.sh" karo "$parent_cmd timeout warning — background monitor" cmd_complete system
-```
-
-### F004 Compliance
-
-**F004 prohibits**: Karo's main body running wait loops (blocks message reception, wastes API calls).
-
-**This pattern is F004-compliant because**:
-- Background Bash runs **outside karo's context** (separate process)
-- Karo's main body **does NOT block** — it immediately proceeds to Step 8 (check_pending)
-- Background monitor has **finite iterations** (max 10) with **timeout** (5 min)
-- This is **event-driven with timeout**, not polling in the traditional sense
-
-**Why this is different from polling**:
-- Traditional polling: `while true; do check; sleep; done` → infinite loop, blocks agent
-- Background monitor: `for i in {1..10}; do check; sleep; done` → finite, non-blocking, timeout-based
-
-### Workflow with Background Monitor
+**After dispatching all subtasks: STOP.** Do not launch background monitors or sleep loops.
 
 ```
 Step 7: Dispatch cmd_N subtasks → inbox_write to ashigaru
-Step 8: check_pending → if pending cmd_N+1 exists, process it (go to Step 2)
-Step 8.5: Launch background monitor for cmd_N (run_in_background: true)
-  → Karo immediately proceeds (does NOT wait)
-  → Background monitor runs independently
-Step 2-8: Process cmd_N+1 (parallel to cmd_N execution)
-Step 9: Woken by either:
-  a. Ashigaru inbox (subtask completion)
-  b. Background monitor inbox (cmd_N all complete)
-  c. Shogun inbox (new cmd_N+2)
+Step 8: check_pending → if pending cmd_N+1, process it → then STOP
+  → Karo becomes idle (prompt waiting)
+Step 9: Ashigaru completes → inbox_write karo → watcher nudges karo
+  → Karo wakes, scans reports, acts
 ```
 
-### Background Monitor Lifecycle
+**Why no background monitor**: inbox_watcher.sh detects ashigaru's inbox_write to karo and sends a nudge. This is true event-driven. No sleep, no polling, no CPU waste.
 
-| Event | Action |
-|-------|--------|
-| All subtasks done/failed | Send-keys to karo → triggers Step 9 (report reception) |
-| Timeout (5 min) | Send-keys warning → karo investigates |
-| Karo processes reports during monitoring | Background monitor detects completion → sends duplicate wake-up (harmless) |
-
-### Use TaskOutput to Check Background Bash
-
-```bash
-# Karo can check background monitor output if needed
-tail -f /path/to/background/output.log
-```
-
-But typically, karo relies on inbox wake-up, not active checking.
+**Karo wakes via**: inbox nudge from ashigaru report, shogun new cmd, or system event. Nothing else.
 
 ## Report Scanning (Communication Loss Safety)
 

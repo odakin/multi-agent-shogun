@@ -11,6 +11,8 @@
 #   冪等: 2回届いてもunreadがなければ何もしない
 #
 # inotifywait でファイル変更を検知（イベント駆動、ポーリングではない）
+# Fallback 1: 60秒タイムアウト（WSL2 inotify不発時の安全網）
+# Fallback 2: rc=1処理（Claude Code atomic write = tmp+rename でinode変更時）
 # ═══════════════════════════════════════════════════════════════
 
 set -euo pipefail
@@ -158,17 +160,25 @@ for s in data.get('specials', []):
 process_unread
 
 # ─── Main loop: event-driven via inotifywait ───
+# Timeout 60s: WSL2 /mnt/c/ can miss inotify events.
+# On timeout (exit 2), check for unread messages as a safety net.
+INOTIFY_TIMEOUT=60
+
 while true; do
-    # Block until file is modified (event-driven, NOT polling)
-    if ! inotifywait -q -e modify -e close_write "$INBOX" 2>/dev/null; then
-        echo "[$(date)] inotifywait error, restarting in 5s..." >&2
-        sleep 5
-        continue
-    fi
+    # Block until file is modified OR timeout (safety net for WSL2)
+    # set +e: inotifywait returns 2 on timeout, which would kill script under set -e
+    set +e
+    inotifywait -q -t "$INOTIFY_TIMEOUT" -e modify -e close_write "$INBOX" 2>/dev/null
+    rc=$?
+    set -e
 
-    # Debounce: wait for burst writes to settle
-    sleep 0.5
+    # rc=0: event fired (instant delivery)
+    # rc=1: watch invalidated — Claude Code uses atomic write (tmp+rename),
+    #        which replaces the inode. inotifywait sees DELETE_SELF → rc=1.
+    #        File still exists with new inode. Treat as event, re-watch next loop.
+    # rc=2: timeout (60s safety net for WSL2 inotify gaps)
+    # All cases: check for unread, then loop back to inotifywait (re-watches new inode)
+    sleep 0.3
 
-    # Send wake-up if there are unread messages
     process_unread
 done

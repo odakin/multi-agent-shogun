@@ -46,9 +46,10 @@ language:
 
 ## Session Start (all agents)
 
-1. `mcp__memory__read_graph` — restore rules, preferences, lessons
-2. Read your instructions: shogun→`instructions/shogun.md`, karo→`instructions/karo.md`, ashigaru→`instructions/ashigaru.md`
-3. Follow instructions to load context, then start work
+1. Identify self: `tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'` — determines which instructions to read
+2. `mcp__memory__read_graph` — restore rules, preferences, lessons
+3. Read your instructions based on agent_id: shogun→`instructions/shogun.md`, karo→`instructions/karo.md`, ashigaru→`instructions/ashigaru.md`
+4. Follow instructions to load context, then start work
 
 ## Compaction Recovery (all agents)
 
