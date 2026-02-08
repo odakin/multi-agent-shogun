@@ -6,7 +6,7 @@
 #
 # 設計思想:
 #   メッセージ本体はファイル（inbox YAML）に書く = 確実
-#   send-keys は短い起動シグナルのみ = ハング防止
+#   起動シグナルは pty直接書き込み = tmux完全バイパス、send-keys不使用
 #   エージェントが自分でinboxをReadして処理する
 #   冪等: 2回届いてもunreadがなければ何もしない
 #
@@ -143,36 +143,32 @@ agent_has_self_watch() {
 }
 
 # ─── Send wake-up nudge ───
-# Layered approach (send-keys撲滅):
+# Layered approach (send-keys完全廃止):
 #   1. If agent has active inotifywait self-watch → skip (agent wakes itself)
-#   2. Fallback: paste-buffer + Enter (avoids send-keys for content)
-# timeout prevents the 1.5-hour hang incident from recurring.
+#   2. pty direct write → tmux完全バイパス。カーソル位置バグも起きない
 send_wakeup() {
     local unread_count="$1"
     local nudge="inbox${unread_count}"
 
-    # Tier 1: Agent self-watch — skip nudge entirely
+    # 優先度1: Agent self-watch — nudge不要（エージェントが自分で気づく）
     if agent_has_self_watch; then
         echo "[$(date)] [SKIP] Agent $AGENT_ID has active self-watch, no nudge needed" >&2
         return 0
     fi
 
-    # Tier 2: paste-buffer fallback (replaces send-keys for content)
-    echo "[$(date)] [FALLBACK] Sending paste-buffer nudge to $AGENT_ID" >&2
+    # 優先度2: pty direct write — tmuxを完全バイパス
+    local pty
+    pty=$(tmux display-message -t "$PANE_TARGET" -p '#{pane_tty}' 2>/dev/null)
 
-    tmux set-buffer -b "nudge_${AGENT_ID}" "$nudge"
-    if ! timeout "$SEND_KEYS_TIMEOUT" tmux paste-buffer -t "$PANE_TARGET" -b "nudge_${AGENT_ID}" -d 2>/dev/null; then
-        echo "[$(date)] WARNING: paste-buffer timed out ($SEND_KEYS_TIMEOUT s)" >&2
-        return 1
-    fi
-    sleep 0.1
-    if ! timeout "$SEND_KEYS_TIMEOUT" tmux send-keys -t "$PANE_TARGET" Enter 2>/dev/null; then
-        echo "[$(date)] WARNING: send-keys Enter timed out ($SEND_KEYS_TIMEOUT s)" >&2
-        return 1
+    if [ -n "$pty" ] && [ -w "$pty" ]; then
+        echo "[$(date)] [PTY] Writing nudge directly to $pty for $AGENT_ID" >&2
+        printf '%s\n' "$nudge" > "$pty"
+        echo "[$(date)] Wake-up sent to $AGENT_ID (${unread_count} unread via pty direct write)" >&2
+        return 0
     fi
 
-    echo "[$(date)] Wake-up sent to $AGENT_ID (${unread_count} unread via paste-buffer)" >&2
-    return 0
+    echo "[$(date)] WARNING: pty not available or not writable ($pty) for $AGENT_ID" >&2
+    return 1
 }
 
 # ─── Process cycle ───

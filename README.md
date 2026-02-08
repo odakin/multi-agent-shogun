@@ -517,8 +517,8 @@ Step 1: Write the message          Step 2: Wake the agent up
 │ with flock (no race) │           │                          │
 └──────────────────────┘           │ Wakes agent via:         │
                                    │  1. Self-watch (skip)    │
-                                   │  2. paste-buffer (safe)  │
-                                   │  3. Enter key only       │
+                                   │  2. pty direct write     │
+                                   │     (tmux bypass)        │
                                    └──────────────────────────┘
 
 Step 3: Agent reads its own inbox
@@ -530,13 +530,12 @@ Step 3: Agent reads its own inbox
 └──────────────────────────────────┘
 ```
 
-**How the wake-up works (3-tier fallback):**
+**How the wake-up works:**
 
 | Priority | Method | What happens | When used |
 |----------|--------|-------------|-----------|
 | 1st | **Self-Watch** | Agent watches its own inbox file — wakes itself, no nudge needed | Agent has its own `inotifywait` running |
-| 2nd | **Paste-Buffer** | Writes a short nudge directly into the agent's terminal input | Default fallback — reliable, no key conflicts |
-| 3rd | **Enter key** | Sends Enter to confirm the pasted nudge | Always follows paste-buffer |
+| 2nd | **pty direct write** | Writes nudge directly to the agent's pty device (`/dev/pts/N`) — completely bypasses tmux | Default — no cursor bugs, no key conflicts, CLI-agnostic |
 
 **Key design choices:**
 - **Message content is never sent through tmux** — only a short "you have mail" nudge. The agent reads its own file. This eliminates character corruption and transmission hangs.
@@ -1512,7 +1511,7 @@ Even if you're not comfortable with keyboard shortcuts, you can switch, scroll, 
 - **SayTask notifications** — Streak tracking, Eat the Frog, behavioral psychology-driven motivation
 - **Pane border task display** — See each agent's current task at a glance on the tmux pane border
 - **Shout mode** (default) — Ashigaru shout personalized battle cries after completing tasks. Disable with `--silent`
-- **Layered Hybrid mailbox (v3.1)** — Agents communicate via file-based inbox; wake-up delivery uses self-watch → paste-buffer → send-keys (Enter only) fallback chain. Content never touches send-keys, eliminating transmission failures
+- **pty direct write mailbox (v3.1)** — Agents communicate via file-based inbox; wake-up nudge writes directly to pty device (`/dev/pts/N`), completely bypassing tmux. send-keys eliminated from nudge delivery, solving cursor bugs and transmission failures
 - **Agent self-identification** (`@agent_id`) — Stable identity via tmux user options, immune to pane reordering
 - **Battle mode** (`-k` flag) — All-Opus formation for maximum capability
 - **Task dependency system** (`blockedBy`) — Automatic unblocking of dependent tasks
