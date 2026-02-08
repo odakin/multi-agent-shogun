@@ -37,6 +37,12 @@
 !instructions/cli_specific/copilot_tools.md
 !instructions/cli_specific/kimi_tools.md
 
+# Multi-CLI: Build template parts (roles, common sections)
+!instructions/roles/
+!instructions/roles/*.md
+!instructions/common/
+!instructions/common/*.md
+
 # Multi-CLI: Generated instruction files (built by build_instructions.sh)
 !instructions/generated/
 !instructions/generated/*.md

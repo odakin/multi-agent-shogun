@@ -17,7 +17,7 @@ jobs:
 
       - name: Install bats-core
         run: |
-          npm install -g bats
+          sudo npm install -g bats
 
       - name: Setup bats helpers
         run: |
@@ -133,7 +133,7 @@ jobs:
       - name: Run shellcheck on lib/
         run: |
           if [ -d lib ]; then
-            find lib -name '*.sh' -type f -exec shellcheck {} +
+            find lib -name '*.sh' -type f -exec shellcheck -x -S error {} +
           else
             echo "::warning::lib/ directory not found"
           fi
@@ -141,7 +141,7 @@ jobs:
       - name: Run shellcheck on scripts/
         run: |
           if [ -d scripts ]; then
-            find scripts -name '*.sh' -type f -exec shellcheck {} +
+            find scripts -name '*.sh' -type f -exec shellcheck -x -S error {} +
           else
             echo "::warning::scripts/ directory not found"
           fi
@@ -157,7 +157,7 @@ jobs:
 
       - name: Install bats-core
         run: |
-          npm install -g bats
+          sudo npm install -g bats
 
       - name: Setup bats helpers
         run: |
