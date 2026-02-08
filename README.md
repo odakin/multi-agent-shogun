@@ -798,19 +798,20 @@ A: Local YAML files on your machine. Nothing is sent to the cloud. Your tasks ne
 **Q: What if I say something vague like "that thing for work"?**
 A: AI does its best to categorize and schedule it. You can always refine later — but the point is capturing the thought before it disappears.
 
-### SayTask Standalone vs Shogun Integration
+### SayTask vs cmd Pipeline
 
-| Capability | SayTask | Full Shogun Integration |
+Shogun has two complementary task systems:
+
+| Capability | SayTask (Voice Layer) | cmd Pipeline (AI Execution) |
 |---|:-:|:-:|
-| Voice input → task creation | ✅ | ✅ |
-| Morning notification digest | ✅ | ✅ |
-| Eat the Frog 🐸 selection | ✅ | ✅ |
+| Voice input → task creation | ✅ | — |
+| Morning notification digest | ✅ | — |
+| Eat the Frog 🐸 selection | ✅ | — |
 | Streak tracking | ✅ | ✅ |
-| AI-executed tasks (cmd pipeline) | — | ✅ |
+| AI-executed tasks (multi-step) | — | ✅ |
 | 8-agent parallel execution | — | ✅ |
-| cmd + SayTask streak unification | — | ✅ |
 
-SayTask gives you voice-driven task management out of the box. When a task needs code, research, or multi-step work, the full Shogun pipeline (Karo → 8 Ashigaru) can execute it for you — bridging personal productivity and AI-powered development.
+SayTask handles personal productivity (capture → schedule → remind). The cmd pipeline handles complex work (research, code, multi-step tasks). Both share streak tracking — completing either type of task counts toward your daily streak.
 
 ---
 
