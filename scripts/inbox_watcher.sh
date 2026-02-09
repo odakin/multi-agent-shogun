@@ -20,43 +20,48 @@
 #   4分〜 : /clear送信（5分に1回まで。強制リセット+YAML再読）
 # ═══════════════════════════════════════════════════════════════
 
-set -euo pipefail
+# ─── Testing guard ───
+# When __INBOX_WATCHER_TESTING__=1, only function definitions are loaded.
+# Argument parsing, inotifywait check, and main loop are skipped.
+# Test code sets variables (AGENT_ID, PANE_TARGET, CLI_TYPE, INBOX) externally.
+if [ "${__INBOX_WATCHER_TESTING__:-}" != "1" ]; then
+    set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-AGENT_ID="$1"
-PANE_TARGET="$2"
-CLI_TYPE="${3:-claude}"  # CLI種別（claude/codex/copilot）。未指定→claude（後方互換）
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    AGENT_ID="$1"
+    PANE_TARGET="$2"
+    CLI_TYPE="${3:-claude}"  # CLI種別（claude/codex/copilot）。未指定→claude（後方互換）
 
-INBOX="$SCRIPT_DIR/queue/inbox/${AGENT_ID}.yaml"
-LOCKFILE="${INBOX}.lock"
+    INBOX="$SCRIPT_DIR/queue/inbox/${AGENT_ID}.yaml"
+    LOCKFILE="${INBOX}.lock"
 
+    if [ -z "$AGENT_ID" ] || [ -z "$PANE_TARGET" ]; then
+        echo "Usage: inbox_watcher.sh <agent_id> <pane_target> [cli_type]" >&2
+        exit 1
+    fi
 
-if [ -z "$AGENT_ID" ] || [ -z "$PANE_TARGET" ]; then
-    echo "Usage: inbox_watcher.sh <agent_id> <pane_target> [cli_type]" >&2
-    exit 1
+    # Initialize inbox if not exists
+    if [ ! -f "$INBOX" ]; then
+        mkdir -p "$(dirname "$INBOX")"
+        echo "messages: []" > "$INBOX"
+    fi
+
+    echo "[$(date)] inbox_watcher started — agent: $AGENT_ID, pane: $PANE_TARGET, cli: $CLI_TYPE" >&2
+
+    # Ensure inotifywait is available
+    if ! command -v inotifywait &>/dev/null; then
+        echo "[inbox_watcher] ERROR: inotifywait not found. Install: sudo apt install inotify-tools" >&2
+        exit 1
+    fi
 fi
-
-# Initialize inbox if not exists
-if [ ! -f "$INBOX" ]; then
-    mkdir -p "$(dirname "$INBOX")"
-    echo "messages: []" > "$INBOX"
-fi
-
-echo "[$(date)] inbox_watcher started — agent: $AGENT_ID, pane: $PANE_TARGET, cli: $CLI_TYPE" >&2
 
 # ─── Escalation state ───
 # Time-based escalation: track how long unread messages have been waiting
-FIRST_UNREAD_SEEN=0   # epoch when first unread was detected (0 = no unread)
-LAST_CLEAR_TS=0       # epoch of last /clear escalation (throttle: max once per 5min)
-ESCALATE_PHASE1=120   # seconds: switch to Escape+nudge (2 min)
-ESCALATE_PHASE2=240   # seconds: switch to /clear (4 min)
-ESCALATE_COOLDOWN=300  # seconds: min interval between /clear sends (5 min)
-
-# Ensure inotifywait is available
-if ! command -v inotifywait &>/dev/null; then
-    echo "[inbox_watcher] ERROR: inotifywait not found. Install: sudo apt install inotify-tools" >&2
-    exit 1
-fi
+FIRST_UNREAD_SEEN=${FIRST_UNREAD_SEEN:-0}
+LAST_CLEAR_TS=${LAST_CLEAR_TS:-0}
+ESCALATE_PHASE1=${ESCALATE_PHASE1:-120}
+ESCALATE_PHASE2=${ESCALATE_PHASE2:-240}
+ESCALATE_COOLDOWN=${ESCALATE_COOLDOWN:-300}
 
 # ─── Extract unread message info (lock-free read) ───
 # Returns JSON lines: {"count": N, "has_special": true/false, "specials": [...]}
@@ -318,6 +323,9 @@ for s in data.get('specials', []):
     fi
 }
 
+# ─── Startup & Main loop (skipped in testing mode) ───
+if [ "${__INBOX_WATCHER_TESTING__:-}" != "1" ]; then
+
 # ─── Startup: process any existing unread messages ───
 process_unread
 
@@ -344,3 +352,5 @@ while true; do
 
     process_unread
 done
+
+fi  # end testing guard
