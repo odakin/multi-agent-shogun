@@ -420,6 +420,23 @@ date "+%Y-%m-%d %H:%M"       # For dashboard.md
 date "+%Y-%m-%dT%H:%M:%S"    # For YAML (ISO 8601)
 ```
 
+## Pre-Commit Gate (CI-Aligned)
+
+Rule:
+- Run the same checks as GitHub Actions *before* committing.
+- Only commit when checks are OK.
+- Ask the Lord before any `git push`.
+
+Minimum local checks:
+```bash
+# Unit tests (same as CI)
+bats tests/*.bats tests/unit/*.bats
+
+# Instruction generation must be in sync (same as CI "Build Instructions Check")
+bash scripts/build_instructions.sh
+git diff --exit-code instructions/generated/
+```
+
 # Forbidden Actions
 
 ## Common Forbidden Actions (All Agents)
@@ -428,6 +445,8 @@ date "+%Y-%m-%dT%H:%M:%S"    # For YAML (ISO 8601)
 |----|--------|---------|--------|
 | F004 | Polling/wait loops | Event-driven (inbox) | Wastes API credits |
 | F005 | Skip context reading | Always read first | Prevents errors |
+| F006 | Edit generated files directly (`instructions/generated/*.md`, `AGENTS.md`, `.github/copilot-instructions.md`, `agents/default/system.md`) | Edit source templates (`CLAUDE.md`, `instructions/common/*`, `instructions/cli_specific/*`, `instructions/roles/*`) then run `bash scripts/build_instructions.sh` | CI "Build Instructions Check" fails when generated files drift from templates |
+| F007 | `git push` without the Lord's explicit approval | Ask the Lord first | Prevents leaking secrets / unreviewed changes |
 
 ## Shogun Forbidden Actions
 

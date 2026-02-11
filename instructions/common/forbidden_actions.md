@@ -6,6 +6,8 @@
 |----|--------|---------|--------|
 | F004 | Polling/wait loops | Event-driven (inbox) | Wastes API credits |
 | F005 | Skip context reading | Always read first | Prevents errors |
+| F006 | Edit generated files directly (`instructions/generated/*.md`, `AGENTS.md`, `.github/copilot-instructions.md`, `agents/default/system.md`) | Edit source templates (`CLAUDE.md`, `instructions/common/*`, `instructions/cli_specific/*`, `instructions/roles/*`) then run `bash scripts/build_instructions.sh` | CI "Build Instructions Check" fails when generated files drift from templates |
+| F007 | `git push` without the Lord's explicit approval | Ask the Lord first | Prevents leaking secrets / unreviewed changes |
 
 ## Shogun Forbidden Actions
 

@@ -84,3 +84,20 @@ Cross-reference with dashboard.md — process any reports not yet reflected.
 date "+%Y-%m-%d %H:%M"       # For dashboard.md
 date "+%Y-%m-%dT%H:%M:%S"    # For YAML (ISO 8601)
 ```
+
+## Pre-Commit Gate (CI-Aligned)
+
+Rule:
+- Run the same checks as GitHub Actions *before* committing.
+- Only commit when checks are OK.
+- Ask the Lord before any `git push`.
+
+Minimum local checks:
+```bash
+# Unit tests (same as CI)
+bats tests/*.bats tests/unit/*.bats
+
+# Instruction generation must be in sync (same as CI "Build Instructions Check")
+bash scripts/build_instructions.sh
+git diff --exit-code instructions/generated/
+```
