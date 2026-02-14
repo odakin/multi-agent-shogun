@@ -565,6 +565,13 @@ if [ "$CLI_ADAPTER_LOADED" = true ]; then
         _agent="${AGENT_IDS[$i]}"
         _cli=$(get_cli_type "$_agent")
         case "$_cli" in
+            claude)
+                _claude_model=$(get_agent_model "$_agent")
+                if [[ -n "$_claude_model" ]]; then
+                    # haiku→Haiku, opus→Opus, sonnet→Sonnet に正規化
+                    MODEL_NAMES[$i]=$(echo "$_claude_model" | sed 's/^./\U&/')
+                fi
+                ;;
             codex)
                 # settings.yamlのmodelを優先表示、なければconfig.tomlのeffort
                 _codex_model=$(get_agent_model "$_agent")
