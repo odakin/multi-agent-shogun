@@ -546,6 +546,19 @@ pane_is_active() {
     [ "$active" = "1" ]
 }
 
+# ─── Session attach detection ───
+# Function: session_has_client
+# Description: Checks if the tmux session containing PANE_TARGET has at least
+#   one client attached. Used to avoid suppressing send-keys when no human is
+#   watching (e.g. single-pane shogun session where pane_is_active is always true).
+# Arguments: none (uses global PANE_TARGET)
+# Returns: 0 if at least one client is attached, 1 otherwise
+session_has_client() {
+    local session_name
+    session_name=$(timeout 2 tmux display-message -p -t "$PANE_TARGET" '#{session_name}' 2>/dev/null || true)
+    [ -n "$session_name" ] && [ "$(tmux list-clients -t "$session_name" 2>/dev/null | wc -l)" -gt 0 ]
+}
+
 # ─── Send wake-up nudge ───
 # Layered approach:
 #   1. If agent has active inotifywait self-watch → skip (agent wakes itself)
@@ -583,10 +596,11 @@ send_wakeup() {
         return 0
     fi
 
-    # Shogun: if the pane is focused, never inject keys (it can clobber the Lord's input).
-    # Instead, show a tmux message. If not focused, we can safely send the normal nudge.
-    if [ "$AGENT_ID" = "shogun" ] && pane_is_active; then
-        echo "[$(date)] [DISPLAY] shogun pane is active — showing nudge: inbox${unread_count}" >&2
+    # Shogun: if the pane is focused AND a human is attached, never inject keys
+    # (it can clobber the Lord's input). Show a tmux message instead.
+    # If session is detached, no human is watching — safe to send-keys normally.
+    if [ "$AGENT_ID" = "shogun" ] && pane_is_active && session_has_client; then
+        echo "[$(date)] [DISPLAY] shogun pane is active + attached — showing nudge: inbox${unread_count}" >&2
         timeout 2 tmux display-message -t "$PANE_TARGET" -d 5000 "inbox${unread_count}" 2>/dev/null || true
         return 0
     fi

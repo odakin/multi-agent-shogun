@@ -36,6 +36,10 @@
 #   T-CODEX-010: unresolved CLI type falls back to codex-safe path
 #   T-CODEX-011: clear_command処理でauto-recovery task_assignedを自動投入
 #   T-CODEX-012: auto-recovery task_assignedは重複投入しない
+#   T-SHOGUN-001: session_has_client — returns 0 when client attached
+#   T-SHOGUN-002: session_has_client — returns 1 when no client
+#   T-SHOGUN-003: send_wakeup — shogun + active + attached → display-message only
+#   T-SHOGUN-004: send_wakeup — shogun + active + detached → send-keys fallthrough
 #   T-COPILOT-001: send_cli_command — copilot /clear → Ctrl-C + restart
 #   T-COPILOT-002: send_cli_command — copilot /model → skip
 
@@ -71,6 +75,8 @@ MOCK
     export MOCK_CAPTURE_PANE=""
     export MOCK_SENDKEYS_RC=0
     export MOCK_PANE_CLI=""
+    export MOCK_PANE_ACTIVE=""
+    export MOCK_LIST_CLIENTS=""
 
     # Test harness: sets up mocks, then sources the REAL inbox_watcher.sh
     # __INBOX_WATCHER_TESTING__=1 skips arg parsing, inotifywait check, and main loop.
@@ -100,8 +106,16 @@ tmux() {
         echo "\${MOCK_PANE_CLI:-}"
         return 0
     fi
+    if echo "\$*" | grep -q "list-clients"; then
+        [ -n "\${MOCK_LIST_CLIENTS:-}" ] && echo "\$MOCK_LIST_CLIENTS"
+        return 0
+    fi
     if echo "\$*" | grep -q "display-message"; then
-        echo "mock_pane"
+        if echo "\$*" | grep -q "pane_active"; then
+            echo "\${MOCK_PANE_ACTIVE:-0}"
+        else
+            echo "mock_session"
+        fi
         return 0
     fi
     return 0
@@ -713,4 +727,64 @@ PY
 
     ! grep -q "send-keys.*/model" "$MOCK_LOG"
     echo "$output" | grep -q "not supported on copilot"
+}
+
+# --- T-SHOGUN-001: session_has_client — client attached ---
+
+@test "T-SHOGUN-001: session_has_client returns 0 when client attached" {
+    run bash -c '
+        MOCK_LIST_CLIENTS="/dev/pts/1: mock_session [200x50 xterm-256color]"
+        source "'"$TEST_HARNESS"'"
+        session_has_client
+    '
+    [ "$status" -eq 0 ]
+}
+
+# --- T-SHOGUN-002: session_has_client — no client ---
+
+@test "T-SHOGUN-002: session_has_client returns 1 when no client" {
+    run bash -c '
+        MOCK_LIST_CLIENTS=""
+        source "'"$TEST_HARNESS"'"
+        session_has_client
+    '
+    [ "$status" -ne 0 ]
+}
+
+# --- T-SHOGUN-003: shogun + active pane + client attached → display-message only ---
+
+@test "T-SHOGUN-003: send_wakeup shogun + active + attached uses display-message only" {
+    run bash -c '
+        MOCK_PANE_ACTIVE="1"
+        MOCK_LIST_CLIENTS="/dev/pts/1: mock_session [200x50 xterm-256color]"
+        source "'"$TEST_HARNESS"'"
+        AGENT_ID="shogun"
+        send_wakeup 2
+    '
+    [ "$status" -eq 0 ]
+
+    # display-message was used for nudge
+    echo "$output" | grep -q "DISPLAY"
+
+    # send-keys with inbox should NOT have occurred
+    ! grep -q "send-keys.*inbox" "$MOCK_LOG"
+}
+
+# --- T-SHOGUN-004: shogun + active pane + no client → send-keys fallthrough ---
+
+@test "T-SHOGUN-004: send_wakeup shogun + active + detached falls through to send-keys" {
+    run bash -c '
+        MOCK_PANE_ACTIVE="1"
+        MOCK_LIST_CLIENTS=""
+        source "'"$TEST_HARNESS"'"
+        AGENT_ID="shogun"
+        send_wakeup 2
+    '
+    [ "$status" -eq 0 ]
+
+    # Should NOT show display-message path
+    ! echo "$output" | grep -q "DISPLAY"
+
+    # Should have used send-keys
+    grep -q "send-keys.*inbox2" "$MOCK_LOG"
 }
