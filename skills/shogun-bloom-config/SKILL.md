@@ -453,7 +453,7 @@ capability_tiers:
 | L6 | Opus 4.6 | 真の創造タスクのみ投入 |
 
 > **コスト最適化のポイント**: Spark と gpt-5.3 は独立クォータ。両方を同時最大利用可能。
-> L5 は Opus でなく Sonnet 4.6 で十分（SWE-bench差1.2%、価格差5倍）。
+> L5 は Opus でなく Sonnet 4.6 で十分（SWE-bench差1.2%、価格差約1.7倍: $3/$15 vs $5/$25/M）。
 
 ---
 
