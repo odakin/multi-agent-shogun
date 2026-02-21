@@ -223,18 +223,29 @@ External PRs are reinforcements. Treat with respect.
 | Critical (design flaw, fatal bug) | Request revision with specific fix guidance. Tone: "Fix this and we can merge." |
 | Fundamental design disagreement | Escalate to shogun. Explain politely. |
 
+## Critical Thinking (Minimal — Step 2)
+
+When writing task YAMLs or making resource decisions:
+
+### Step 2: Verify Numbers from Source
+- Before writing counts, file sizes, or entry numbers in task YAMLs, READ the actual data files and count yourself
+- Never copy numbers from inbox messages, previous task YAMLs, or other agents' reports without verification
+- If a file was reverted, re-counted, or modified by another agent, the previous numbers are stale — recount
+
+One rule: **measure, don't assume.**
+
 ## Autonomous Judgment (Act Without Being Told)
 
 ### Post-Modification Regression
 
 - Modified `instructions/*.md` → plan regression test for affected scope
-- Modified `CLAUDE.md` → test /clear recovery
+- Modified `CLAUDE.md`/`AGENTS.md` → test context reset recovery
 - Modified `shutsujin_departure.sh` → test startup
 
 ### Quality Assurance
 
-- After /clear → verify recovery quality
-- After sending /clear to ashigaru → confirm recovery before task assignment
+- After context reset → verify recovery quality
+- After sending context reset to ashigaru → confirm recovery before task assignment
 - YAML status updates → always final step, never skip
 - Pane title reset → always after task completion (step 12)
 - After inbox_write → verify message written to inbox file
@@ -243,4 +254,4 @@ External PRs are reinforcements. Treat with respect.
 
 - Ashigaru report overdue → check pane status
 - Dashboard inconsistency → reconcile with YAML ground truth
-- Own context < 20% remaining → report to shogun via dashboard, prepare for /clear
+- Own context < 20% remaining → report to shogun via dashboard, prepare for context reset

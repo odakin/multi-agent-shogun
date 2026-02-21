@@ -224,18 +224,29 @@ External PRs are reinforcements. Treat with respect.
 | Critical (design flaw, fatal bug) | Request revision with specific fix guidance. Tone: "Fix this and we can merge." |
 | Fundamental design disagreement | Escalate to shogun. Explain politely. |
 
+## Critical Thinking (Minimal — Step 2)
+
+When writing task YAMLs or making resource decisions:
+
+### Step 2: Verify Numbers from Source
+- Before writing counts, file sizes, or entry numbers in task YAMLs, READ the actual data files and count yourself
+- Never copy numbers from inbox messages, previous task YAMLs, or other agents' reports without verification
+- If a file was reverted, re-counted, or modified by another agent, the previous numbers are stale — recount
+
+One rule: **measure, don't assume.**
+
 ## Autonomous Judgment (Act Without Being Told)
 
 ### Post-Modification Regression
 
 - Modified `instructions/*.md` → plan regression test for affected scope
-- Modified `CLAUDE.md` → test /clear recovery
+- Modified `CLAUDE.md`/`AGENTS.md` → test context reset recovery
 - Modified `shutsujin_departure.sh` → test startup
 
 ### Quality Assurance
 
-- After /clear → verify recovery quality
-- After sending /clear to ashigaru → confirm recovery before task assignment
+- After context reset → verify recovery quality
+- After sending context reset to ashigaru → confirm recovery before task assignment
 - YAML status updates → always final step, never skip
 - Pane title reset → always after task completion (step 12)
 - After inbox_write → verify message written to inbox file
@@ -244,7 +255,7 @@ External PRs are reinforcements. Treat with respect.
 
 - Ashigaru report overdue → check pane status
 - Dashboard inconsistency → reconcile with YAML ground truth
-- Own context < 20% remaining → report to shogun via dashboard, prepare for /clear
+- Own context < 20% remaining → report to shogun via dashboard, prepare for context reset
 
 # Communication Protocol
 
@@ -284,10 +295,10 @@ The nudge is minimal: `inboxN` (e.g. `inbox3` = 3 unread). That's it.
 
 Safety note (shogun):
 - If the Shogun pane is active (the Lord is typing), `inbox_watcher.sh` must not inject keystrokes. It should use tmux `display-message` only.
-- Escalation keystrokes (`Escape×2`, `/clear`, `C-u`) must be suppressed for shogun to avoid clobbering human input.
+- Escalation keystrokes (`Escape×2`, context reset, `C-u`) must be suppressed for shogun to avoid clobbering human input.
 
 Special cases (CLI commands sent via `tmux send-keys`):
-- `type: clear_command` → sends `/clear` + Enter via send-keys
+- `type: clear_command` → sends context reset command via send-keys（Claude Code: `/clear`, Codex: `/new`）
 - `type: model_switch` → sends the /model command via send-keys
 
 ## Agent Self-Watch Phase Policy (cmd_107)
@@ -310,7 +321,7 @@ Read-cost controls:
 |---------|--------|---------|
 | 0〜2 min | Standard pty nudge | Normal delivery |
 | 2〜4 min | Escape×2 + nudge | Cursor position bug workaround |
-| 4 min+ | `/clear` sent (max once per 5 min) | Force session reset + YAML re-read |
+| 4 min+ | Context reset sent (max once per 5 min, Codexはスキップ) | Force session reset + YAML re-read |
 
 ## Inbox Processing Protocol (karo/ashigaru/gunshi)
 
@@ -329,7 +340,7 @@ When you receive `inboxN` (e.g. `inbox3`):
 3. Only then go idle
 
 This is NOT optional. If you skip this and a redo message is waiting,
-you will be stuck idle until the escalation sends `/clear` (~4 min).
+you will be stuck idle until the next nudge escalation or task reassignment.
 
 ## Redo Protocol
 
@@ -337,10 +348,10 @@ When Karo determines a task needs to be redone:
 
 1. Karo writes new task YAML with new task_id (e.g., `subtask_097d` → `subtask_097d2`), adds `redo_of` field
 2. Karo sends `clear_command` type inbox message (NOT `task_assigned`)
-3. inbox_watcher delivers `/clear` to the agent → session reset
+3. inbox_watcher delivers context reset to the agent（Claude Code: `/clear`, Codex: `/new`）→ session reset
 4. Agent recovers via Session Start procedure, reads new task YAML, starts fresh
 
-Race condition is eliminated: `/clear` wipes old context. Agent re-reads YAML with new task_id.
+Race condition is eliminated: context reset wipes old context. Agent re-reads YAML with new task_id.
 
 ## Report Flow (interrupt prevention)
 

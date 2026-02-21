@@ -128,6 +128,16 @@ generate_agents_md() {
         -e 's|\.claude\.json|.codex/config.toml|g' \
         -e 's|\.mcp\.json|config.toml (mcp_servers section)|g' \
         -e 's|Claude Code|Codex CLI|g' \
+        -e 's|## /clear Recovery|## /new Recovery|g' \
+        -e 's|Forbidden after /clear|Forbidden after /new|g' \
+        -e 's|pre-/clear memory|pre-/new memory|g' \
+        -e 's|lost on /clear)|lost on /new)|g' \
+        -e 's|(/new or /clear)|(`/new`)|g' \
+        -e 's|sends `/clear` + Enter via send-keys|sends `/new` + Enter via send-keys（/clear→/new自動変換）|g' \
+        -e 's|`/clear` sent (max once per 5 min)|スキップ（Codexは`/clear`不可）|g' \
+        -e 's|escalation sends `/clear` (~4 min)|next nudge escalation or task reassignment|g' \
+        -e 's|delivers `/clear` to the agent|delivers `/new` to the agent（/clear→/new自動変換）|g' \
+        -e 's|`/clear` wipes old context|`/new` wipes old context|g' \
         "$claude_md" | tr -d '\r' > "$output_path"
 
     echo "  ✅ Created: AGENTS.md"
