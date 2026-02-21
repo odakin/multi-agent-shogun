@@ -279,7 +279,7 @@ load_adapter_with() {
 @test "build_cli_command: codex + default model → codex --model sonnet ..." {
     load_adapter_with "${TEST_TMP}/settings_mixed.yaml"
     result=$(build_cli_command "ashigaru5")
-    [ "$result" = "codex --model sonnet --dangerously-bypass-approvals-and-sandbox --no-alt-screen" ]
+    [ "$result" = "codex --model sonnet --search --dangerously-bypass-approvals-and-sandbox --no-alt-screen" ]
 }
 
 @test "build_cli_command: copilot → copilot --yolo" {
