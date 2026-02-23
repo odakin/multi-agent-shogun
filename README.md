@@ -357,7 +357,8 @@ Then restart your computer and run `install.bat` again.
 |--------|---------|-------------|
 | `install.bat` | Windows: WSL2 + Ubuntu setup | First time only |
 | `first_setup.sh` | Install tmux, Node.js, Claude Code CLI + Memory MCP config | First time only |
-| `shutsujin_departure.sh` | Create tmux sessions + launch Claude Code + load instructions + start ntfy listener | Daily |
+| `shutsujin_departure.sh` | Create tmux sessions + launch CLI + load instructions + start ntfy listener | Daily |
+| `scripts/switch_cli.sh` | Live switch agent CLI/model (settings.yaml → /exit → relaunch) | As needed |
 
 ### What `install.bat` does automatically:
 - ✅ Checks if WSL2 is installed (guides you if not)
@@ -796,19 +797,20 @@ Behavioral psychology-driven motivation through your notification feed:
 Each tmux pane shows the agent's current task directly on its border:
 
 ```
-┌ ashigaru1 (Sonnet) VF requirements ─┬ ashigaru3 (Opus) API research ──────┐
+┌ ashigaru1 Sonnet+T VF requirements ──┬ ashigaru3 Opus+T API research ──────┐
 │                                      │                                     │
 │  Working on SayTask requirements     │  Researching REST API patterns      │
 │                                      │                                     │
-├ ashigaru2 (Sonnet) ─────────────────┼ ashigaru4 (Opus) DB schema design ──┤
+├ ashigaru2 Sonnet ───────────────────┼ ashigaru4 Spark DB schema design ───┤
 │                                      │                                     │
 │  (idle — waiting for assignment)     │  Designing database schema          │
 │                                      │                                     │
 └──────────────────────────────────────┴─────────────────────────────────────┘
 ```
 
-- **Working**: `ashigaru1 (Sonnet) VF requirements` — agent name, model, and task summary
-- **Idle**: `ashigaru1 (Sonnet)` — model name only, no task
+- **Working**: `ashigaru1 Sonnet+T VF requirements` — agent name, model (with Thinking indicator), and task summary
+- **Idle**: `ashigaru2 Sonnet` — model name only, no task
+- **Display names**: Sonnet, Opus, Haiku, Codex, Spark — `+T` suffix = Extended Thinking enabled
 - Updated automatically by the Karo when assigning or completing tasks
 - Glance at all 9 panes to instantly know who's doing what
 
@@ -946,8 +948,12 @@ SayTask handles personal productivity (capture → schedule → remind). The cmd
 |-------|--------------|----------|------|
 | Shogun | Opus | **Enabled (high)** | Strategic advisor to the Lord. Use `--shogun-no-thinking` for relay-only mode |
 | Karo | Sonnet | Enabled | Task distribution, simple QC, dashboard management |
-| Gunshi | Sonnet 4.6 | Enabled | Deep analysis, design review, architecture evaluation |
+| Gunshi | Opus | Enabled | Deep analysis, design review, architecture evaluation |
 | Ashigaru 1–7 | Sonnet 4.6 | Enabled | Implementation: code, research, file operations |
+
+**Thinking control**: Set `thinking: true/false` per agent in `config/settings.yaml`. When `thinking: false`, the agent starts with `MAX_THINKING_TOKENS=0` to disable Extended Thinking. Pane borders show `+T` suffix when Thinking is enabled (e.g., `Sonnet+T`, `Opus+T`).
+
+**Live model switching**: Use `/shogun-model-switch` to change any agent's CLI type, model, or Thinking setting without restarting the entire system. See the Skills section for details.
 
 The system routes work by **cognitive complexity** at two levels: **Agent routing** (Ashigaru for L1–L3, Gunshi for L4–L6) and **Model routing within Ashigaru** via `capability_tiers` (see Dynamic Model Routing below).
 
@@ -1084,14 +1090,18 @@ Invoke skills with `/skill-name`. Just tell the Shogun: "run /skill-name".
 
 ### Included Skills (committed to repo)
 
-Two skills ship with the repository in `skills/`. They are domain-agnostic setup utilities useful for any user:
+Skills ship with the repository in `skills/`. They are domain-agnostic utilities useful for any user:
 
 | Skill | Description |
 |-------|-------------|
+| `/skill-creator` | Template and guide for creating new skills |
+| `/shogun-agent-status` | Show busy/idle status of all agents with task and inbox info |
 | `/shogun-model-list` | Reference table: all CLI tools × models × subscriptions × Bloom max level |
 | `/shogun-bloom-config` | Interactive configurator: answer 2 questions about your subscriptions → get ready-to-paste `capability_tiers` YAML |
+| `/shogun-model-switch` | Live CLI/model switching: settings.yaml update → `/exit` → relaunch with correct flags. Supports Thinking ON/OFF control |
+| `/shogun-readme-sync` | Keep README.md and README_ja.md in sync |
 
-These are intentionally minimal — they help you configure the system, not do your work for you.
+These help you configure and operate the system. Personal workflow skills grow organically through the bottom-up discovery process.
 
 ### Skill Philosophy
 
@@ -1410,6 +1420,7 @@ multi-agent-shogun/
 │   ├── agent_status.sh       # Show busy/idle status of all agents
 │   ├── inbox_write.sh        # Write messages to agent inbox
 │   ├── inbox_watcher.sh      # Watch inbox changes via inotifywait
+│   ├── switch_cli.sh         # Live CLI/model switching (/exit → relaunch)
 │   ├── ntfy.sh               # Send push notifications to phone
 │   └── ntfy_listener.sh      # Stream incoming messages from phone
 │
@@ -1441,6 +1452,14 @@ multi-agent-shogun/
 │   ├── integ_code.md         # Integration: code review
 │   ├── integ_analysis.md     # Integration: analysis
 │   └── context_template.md   # Universal 7-section project context
+│
+├── skills/                   # Reusable skills (committed to repo)
+│   ├── skill-creator/        # Skill creation template
+│   ├── shogun-agent-status/  # Agent status display
+│   ├── shogun-model-list/    # Model capability reference
+│   ├── shogun-bloom-config/  # Bloom tier configurator
+│   ├── shogun-model-switch/  # Live CLI/model switching
+│   └── shogun-readme-sync/   # README sync
 │
 ├── memory/                   # Memory MCP persistent storage
 ├── dashboard.md              # Real-time status board
