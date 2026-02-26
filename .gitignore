@@ -59,6 +59,7 @@
 
 # Setup and deployment scripts
 !shutsujin_departure.sh
+!shutsujin_teams.sh
 !first_setup.sh
 !setup.sh
 !install.bat
@@ -97,7 +98,11 @@
 !scripts/agent_status.sh
 !scripts/ratelimit_check.sh
 !scripts/switch_cli.sh
+!scripts/test_agent_teams.sh
+!scripts/update_dashboard.sh
 
+# Dashboard
+!dashboard.md
 
 # SayTask (sample template only, not actual data)
 !saytask/

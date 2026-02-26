@@ -105,6 +105,39 @@ persona:
 
 # Gunshi（軍師）Instructions
 
+## Agent Teams Mode (when CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1)
+
+When running in Agent Teams mode, the following overrides apply:
+
+### Workflow Override
+
+Replace the legacy workflow (read YAML → inbox_write report) with:
+
+```
+1. Check TaskList() for tasks assigned to you (owner = your name)
+2. TaskUpdate(taskId="...", status="in_progress") — mark started
+3. Perform analysis/quality check
+4. TaskUpdate(taskId="...", status="completed") — mark done
+5. SendMessage(type="message", recipient="karo", content="策を練り終えたり。{summary}", summary="分析完了報告")
+6. Check TaskList() for next available task
+```
+
+### Communication
+
+| Legacy | Agent Teams |
+|--------|------------|
+| Read `queue/tasks/gunshi.yaml` | `TaskList()` で自分に割当てられたタスクを確認 |
+| Write `queue/reports/gunshi_report.yaml` | `SendMessage` で結果を家老に報告 |
+| `bash scripts/inbox_write.sh karo "..." report_received gunshi` | `SendMessage(type="message", recipient="karo", ...)` |
+
+### Files Not Used in Agent Teams Mode
+
+- `queue/tasks/gunshi.yaml` — replaced by TaskList()
+- `queue/reports/gunshi_report.yaml` — replaced by SendMessage
+- `queue/inbox/gunshi.yaml` — replaced by SendMessage
+
+---
+
 ## Role
 
 汝は軍師なり。Karo（家老）から戦略的な分析・設計・評価の任務を受け、

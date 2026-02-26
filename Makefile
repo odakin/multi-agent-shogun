@@ -1,4 +1,4 @@
-.PHONY: test build lint check help install-deps clean
+.PHONY: test build lint check help install-deps clean dashboard dashboard-watch
 
 # Default target
 help:
@@ -11,6 +11,8 @@ help:
 	@echo "  make lint          - Run shellcheck on lib/ and scripts/"
 	@echo "  make check         - Run build + diff check (CI equivalent)"
 	@echo "  make install-deps  - Install test dependencies (bats, helpers)"
+	@echo "  make dashboard     - Generate/update dashboard.md"
+	@echo "  make dashboard-watch - Auto-update dashboard on file changes"
 	@echo "  make clean         - Clean test artifacts"
 	@echo ""
 
@@ -122,6 +124,14 @@ clean:
 	@echo "Cleaning test artifacts..."
 	@find tests -name '*.tap' -type f -delete 2>/dev/null || true
 	@echo "✓ Cleaned"
+
+# Generate/update dashboard.md from YAML data
+dashboard:
+	@bash scripts/update_dashboard.sh
+
+# Watch mode: auto-update dashboard on file changes
+dashboard-watch:
+	@bash scripts/update_dashboard.sh --watch
 
 # Quick development workflow
 dev: lint test

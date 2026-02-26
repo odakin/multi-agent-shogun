@@ -94,7 +94,62 @@ Always include: 1) Agent role (shogun/karo/ashigaru/gunshi) 2) Forbidden actions
 
 # Communication Protocol
 
-## Mailbox System (inbox_write.sh)
+## Mode Detection
+
+Check `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` env var:
+- **Set to 1**: Use Agent Teams protocol below. Ignore Mailbox System section.
+- **Not set**: Use Mailbox System (legacy). Skip Agent Teams section.
+
+## Agent Teams Protocol (when CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1)
+
+Agent-to-agent communication uses **Agent Teams** built-in tools. No inbox_write.sh, no inbox_watcher.sh, no tmux send-keys.
+
+### Startup Sequence (Shogun only)
+
+```
+1. TeamCreate(team_name="shogun-team", description="戦国マルチエージェント統率チーム")
+2. Spawn karo:
+   Task(subagent_type="general-purpose", team_name="shogun-team", name="karo",
+        prompt="汝は家老なり。CLAUDE.md を読み、instructions/karo.md を読んで役割を理解せよ。")
+3. TaskCreate(subject="...", description="...") でタスク作成
+4. TaskUpdate(taskId="...", owner="karo") で家老に割当
+5. SendMessage(type="message", recipient="karo", content="新タスクを割当てた。TaskListを確認せよ。", summary="新タスク割当通知")
+```
+
+### Communication API
+
+| 操作 | API | 例 |
+|------|-----|-----|
+| 直接メッセージ | `SendMessage(type="message", recipient="名前", content="...", summary="...")` | 将軍→家老 |
+| 全体通知 | `SendMessage(type="broadcast", content="...", summary="...")` | 全員への連絡 |
+| タスク作成 | `TaskCreate(subject="...", description="...")` | 新しい作業項目 |
+| タスク割当 | `TaskUpdate(taskId="...", owner="名前")` | 担当者の設定 |
+| タスク状態更新 | `TaskUpdate(taskId="...", status="completed")` | 完了報告 |
+| タスク依存関係 | `TaskUpdate(taskId="...", addBlockedBy=["前提タスクID"])` | 順序制御 |
+| タスク一覧 | `TaskList()` | 進捗確認 |
+
+### Communication Rules (Agent Teams mode)
+
+1. **メッセージは自動配信**: SendMessage で送信すれば相手に自動的に届く。ポーリング不要。
+2. **報告もSendMessage**: 足軽→家老の完了報告もSendMessage + TaskUpdate(status="completed")。
+3. **タスク可視性**: TaskList() で全タスクの状態が見える。dashboard.md の手動更新は補助的。
+4. **指揮系統**: 将軍→家老→足軽/軍師。SendMessageの宛先もこの系統に従う。
+5. **足軽spawn**: 家老がTask()で足軽をspawnする。将軍は直接足軽をspawnしない。
+
+### Teammate Spawn (karo)
+
+家老が足軽・軍師をspawnする例:
+```
+Task(subagent_type="general-purpose", team_name="shogun-team", name="ashigaru1",
+     prompt="汝は足軽1号なり。CLAUDE.md を読み、instructions/ashigaru.md を読んで役割を理解せよ。")
+
+Task(subagent_type="general-purpose", team_name="shogun-team", name="gunshi",
+     prompt="汝は軍師なり。CLAUDE.md を読み、instructions/gunshi.md を読んで役割を理解せよ。")
+```
+
+---
+
+## Mailbox System (inbox_write.sh) — Legacy Mode
 
 Agent-to-agent communication uses file-based mailbox:
 

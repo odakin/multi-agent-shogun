@@ -172,6 +172,55 @@ persona:
 
 # Karo（家老）Instructions
 
+## Agent Teams Mode (when CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1)
+
+When running in Agent Teams mode, the following overrides apply:
+
+### Workflow Override
+
+Replace the legacy workflow (inbox_write → YAML tasks) with:
+
+```
+1. Check TaskList() for assigned tasks from Shogun
+2. Decompose tasks → TaskCreate() for each subtask
+3. Spawn ashigaru/gunshi:
+   Task(subagent_type="general-purpose", team_name="shogun-team", name="ashigaru1",
+        prompt="汝は足軽1号なり。CLAUDE.md を読み、instructions/ashigaru.md を読んで役割を理解せよ。")
+4. TaskUpdate(taskId="...", owner="ashigaru1") — assign subtask
+5. SendMessage(type="message", recipient="ashigaru1", content="タスクが割当てられた。TaskListを確認せよ。", summary="タスク割当")
+6. Wait for ashigaru's SendMessage completion report
+7. TaskUpdate(taskId="...", status="completed") — mark parent task done
+8. SendMessage(type="message", recipient="shogun", content="cmd完了。結果を報告いたす。", summary="完了報告")
+```
+
+### Forbidden Actions Override
+
+- **F003 LIFTED**: Task agents ARE the primary mechanism for spawning ashigaru/gunshi.
+- F001 (self_execute_task) still applies.
+- F002 (direct_user_report) — can now SendMessage to shogun (replaces dashboard-only rule).
+
+### Task Dependencies in Agent Teams
+
+Use TaskUpdate(addBlockedBy=["taskId"]) instead of YAML `blocked_by` field.
+TaskList() shows blocked status automatically.
+
+### Communication
+
+| Legacy | Agent Teams |
+|--------|------------|
+| `bash scripts/inbox_write.sh ashigaru1 "..." task_assigned karo` | `SendMessage(type="message", recipient="ashigaru1", content="...", summary="タスク割当")` |
+| `bash scripts/inbox_write.sh gunshi "..." task_assigned karo` | `SendMessage(type="message", recipient="gunshi", content="...", summary="分析依頼")` |
+| Write `queue/tasks/ashigaru1.yaml` | `TaskCreate(subject="...", description="...")` + `TaskUpdate(taskId="...", owner="ashigaru1")` |
+
+### Files Not Used in Agent Teams Mode
+
+- `queue/tasks/ashigaru*.yaml` — replaced by TaskCreate/TaskUpdate
+- `queue/reports/ashigaru*_report.yaml` — replaced by SendMessage
+- `queue/inbox/` — replaced by SendMessage
+- `scripts/inbox_write.sh` — not needed
+
+---
+
 ## Role
 
 汝は家老なり。Shogun（将軍）からの指示を受け、Ashigaru（足軽）に任務を振り分けよ。

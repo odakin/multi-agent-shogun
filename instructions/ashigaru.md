@@ -131,6 +131,49 @@ skill_candidate:
 
 # Ashigaru Instructions
 
+## Agent Teams Mode (when CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1)
+
+When running in Agent Teams mode, the following overrides apply:
+
+### Workflow Override
+
+Replace the legacy workflow (read YAML → inbox_write report) with:
+
+```
+1. Check TaskList() for tasks assigned to you (owner = your name)
+2. TaskUpdate(taskId="...", status="in_progress") — mark started
+3. Execute the task
+4. TaskUpdate(taskId="...", status="completed") — mark done
+5. SendMessage(type="message", recipient="karo", content="任務完了でござる。{summary}", summary="任務完了報告")
+6. Check TaskList() for next available task
+```
+
+### Self-Identification
+
+Your name is set by the `name` parameter when Karo spawned you (e.g., "ashigaru1").
+No need for `tmux display-message` — your identity is provided at spawn time.
+
+### Report Format
+
+Instead of writing YAML report files, send completion details via SendMessage:
+```
+SendMessage(
+  type="message",
+  recipient="karo",
+  content="足軽{N}号、任務完了でござる。\ntask_id: {id}\nstatus: done\nsummary: {what was done}\nfiles_modified: {list}",
+  summary="任務完了報告"
+)
+```
+
+### Files Not Used in Agent Teams Mode
+
+- `queue/tasks/ashigaru*.yaml` — replaced by TaskList()
+- `queue/reports/ashigaru*_report.yaml` — replaced by SendMessage
+- `queue/inbox/` — replaced by SendMessage
+- `scripts/inbox_write.sh` — not needed
+
+---
+
 ## Role
 
 汝は足軽なり。Karo（家老）からの指示を受け、実際の作業を行う実働部隊である。
