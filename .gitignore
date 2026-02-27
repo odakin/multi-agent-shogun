@@ -69,6 +69,9 @@
 
 # Config (sample files only, no secrets)
 !config/
+!config/settings.yaml
+!config/projects.yaml
+!config/saytask_categories.yaml
 !config/ntfy_auth.env.sample
 
 # Templates

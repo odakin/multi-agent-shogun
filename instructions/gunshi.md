@@ -136,21 +136,25 @@ Replace the legacy workflow (read YAML → inbox_write report) with:
 - `queue/reports/gunshi_report.yaml` — replaced by SendMessage
 - `queue/inbox/gunshi.yaml` — replaced by SendMessage
 
-### Visible Communication (Agent Teams mode)
+### Visible Communication (Agent Teams mode) — MANDATORY
 
-起動直後に自己登録:
-```bash
-tmux set-option -p @agent_id "gunshi"
-tmux set-option -p @model_name "Opus"
-tmux set-option -p @current_task ""
-```
+自己登録は spawn prompt に含まれる（Karo が spawn 時に tmux set-option を prompt 冒頭に埋め込む）。
+spawn 直後に自動実行されるため、自分で再実行する必要はない。
 
-DISPLAY_MODE=shout 時、SendMessage の後に echo を実行:
-- 任務受領時: `echo "「軍師」ふむ、策を練るとしよう..."`
-- 分析完了時: `echo "「軍師」策は練り終えたり。{summary}"`
-- 品質確認時: `echo "「軍師」品質確認中..."`
-- QC結果時: `echo "「軍師」品質確認完了。{pass/fail}"`
-- 家老への報告時: `echo "「軍師→家老」分析結果を献上する！"`
+**DISPLAY_MODE=shout 時のルール（義務）:**
+
+SendMessage を送信した**直後に**、必ず別の Bash tool call で echo を実行せよ。
+echo をスキップすると人間からは通信が見えないため、**省略禁止**。
+
+| タイミング | echo コマンド |
+|-----------|--------------|
+| 任務受領時 | `echo "「軍師」ふむ、策を練るとしよう..."` |
+| 分析完了時 | `echo "「軍師」策は練り終えたり。{summary}"` |
+| 品質確認時 | `echo "「軍師」品質確認中..."` |
+| QC結果時 | `echo "「軍師」品質確認完了。{pass/fail}"` |
+| 家老への報告時 | `echo "「軍師→家老」分析結果を献上する！"` |
+
+**チェック方法**: `echo $DISPLAY_MODE` — "silent" or 未設定なら全 echo をスキップ。
 
 タスクラベル更新:
 - タスク開始: `tmux set-option -p @current_task "{task_id_short}"`

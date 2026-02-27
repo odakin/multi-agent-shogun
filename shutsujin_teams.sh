@@ -538,6 +538,11 @@ with open(f,'w') as fh: yaml.safe_dump(d, fh, default_flow_style=False, allow_un
         export DISPLAY_MODE="shout"
     fi
 
+    # KESSEN_MODE 環境変数（決戦の陣）
+    if [ "$KESSEN_MODE" = true ]; then
+        export KESSEN_MODE=true
+    fi
+
     # 忍者アスキーアート（CC0 Public Domain）
     echo -e "\033[1;35m  ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────┐\033[0m"
     echo -e "\033[1;35m  │\033[0m                              \033[1;37m【 忍 者 戦 士 】\033[0m  Ryu Hayabusa (CC0 Public Domain)                        \033[1;35m│\033[0m"
@@ -570,11 +575,24 @@ NINJA_EOF
 
     if [ "$KESSEN_MODE" = true ]; then
         log_success "⚔️  決戦の陣で出陣！全軍Opus！"
-        export KESSEN_MODE=true
     else
         log_success "⚔️  平時の陣で出陣（足軽=Sonnet, 軍師=Opus）"
     fi
     echo ""
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # ntfy 入力リスナー起動
+    # ═══════════════════════════════════════════════════════════════════════════
+    NTFY_TOPIC=$(grep 'ntfy_topic:' ./config/settings.yaml 2>/dev/null | awk '{print $2}' | tr -d '"')
+    if [ -n "$NTFY_TOPIC" ]; then
+        pkill -f "ntfy_listener.sh" 2>/dev/null || true
+        [ ! -f ./queue/ntfy_inbox.yaml ] && echo "inbox:" > ./queue/ntfy_inbox.yaml
+        nohup bash "$SCRIPT_DIR/scripts/ntfy_listener.sh" &>/dev/null &
+        disown
+        log_info "📱 ntfy入力リスナー起動 (topic: $NTFY_TOPIC)"
+    else
+        log_info "📱 ntfy未設定のためリスナーはスキップ"
+    fi
 
     # ═══════════════════════════════════════════════════════════════════════════
     # ビジュアルモニター起動（サイレントモード以外）
@@ -588,6 +606,15 @@ NINJA_EOF
             TEAMS_SESSION=$(tmux display-message -p '#{session_name}' 2>/dev/null)
         fi
         export TEAMS_SESSION
+
+        # tmux 環境変数にも DISPLAY_MODE と KESSEN_MODE をセット
+        # （エージェントが tmux show-environment で読めるように）
+        if [ -n "$TEAMS_SESSION" ]; then
+            tmux set-environment -t "$TEAMS_SESSION" DISPLAY_MODE "$DISPLAY_MODE" 2>/dev/null || true
+            if [ "$KESSEN_MODE" = true ]; then
+                tmux set-environment -t "$TEAMS_SESSION" KESSEN_MODE "true" 2>/dev/null || true
+            fi
+        fi
 
         mkdir -p "$SCRIPT_DIR/logs"
         log_info "🎨 ビジュアルモニター起動中..."

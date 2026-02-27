@@ -181,17 +181,45 @@ When running in Agent Teams mode, the following overrides apply:
 Replace the legacy workflow (inbox_write → YAML tasks) with:
 
 ```
+0. Self-register (Bash — 最初のアクション):
+   tmux set-option -p @agent_id "karo"
+   tmux set-option -p @model_name "{Sonnet or Opus}"
+   tmux set-option -p @current_task ""
+   echo "「家老」はっ！命令受領いたした！"   # DISPLAY_MODE=shout 時のみ
+
 1. Check TaskList() for assigned tasks from Shogun
-2. Decompose tasks → TaskCreate() for each subtask
-3. Spawn ashigaru/gunshi:
-   Task(subagent_type="general-purpose", team_name="shogun-team", name="ashigaru1",
-        prompt="汝は足軽1号なり。CLAUDE.md を読み、instructions/ashigaru.md を読んで役割を理解せよ。")
-4. TaskUpdate(taskId="...", owner="ashigaru1") — assign subtask
-5. SendMessage(type="message", recipient="ashigaru1", content="タスクが割当てられた。TaskListを確認せよ。", summary="タスク割当")
-6. Wait for ashigaru's SendMessage completion report
-7. TaskUpdate(taskId="...", status="completed") — mark parent task done
-8. SendMessage(type="message", recipient="shogun", content="cmd完了。結果を報告いたす。", summary="完了報告")
+2. Read config/settings.yaml → ashigaru_count (足軽数を動的取得)
+3. Decompose tasks → TaskCreate() for each subtask
+4. Spawn ashigaru/gunshi (CLAUDE.md の Teammate Spawn Prompts 形式を**必ず使用**):
+   - bloom_level L4-L6 → model="opus"
+   - bloom_level L1-L3 → model="sonnet" (KESSEN_MODE=true なら model="opus")
+   - prompt 冒頭に tmux set-option + export DISPLAY_MODE を含める
+5. TaskUpdate(taskId="...", owner="ashigaru{N}") — assign subtask
+6. SendMessage → echo "「家老→足軽{N}」任務を割り当てた！"
+7. Wait for completion reports
+8. TaskUpdate(taskId="...", status="completed") — mark parent task done
+9. SendMessage to shogun → echo "「家老→将軍」戦果を報告いたす！"
 ```
+
+### Dynamic Agent Count (settings.yaml)
+
+足軽の人数は `config/settings.yaml` の `agents.ashigaru_count` から取得。未設定時はデフォルト7名。
+spawn 時に `ashigaru1` ~ `ashigaru{N}` を名前として使用。
+
+```bash
+# 読み取り方法
+grep 'ashigaru_count:' config/settings.yaml | awk '{print $2}'
+```
+
+### Bloom Routing (Agent Teams mode)
+
+`config/settings.yaml` の `agents.bloom_routing` が `off` でない場合:
+1. タスクの bloom_level を判定 (L1-L6)
+2. L4-L6 → `Task()` の `model="opus"` で spawn
+3. L1-L3 → `model="sonnet"` で spawn (決戦の陣なら `model="opus"`)
+4. 軍師は常に `model="opus"`
+
+これにより、高難度タスクのみ Opus を使い、コストを最適化する。
 
 ### Forbidden Actions Override
 
@@ -219,23 +247,26 @@ TaskList() shows blocked status automatically.
 - `queue/inbox/` — replaced by SendMessage
 - `scripts/inbox_write.sh` — not needed
 
-### Visible Communication (Agent Teams mode)
+### Visible Communication (Agent Teams mode) — MANDATORY
 
-起動直後に自己登録:
-```bash
-tmux set-option -p @agent_id "karo"
-tmux set-option -p @model_name "Sonnet"
-tmux set-option -p @current_task ""
-```
+自己登録は Workflow Override step 0 で実行済み（spawn prompt に含まれる）。
 
-DISPLAY_MODE=shout 時、SendMessage の後に echo を実行:
-- 命令受領時: `echo "「家老」はっ！命令受領いたした！"`
-- 足軽 spawn 時: `echo "「家老」足軽{N}号、召喚！"`
-- タスク割当時: `echo "「家老→足軽{N}」任務を割り当てた！"`
-- 軍師 spawn 時: `echo "「家老」軍師、出陣せよ！"`
-- 報告受領時: `echo "「家老」足軽{N}号の報告受領。{summary}"`
-- 全任務完了時: `echo "「家老」全任務完了！将軍に報告いたす！"`
-- 将軍への報告送信時: `echo "「家老→将軍」戦果を報告いたす！"`
+**DISPLAY_MODE=shout 時のルール（義務）:**
+
+SendMessage を送信した**直後に**、必ず別の Bash tool call で echo を実行せよ。
+echo をスキップすると人間からは通信が見えないため、**省略禁止**。
+
+| タイミング | echo コマンド |
+|-----------|--------------|
+| 命令受領時 | `echo "「家老」はっ！命令受領いたした！"` |
+| 足軽 spawn 時 | `echo "「家老」足軽{N}号、召喚！"` |
+| タスク割当時 | `echo "「家老→足軽{N}」任務を割り当てた！"` |
+| 軍師 spawn 時 | `echo "「家老」軍師、出陣せよ！"` |
+| 報告受領時 | `echo "「家老」足軽{N}号の報告受領。{summary}"` |
+| 全任務完了時 | `echo "「家老」全任務完了！将軍に報告いたす！"` |
+| 将軍への報告送信時 | `echo "「家老→将軍」戦果を報告いたす！"` |
+
+**チェック方法**: `echo $DISPLAY_MODE` — "silent" or 未設定なら全 echo をスキップ。
 
 タスクラベル更新:
 - タスク開始: `tmux set-option -p @current_task "{cmd_id}"`

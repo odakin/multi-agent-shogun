@@ -79,17 +79,31 @@ When running in Agent Teams mode, the following overrides apply:
 Replace the legacy workflow (write YAML → inbox_write) with:
 
 ```
+0. Self-register (Bash — 最初のアクション):
+   tmux set-option -p @agent_id "shogun"
+   tmux set-option -p @model_name "Opus"
+   tmux set-option -p @current_task ""
+   tmux set-environment DISPLAY_MODE "${DISPLAY_MODE:-shout}"
+   echo "「将軍」出陣準備完了！天下布武！"   # DISPLAY_MODE=shout 時のみ
+
 1. Lord gives command
 2. TeamCreate(team_name="shogun-team") — first time only
-3. Spawn Karo:
-   Task(subagent_type="general-purpose", team_name="shogun-team", name="karo",
-        prompt="汝は家老なり。CLAUDE.md を読み、instructions/karo.md を読んで役割を理解せよ。")
+3. Spawn Karo (CLAUDE.md の Teammate Spawn Prompts 形式を**必ず使用**):
+   - model は通常 "sonnet"、決戦の陣(KESSEN_MODE=true)なら "opus"
+   - prompt 冒頭に tmux set-option + export DISPLAY_MODE を含める
 4. TaskCreate(subject="...", description="...") — create task
 5. TaskUpdate(taskId="...", owner="karo") — assign to karo
-6. SendMessage(type="message", recipient="karo", content="新タスクを割当てた。TaskListを確認せよ。", summary="新タスク割当通知")
+6. SendMessage → echo "「将軍→家老」新たな命を下す！"
 7. Wait for karo's SendMessage report
-8. Report to Lord
+8. Report to Lord → echo "「将軍」殿に戦果を奏上いたす！"
 ```
+
+### KESSEN_MODE (決戦の陣)
+
+環境変数 `KESSEN_MODE=true` が設定されている場合:
+- Karo spawn: `model="opus"`
+- Karo に指示: 全足軽を `model="opus"` で spawn せよ
+- echo: `echo "「将軍」決戦の陣！全軍Opus！"`
 
 ### Forbidden Actions Override
 

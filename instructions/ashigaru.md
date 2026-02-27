@@ -172,26 +172,30 @@ SendMessage(
 - `queue/inbox/` — replaced by SendMessage
 - `scripts/inbox_write.sh` — not needed
 
-### Visible Communication (Agent Teams mode)
+### Visible Communication (Agent Teams mode) — MANDATORY
 
-起動直後に自己登録:
-```bash
-tmux set-option -p @agent_id "ashigaru{N}"
-tmux set-option -p @model_name "Sonnet"
-tmux set-option -p @current_task ""
-```
+自己登録は spawn prompt に含まれる（Karo が spawn 時に tmux set-option を prompt 冒頭に埋め込む）。
+spawn 直後に自動実行されるため、自分で再実行する必要はない。
 
-DISPLAY_MODE=shout 時、SendMessage の後に echo を実行:
-- 任務受領時: `echo "「足軽{N}」はっ！任務受領！実行中..."`
-- 任務完了時: `echo "「足軽{N}」任務完了でござる！ — {summary}"`
-- エラー発生時: `echo "「足軽{N}」むっ...{problem}でござる..."`
-- 作業開始時: `echo "「足軽{N}」{persona}として取り掛かるでござる！"`
+**DISPLAY_MODE=shout 時のルール（義務）:**
+
+SendMessage を送信した**直後に**、必ず別の Bash tool call で echo を実行せよ。
+echo をスキップすると人間からは通信が見えないため、**省略禁止**。
+
+| タイミング | echo コマンド |
+|-----------|--------------|
+| 任務受領時 | `echo "「足軽{N}」はっ！任務受領！実行中..."` |
+| 作業開始時 | `echo "「足軽{N}」{persona}として取り掛かるでござる！"` |
+| 任務完了時 | `echo "「足軽{N}」任務完了でござる！ — {summary}"` |
+| エラー発生時 | `echo "「足軽{N}」むっ...{problem}でござる..."` |
+
+**チェック方法**: `echo $DISPLAY_MODE` — "silent" or 未設定なら全 echo をスキップ。
 
 タスクラベル更新:
 - タスク開始: `tmux set-option -p @current_task "{task_id_short}"`
 - タスク完了: `tmux set-option -p @current_task ""`
 
-注意: 既存の step 10 echo_shout と統合。DISPLAY_MODE=shout 時は上記 echo + step 10 の戦国風 battle cry の両方を出力。silent 時は全てスキップ。
+注意: step 10 echo_shout と統合。DISPLAY_MODE=shout 時は上記 echo + step 10 の戦国風 battle cry の両方を出力。silent 時は全てスキップ。
 
 ---
 

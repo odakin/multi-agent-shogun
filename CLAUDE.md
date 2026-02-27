@@ -107,14 +107,19 @@ Agent-to-agent communication uses **Agent Teams** built-in tools. No inbox_write
 ### Startup Sequence (Shogun only)
 
 ```
+0. Self-register (Bash):
+   tmux set-option -p @agent_id "shogun"
+   tmux set-option -p @model_name "Opus"
+   tmux set-option -p @current_task ""
+   tmux set-environment DISPLAY_MODE "${DISPLAY_MODE:-shout}"
 1. TeamCreate(team_name="shogun-team", description="戦国マルチエージェント統率チーム")
-2. Spawn karo:
-   Task(subagent_type="general-purpose", team_name="shogun-team", name="karo",
-        prompt="汝は家老なり。CLAUDE.md を読み、instructions/karo.md を読んで役割を理解せよ。")
+2. Spawn karo (see Teammate Spawn Prompts — use mandatory format with model + DISPLAY_MODE)
 3. TaskCreate(subject="...", description="...") でタスク作成
 4. TaskUpdate(taskId="...", owner="karo") で家老に割当
 5. SendMessage(type="message", recipient="karo", content="新タスクを割当てた。TaskListを確認せよ。", summary="新タスク割当通知")
 ```
+
+**DISPLAY_MODE 伝搬**: 将軍は起動時に `tmux set-environment DISPLAY_MODE` で tmux 環境にセット。spawn prompt 内で `export DISPLAY_MODE='{value}'` を指定し、全エージェントに伝搬。
 
 ### Communication API
 
@@ -175,16 +180,63 @@ SendMessage の後に、戦国風 echo を Bash tool で実行して通信を可
 タスク開始時: `tmux set-option -p @current_task "{task_id_short}"`
 タスク完了時: `tmux set-option -p @current_task ""`
 
-### Teammate Spawn (karo)
+### Teammate Spawn Prompts (MANDATORY format)
 
-家老が足軽・軍師をspawnする例:
+spawn prompt には以下を**必ず含める**。省略禁止。
+
+#### Shogun → Karo spawn:
 ```
-Task(subagent_type="general-purpose", team_name="shogun-team", name="ashigaru1",
-     prompt="汝は足軽1号なり。CLAUDE.md を読み、instructions/ashigaru.md を読んで役割を理解せよ。")
+Task(subagent_type="general-purpose", team_name="shogun-team", name="karo",
+     model="{KESSEN_MODE ? 'opus' : 'sonnet'}",
+     prompt="【即時実行】まず以下の Bash を実行:
+tmux set-option -p @agent_id 'karo'
+tmux set-option -p @model_name '{model_name}'
+tmux set-option -p @current_task ''
+export DISPLAY_MODE='{DISPLAY_MODE}'
 
+汝は家老なり。CLAUDE.md を読み、instructions/karo.md を読んで役割を理解せよ。
+DISPLAY_MODE=shout なら SendMessage の後に必ず echo を実行（CLAUDE.md の Communication Echo Rules 参照）。")
+```
+
+#### Karo → Ashigaru spawn:
+```
+Task(subagent_type="general-purpose", team_name="shogun-team", name="ashigaru{N}",
+     model="{bloom_level >= L4 ? 'opus' : (KESSEN_MODE ? 'opus' : 'sonnet')}",
+     prompt="【即時実行】まず以下の Bash を実行:
+tmux set-option -p @agent_id 'ashigaru{N}'
+tmux set-option -p @model_name '{model_name}'
+tmux set-option -p @current_task ''
+export DISPLAY_MODE='{DISPLAY_MODE}'
+
+汝は足軽{N}号なり。CLAUDE.md を読み、instructions/ashigaru.md を読んで役割を理解せよ。
+DISPLAY_MODE=shout なら echo と SendMessage のルールに従え（CLAUDE.md の Communication Echo Rules 参照）。")
+```
+
+#### Karo → Gunshi spawn:
+```
 Task(subagent_type="general-purpose", team_name="shogun-team", name="gunshi",
-     prompt="汝は軍師なり。CLAUDE.md を読み、instructions/gunshi.md を読んで役割を理解せよ。")
+     model="opus",
+     prompt="【即時実行】まず以下の Bash を実行:
+tmux set-option -p @agent_id 'gunshi'
+tmux set-option -p @model_name 'Opus'
+tmux set-option -p @current_task ''
+export DISPLAY_MODE='{DISPLAY_MODE}'
+
+汝は軍師なり。CLAUDE.md を読み、instructions/gunshi.md を読んで役割を理解せよ。
+DISPLAY_MODE=shout なら SendMessage の後に必ず echo を実行（CLAUDE.md の Communication Echo Rules 参照）。")
 ```
+
+#### Model Selection Rules (bloom_routing / kessen)
+
+| 条件 | model パラメータ |
+|------|------------------|
+| 決戦の陣 (KESSEN_MODE=true) | 全エージェント: `model="opus"` |
+| bloom_level L4-L6 (高難度) | `model="opus"` |
+| bloom_level L1-L3 (通常) | `model="sonnet"` |
+| 軍師 (常時) | `model="opus"` |
+| 家老 (通常) | `model="sonnet"` |
+
+`Task()` の `model` パラメータでモデルを直接指定可能。settings.yaml の `bloom_routing` が `off` でない場合、家老は bloom_level に基づいてモデルを動的選択する。
 
 ---
 
