@@ -100,6 +100,7 @@
 !scripts/switch_cli.sh
 !scripts/test_agent_teams.sh
 !scripts/update_dashboard.sh
+!scripts/teams_visual_monitor.sh
 
 # Dashboard
 !dashboard.md

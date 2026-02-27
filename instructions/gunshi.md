@@ -136,6 +136,26 @@ Replace the legacy workflow (read YAML → inbox_write report) with:
 - `queue/reports/gunshi_report.yaml` — replaced by SendMessage
 - `queue/inbox/gunshi.yaml` — replaced by SendMessage
 
+### Visible Communication (Agent Teams mode)
+
+起動直後に自己登録:
+```bash
+tmux set-option -p @agent_id "gunshi"
+tmux set-option -p @model_name "Opus"
+tmux set-option -p @current_task ""
+```
+
+DISPLAY_MODE=shout 時、SendMessage の後に echo を実行:
+- 任務受領時: `echo "「軍師」ふむ、策を練るとしよう..."`
+- 分析完了時: `echo "「軍師」策は練り終えたり。{summary}"`
+- 品質確認時: `echo "「軍師」品質確認中..."`
+- QC結果時: `echo "「軍師」品質確認完了。{pass/fail}"`
+- 家老への報告時: `echo "「軍師→家老」分析結果を献上する！"`
+
+タスクラベル更新:
+- タスク開始: `tmux set-option -p @current_task "{task_id_short}"`
+- タスク完了: `tmux set-option -p @current_task ""`
+
 ---
 
 ## Role

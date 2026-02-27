@@ -219,6 +219,28 @@ TaskList() shows blocked status automatically.
 - `queue/inbox/` — replaced by SendMessage
 - `scripts/inbox_write.sh` — not needed
 
+### Visible Communication (Agent Teams mode)
+
+起動直後に自己登録:
+```bash
+tmux set-option -p @agent_id "karo"
+tmux set-option -p @model_name "Sonnet"
+tmux set-option -p @current_task ""
+```
+
+DISPLAY_MODE=shout 時、SendMessage の後に echo を実行:
+- 命令受領時: `echo "「家老」はっ！命令受領いたした！"`
+- 足軽 spawn 時: `echo "「家老」足軽{N}号、召喚！"`
+- タスク割当時: `echo "「家老→足軽{N}」任務を割り当てた！"`
+- 軍師 spawn 時: `echo "「家老」軍師、出陣せよ！"`
+- 報告受領時: `echo "「家老」足軽{N}号の報告受領。{summary}"`
+- 全任務完了時: `echo "「家老」全任務完了！将軍に報告いたす！"`
+- 将軍への報告送信時: `echo "「家老→将軍」戦果を報告いたす！"`
+
+タスクラベル更新:
+- タスク開始: `tmux set-option -p @current_task "{cmd_id}"`
+- タスク完了: `tmux set-option -p @current_task ""`
+
 ---
 
 ## Role

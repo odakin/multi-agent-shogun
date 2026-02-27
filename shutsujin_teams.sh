@@ -570,17 +570,43 @@ NINJA_EOF
 
     if [ "$KESSEN_MODE" = true ]; then
         log_success "⚔️  決戦の陣で出陣！全軍Opus！"
+        export KESSEN_MODE=true
     else
         log_success "⚔️  平時の陣で出陣（足軽=Sonnet, 軍師=Opus）"
     fi
     echo ""
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # ビジュアルモニター起動（サイレントモード以外）
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Agent Teams が自動作成する tmux ペインを監視し、
+    # pane-border-format, @agent_id, tiled レイアウトを適用する。
+    if [ "$SILENT_MODE" != true ]; then
+        # 現在の tmux セッション名を検出（tmux 内で実行されている場合）
+        TEAMS_SESSION=""
+        if [ -n "${TMUX:-}" ]; then
+            TEAMS_SESSION=$(tmux display-message -p '#{session_name}' 2>/dev/null)
+        fi
+        export TEAMS_SESSION
+
+        mkdir -p "$SCRIPT_DIR/logs"
+        log_info "🎨 ビジュアルモニター起動中..."
+        nohup bash "$SCRIPT_DIR/scripts/teams_visual_monitor.sh" \
+            "$TEAMS_SESSION" \
+            "$SCRIPT_DIR" \
+            >> "$SCRIPT_DIR/logs/teams_visual_monitor.log" 2>&1 &
+        MONITOR_PID=$!
+        disown
+        log_success "  └─ ビジュアルモニター起動完了 (PID: $MONITOR_PID)"
+        echo ""
+    fi
 
     echo -e "\033[1;32m【起動】\033[0m npx @anthropic-ai/claude-code ${CLAUDE_ARGS[*]}"
     echo ""
 
     echo "  ╔══════════════════════════════════════════════════════════╗"
     echo "  ║  🏯 出陣準備完了！天下布武！                              ║"
-    echo "  ║  Agent Teams が tmux ペインを自動管理します               ║"
+    echo "  ║  Agent Teams + ビジュアルモニター で tmux 管理            ║"
     echo "  ╚══════════════════════════════════════════════════════════╝"
     echo ""
     echo "  ════════════════════════════════════════════════════════════"

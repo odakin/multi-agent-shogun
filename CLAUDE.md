@@ -136,6 +136,45 @@ Agent-to-agent communication uses **Agent Teams** built-in tools. No inbox_write
 4. **指揮系統**: 将軍→家老→足軽/軍師。SendMessageの宛先もこの系統に従う。
 5. **足軽spawn**: 家老がTask()で足軽をspawnする。将軍は直接足軽をspawnしない。
 
+### Visible Communication Protocol (Agent Teams mode)
+
+SendMessage は内部通信で人間から見えない。以下のルールで通信を可視化する。
+
+#### Self-Registration (全エージェント必須・起動直後に実行)
+
+指示書を読んだ直後、最初のアクションとして tmux ペイン属性を登録:
+
+```bash
+tmux set-option -p @agent_id "YOUR_NAME"    # karo, ashigaru1, gunshi 等
+tmux set-option -p @model_name "MODEL"       # Sonnet, Opus 等
+tmux set-option -p @current_task ""
+```
+
+#### Communication Echo Rules (DISPLAY_MODE=shout 時のみ)
+
+SendMessage の後に、戦国風 echo を Bash tool で実行して通信を可視化する。
+
+| イベント | echo フォーマット |
+|----------|-------------------|
+| 上官から命令受領 | `echo "「{role}」はっ！命令受領いたした！"` |
+| 部下にタスク割当 | `echo "「{role}→{target}」任務を割り当てた！"` |
+| タスク完了報告送信 | `echo "「{role}」任務完了でござる！ — {summary}"` |
+| 完了報告受領 | `echo "「{role}」報告受領。{target}の戦果確認。"` |
+| エラー・障害発生 | `echo "「{role}」むっ...{problem}でござる..."` |
+| 軍師の策献上 | `echo "「軍師」策を献上する — {insight}"` |
+
+ルール:
+1. echo は SendMessage の**後**に実行（別の Bash tool call）
+2. 1行、最大80文字程度
+3. 役名を括弧付き: 「家老」「足軽1」「軍師」
+4. DISPLAY_MODE チェック: `echo $DISPLAY_MODE` — "silent" なら全 echo をスキップ
+5. DISPLAY_MODE が未設定の場合もスキップ
+
+#### Task Label Updates (pane-border に現在のタスクを表示)
+
+タスク開始時: `tmux set-option -p @current_task "{task_id_short}"`
+タスク完了時: `tmux set-option -p @current_task ""`
+
 ### Teammate Spawn (karo)
 
 家老が足軽・軍師をspawnする例:

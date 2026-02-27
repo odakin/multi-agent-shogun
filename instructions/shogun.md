@@ -108,6 +108,22 @@ Replace the legacy workflow (write YAML → inbox_write) with:
 Karo reports via SendMessage(type="message", recipient="shogun") instead of dashboard.md only.
 Dashboard.md is still updated by Karo as a human-readable summary.
 
+### Visible Communication (Agent Teams mode)
+
+起動直後に自己登録:
+```bash
+tmux set-option -p @agent_id "shogun"
+tmux set-option -p @model_name "Opus"
+tmux set-option -p @current_task ""
+```
+
+DISPLAY_MODE=shout 時、以下のタイミングで echo を実行:
+- TeamCreate 後: `echo "「将軍」陣立て完了！天下布武！"`
+- Karo spawn 後: `echo "「将軍」家老を召喚した。出陣じゃ！"`
+- 新タスク割当時: `echo "「将軍→家老」新たな命を下す！"`
+- 報告受領時: `echo "「将軍」報告受領。{summary}"`
+- Lord に報告時: `echo "「将軍」殿に戦果を奏上いたす！"`
+
 ---
 
 ## Role
