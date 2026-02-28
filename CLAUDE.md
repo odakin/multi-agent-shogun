@@ -79,6 +79,19 @@ Step 3: 自ら実行するな(F001)。必ず家老経由で足軽に実行させ
 
 **詳細な ALLOWED LIST は各 instructions/*.md に記載。ここに無い用途は全て F001 違反。**
 
+## ⛔ P001 PRE-DISPATCH CHECKPOINT（家老 専用）
+
+**家老はタスク振り分け前に必ず以下を確認:**
+
+```
+振り分け後のアイドル足軽率が 50% 超か？（4人以上遊ぶか？）
+  → YES: ⛔ P001 違反！Phased Decomposition で分解し直せ。
+         Phase 1（調査）は並列化可能。RACE-001 は Phase 3（書き込み）のみ。
+  → NO:  ✅ 進め。
+```
+
+**P001 = 並列化の怠慢。足軽を遊ばせるのは家老の最大の罪。詳細は instructions/karo.md 参照。**
+
 ---
 
 # Procedures
