@@ -9,7 +9,7 @@ language: ja
 # シェル設定
 # bash: bash用プロンプト（デフォルト）
 # zsh: zsh用プロンプト
-shell: bash
+shell: zsh
 
 # エージェント設定
 agents:
@@ -22,9 +22,9 @@ skill:
   save_path: "~/.claude/skills/"
 
   # ローカルスキル保存先（このプロジェクト専用）
-  local_path: "/Users/odakin/multi-agent-shogun/skills/"
+  local_path: "/Users/odakin/Dropbox/Claude/multi-agent-shogun/skills/"
 
 # ログ設定
 logging:
   level: info  # debug | info | warn | error
-  path: "/Users/odakin/multi-agent-shogun/logs/"
+  path: "/Users/odakin/Dropbox/Claude/multi-agent-shogun/logs/"

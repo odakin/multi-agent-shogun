@@ -33,6 +33,9 @@ BORDER_APPLIED=false
 UNRESPONSIVE_THRESHOLD=240   # 4分間無反応で /clear 送信
 CLEAR_COOLDOWN=300           # /clear は5分に1回まで
 
+# claude-swarm tmux サーバー検出用
+TMUX_SOCKET=""               # -L オプションの値（空なら デフォルトサーバー）
+
 mkdir -p "$LOG_DIR"
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -42,9 +45,55 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# tmux ラッパー: claude-swarm サーバー対応
+# ═══════════════════════════════════════════════════════════════════════════════
+_tmux() {
+    if [ -n "$TMUX_SOCKET" ]; then
+        tmux -L "$TMUX_SOCKET" "$@"
+    else
+        tmux "$@"
+    fi
+}
+
 log "=== ビジュアルモニター起動 ==="
 log "SESSION_NAME=$SESSION_NAME"
 log "SCRIPT_DIR=$SCRIPT_DIR"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# claude-swarm tmux サーバーを検出
+# --teammate-mode tmux は tmux -L claude-swarm-{PID} でサーバーを作る
+# ═══════════════════════════════════════════════════════════════════════════════
+detect_swarm_socket() {
+    # claude-swarm-* の tmux ソケットを探す
+    # macOS: ソケットは /tmp/tmux-{uid}/ に作られる（/tmp 直下ではない）
+    local uid
+    uid=$(id -u)
+    for dir in "/tmp/tmux-${uid}" "${TMPDIR:-/tmp}" "/tmp"; do
+        [ -d "$dir" ] || continue
+        local found
+        found=$(ls -t "$dir"/claude-swarm-* 2>/dev/null | head -1)
+        if [ -n "$found" ] && [ -S "$found" ]; then
+            local socket_name
+            socket_name=$(basename "$found")
+            # tmux サーバーが生きているか確認
+            if tmux -L "$socket_name" list-sessions >/dev/null 2>&1; then
+                echo "$socket_name"
+                return
+            fi
+        fi
+    done
+
+    # ps から claude-swarm の tmux プロセスを探す
+    local swarm_pid
+    swarm_pid=$(ps aux 2>/dev/null | grep "tmux -L claude-swarm-" | grep -v grep | head -1 | awk '{print $NF}' | grep -o 'claude-swarm-[0-9]*')
+    if [ -n "$swarm_pid" ]; then
+        echo "$swarm_pid"
+        return
+    fi
+
+    echo ""
+}
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # セッション名の自動検出
@@ -55,17 +104,41 @@ detect_session() {
         return
     fi
 
-    # Agent Teams のセッションを探す
+    # まず claude-swarm サーバーを探す（Agent Teams --teammate-mode tmux 用）
+    local swarm_socket
+    swarm_socket=$(detect_swarm_socket)
+    if [ -n "$swarm_socket" ]; then
+        TMUX_SOCKET="$swarm_socket"
+        local swarm_session
+        swarm_session=$(_tmux list-sessions -F '#{session_name}' 2>/dev/null | head -1)
+        if [ -n "$swarm_session" ]; then
+            log "claude-swarm detected: socket=$TMUX_SOCKET session=$swarm_session"
+            echo "$swarm_session"
+            return
+        fi
+    fi
+
+    # フォールバック: デフォルト tmux サーバーで探す
+    TMUX_SOCKET=""
     local sessions
     sessions=$(tmux list-sessions -F '#{session_name}' 2>/dev/null)
     for s in $sessions; do
-        # Claude Code が動いているセッションを探す
-        local pane_content
-        pane_content=$(tmux capture-pane -t "$s" -p 2>/dev/null | head -5)
-        if echo "$pane_content" | grep -q "Claude Code\|claude-code\|multi-agent-shogun"; then
-            echo "$s"
-            return
-        fi
+        local pane_ids
+        pane_ids=$(tmux list-panes -t "$s" -F '#{pane_index}' 2>/dev/null)
+        for p in $pane_ids; do
+            local pane_content
+            pane_content=$(tmux capture-pane -t "$s:0.$p" -p 2>/dev/null)
+            if echo "$pane_content" | grep -q "Claude Code\|claude-code\|multi-agent-shogun\|@anthropic-ai\|teammate-mode"; then
+                echo "$s"
+                return
+            fi
+            local agent_id
+            agent_id=$(tmux show-options -p -t "$s:0.$p" -v @agent_id 2>/dev/null)
+            if [ -n "$agent_id" ]; then
+                echo "$s"
+                return
+            fi
+        done
     done
 
     echo ""
@@ -137,7 +210,7 @@ detect_agent_from_pane() {
 
     # 方法1: 既に @agent_id が自己登録されている場合（最優先）
     local existing_id
-    existing_id=$(tmux show-options -p -t "$pane_id" -v @agent_id 2>/dev/null)
+    existing_id=$(_tmux show-options -p -t "$pane_id" -v @agent_id 2>/dev/null)
     if [ -n "$existing_id" ] && [ "$existing_id" != "" ] && [ "$existing_id" != "..." ]; then
         echo "$existing_id"
         return
@@ -145,7 +218,7 @@ detect_agent_from_pane() {
 
     # 方法2: ペイン内容をスキャンしてエージェント名を検出
     local content
-    content=$(tmux capture-pane -t "$pane_id" -p 2>/dev/null | head -30)
+    content=$(_tmux capture-pane -t "$pane_id" -p 2>/dev/null | head -30)
 
     # spawn prompt の set-option パターンから検出
     local set_id
@@ -190,30 +263,30 @@ style_pane() {
 
     # @agent_id が既に自己登録で正しく設定されていればそのまま維持
     local current_id
-    current_id=$(tmux show-options -p -t "$pane_id" -v @agent_id 2>/dev/null)
+    current_id=$(_tmux show-options -p -t "$pane_id" -v @agent_id 2>/dev/null)
     if [ "$current_id" != "$agent_name" ]; then
-        tmux set-option -p -t "$pane_id" @agent_id "$agent_name" 2>/dev/null
+        _tmux set-option -p -t "$pane_id" @agent_id "$agent_name" 2>/dev/null
     fi
 
     # @model_name も自己登録を尊重（spawn prompt で設定済みの場合がある）
     local current_model
-    current_model=$(tmux show-options -p -t "$pane_id" -v @model_name 2>/dev/null)
+    current_model=$(_tmux show-options -p -t "$pane_id" -v @model_name 2>/dev/null)
     if [ -z "$current_model" ] || [ "$current_model" = "..." ]; then
-        tmux set-option -p -t "$pane_id" @model_name "$model" 2>/dev/null
+        _tmux set-option -p -t "$pane_id" @model_name "$model" 2>/dev/null
     fi
 
     # @current_task が未設定の場合のみ初期化
     local current_task
-    current_task=$(tmux show-options -p -t "$pane_id" -v @current_task 2>/dev/null)
+    current_task=$(_tmux show-options -p -t "$pane_id" -v @current_task 2>/dev/null)
     if [ -z "$current_task" ]; then
-        tmux set-option -p -t "$pane_id" @current_task "" 2>/dev/null
+        _tmux set-option -p -t "$pane_id" @current_task "" 2>/dev/null
     fi
 
     # 背景色の適用
     local bg_color
     bg_color=$(get_bg_color_for_agent "$agent_name")
     if [ -n "$bg_color" ]; then
-        tmux select-pane -t "$pane_id" -P "$bg_color" 2>/dev/null
+        _tmux select-pane -t "$pane_id" -P "$bg_color" 2>/dev/null
     fi
 
     log "Styled pane $pane_id as $agent_name ($model) ${bg_color:+[$bg_color]}"
@@ -227,10 +300,10 @@ apply_border_format() {
 
     # 全ウィンドウに適用
     local windows
-    windows=$(tmux list-windows -t "$session" -F '#{window_id}' 2>/dev/null)
+    windows=$(_tmux list-windows -t "$session" -F '#{window_id}' 2>/dev/null)
     for win in $windows; do
-        tmux set-option -w -t "$win" pane-border-status top 2>/dev/null
-        tmux set-option -w -t "$win" pane-border-format \
+        _tmux set-option -w -t "$win" pane-border-status top 2>/dev/null
+        _tmux set-option -w -t "$win" pane-border-format \
             '#{?pane_active,#[reverse],}#[bold]#{@agent_id}#[default] (#{@model_name}) #{@current_task}' \
             2>/dev/null
     done
@@ -244,11 +317,11 @@ apply_border_format() {
 apply_3x3_grid() {
     local win="$1"
     local win_panes
-    win_panes=$(tmux list-panes -t "$win" 2>/dev/null | wc -l | tr -d ' ')
+    win_panes=$(_tmux list-panes -t "$win" 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$win_panes" -eq 9 ]; then
         # tiled レイアウトをまず適用（均等分割のベース）
-        tmux select-layout -t "$win" tiled 2>/dev/null
+        _tmux select-layout -t "$win" tiled 2>/dev/null
         log "3x3 grid layout applied to window $win (9 panes)"
         return 0
     fi
@@ -256,7 +329,88 @@ apply_3x3_grid() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 無反応検出 + /clear 復旧
+# Permission デッドロック検出 + Escape 復旧
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Teams で mode="bypassPermissions" が省略された場合、エージェントが
+# "Waiting for team lead approval" で永久にブロックする。
+# ペイン内容をスキャンし、検出したら Escape で cancel して復旧を試みる。
+#
+# エスカレーション:
+#   Phase 1 (0-60秒):  無視（正常な一時的待機の可能性）
+#   Phase 2 (60-120秒): Escape 送信で Permission cancel
+#   Phase 3 (120秒+):  Escape + /clear 送信（セッションリセット）
+# ═══════════════════════════════════════════════════════════════════════════════
+PERMISSION_PHASE1=60    # 60秒以上で Escape
+PERMISSION_PHASE2=120   # 120秒以上で Escape + /clear
+
+declare -A PANE_PERMISSION_FIRST_SEEN
+declare -A PANE_PERMISSION_ESCAPE_COUNT
+
+check_permission_deadlock() {
+    local session="$1"
+    local now
+    now=$(date +%s)
+
+    local pane_list
+    pane_list=$(_tmux list-panes -s -t "$session" -F '#{pane_id} #{@agent_id}' 2>/dev/null)
+
+    while IFS=' ' read -r pane_id agent_id; do
+        [ -z "$pane_id" ] && continue
+        [ -z "$agent_id" ] || [ "$agent_id" = "..." ] && continue
+
+        # ペイン内容をスキャン（最後の20行）
+        local content
+        content=$(_tmux capture-pane -t "$pane_id" -p 2>/dev/null | tail -20)
+
+        # "Waiting for permission" or "Waiting for team lead approval" を検出
+        if echo "$content" | grep -q "Waiting for.*permission\|Waiting for team lead"; then
+            # 初回検出
+            if [ -z "${PANE_PERMISSION_FIRST_SEEN[$pane_id]:-}" ]; then
+                PANE_PERMISSION_FIRST_SEEN[$pane_id]=$now
+                PANE_PERMISSION_ESCAPE_COUNT[$pane_id]=0
+                log "DEADLOCK-DETECT: $agent_id ($pane_id) — permission待ち検出"
+                continue
+            fi
+
+            local first_seen="${PANE_PERMISSION_FIRST_SEEN[$pane_id]}"
+            local age=$((now - first_seen))
+            local esc_count="${PANE_PERMISSION_ESCAPE_COUNT[$pane_id]:-0}"
+
+            if [ "$age" -ge "$PERMISSION_PHASE2" ]; then
+                # Phase 3: Escape + /clear
+                log "DEADLOCK-RECOVERY: $agent_id ($pane_id) — ${age}秒経過、Escape + /clear 送信"
+                _tmux send-keys -t "$pane_id" Escape 2>/dev/null
+                sleep 2
+                _tmux send-keys -t "$pane_id" Escape 2>/dev/null
+                sleep 2
+                _tmux send-keys -t "$pane_id" "/clear" 2>/dev/null
+                sleep 1
+                _tmux send-keys -t "$pane_id" Enter 2>/dev/null
+                # リセット
+                unset "PANE_PERMISSION_FIRST_SEEN[$pane_id]"
+                unset "PANE_PERMISSION_ESCAPE_COUNT[$pane_id]"
+
+            elif [ "$age" -ge "$PERMISSION_PHASE1" ] && [ "$esc_count" -lt 2 ]; then
+                # Phase 2: Escape で cancel
+                log "DEADLOCK-RECOVERY: $agent_id ($pane_id) — ${age}秒経過、Escape 送信 (試行$((esc_count+1)))"
+                _tmux send-keys -t "$pane_id" Escape 2>/dev/null
+                sleep 1
+                _tmux send-keys -t "$pane_id" Escape 2>/dev/null
+                PANE_PERMISSION_ESCAPE_COUNT[$pane_id]=$((esc_count + 1))
+            fi
+        else
+            # Permission待ちが解消された → リセット
+            if [ -n "${PANE_PERMISSION_FIRST_SEEN[$pane_id]:-}" ]; then
+                log "DEADLOCK-RESOLVED: $agent_id ($pane_id) — permission待ち解消"
+                unset "PANE_PERMISSION_FIRST_SEEN[$pane_id]"
+                unset "PANE_PERMISSION_ESCAPE_COUNT[$pane_id]"
+            fi
+        fi
+    done <<< "$pane_list"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 無反応検出 + /clear 復旧（カーソル位置ベース）
 # ═══════════════════════════════════════════════════════════════════════════════
 declare -A PANE_LAST_ACTIVITY
 declare -A PANE_LAST_CLEAR
@@ -267,7 +421,7 @@ check_unresponsive_panes() {
     now=$(date +%s)
 
     local pane_list
-    pane_list=$(tmux list-panes -s -t "$session" -F '#{pane_id} #{@agent_id}' 2>/dev/null)
+    pane_list=$(_tmux list-panes -s -t "$session" -F '#{pane_id} #{@agent_id}' 2>/dev/null)
 
     while IFS=' ' read -r pane_id agent_id; do
         [ -z "$pane_id" ] && continue
@@ -280,7 +434,7 @@ check_unresponsive_panes() {
 
         # ペインのカーソル位置（活動の指標）
         local cursor_y
-        cursor_y=$(tmux display-message -t "$pane_id" -p '#{cursor_y}' 2>/dev/null)
+        cursor_y=$(_tmux display-message -t "$pane_id" -p '#{cursor_y}' 2>/dev/null)
 
         # 活動追跡キー
         local activity_key="${pane_id}_${cursor_y}"
@@ -296,9 +450,9 @@ check_unresponsive_panes() {
                     local last_clear="${PANE_LAST_CLEAR[$pane_id]:-0}"
                     if [ "$((now - last_clear))" -ge "$CLEAR_COOLDOWN" ]; then
                         log "RECOVERY: $agent_id ($pane_id) unresponsive for ${age}s — sending /clear"
-                        tmux send-keys -t "$pane_id" "/clear" 2>/dev/null
+                        _tmux send-keys -t "$pane_id" "/clear" 2>/dev/null
                         sleep 1
-                        tmux send-keys -t "$pane_id" Enter 2>/dev/null
+                        _tmux send-keys -t "$pane_id" Enter 2>/dev/null
                         PANE_LAST_CLEAR[$pane_id]=$now
                         # リセット
                         unset "PANE_LAST_ACTIVITY[${pane_id}_ts]"
@@ -323,6 +477,7 @@ check_unresponsive_panes() {
 declare -A STYLED_PANES
 PREV_PANE_COUNT=0
 RECOVERY_CHECK_COUNTER=0
+DEADLOCK_CHECK_COUNTER=0
 
 while true; do
     sleep "$POLL_INTERVAL"
@@ -333,13 +488,18 @@ while true; do
         continue
     fi
 
+    # shogun-main は統合ビューア（ユーザー操作画面）なのでスキップ
+    if [ "$local_session" = "shogun-main" ]; then
+        continue
+    fi
+
     # セッションが存在するか確認
-    if ! tmux has-session -t "$local_session" 2>/dev/null; then
+    if ! _tmux has-session -t "$local_session" 2>/dev/null; then
         continue
     fi
 
     # 現在のペイン一覧を取得
-    pane_list=$(tmux list-panes -s -t "$local_session" -F '#{pane_id}' 2>/dev/null)
+    pane_list=$(_tmux list-panes -s -t "$local_session" -F '#{pane_id}' 2>/dev/null)
     if [ -z "$pane_list" ]; then
         continue
     fi
@@ -353,7 +513,7 @@ while true; do
         # 既にスタイル済みかチェック
         if [ "${STYLED_PANES[$pane_id]+exists}" ]; then
             # 既にスタイル済みでも、自己登録で @agent_id が変わった場合は再適用
-            current_id=$(tmux show-options -p -t "$pane_id" -v @agent_id 2>/dev/null)
+            current_id=$(_tmux show-options -p -t "$pane_id" -v @agent_id 2>/dev/null)
             if [ -n "$current_id" ] && [ "$current_id" != "..." ] && [ "$current_id" != "${STYLED_PANES[$pane_id]}" ]; then
                 style_pane "$pane_id" "$current_id"
                 STYLED_PANES[$pane_id]="$current_id"
@@ -369,9 +529,9 @@ while true; do
             STYLED_PANES[$pane_id]="$agent_name"
         else
             # 未検出でも空のデフォルトをセット（border表示のため）
-            tmux set-option -p -t "$pane_id" @agent_id "..." 2>/dev/null
-            tmux set-option -p -t "$pane_id" @model_name "..." 2>/dev/null
-            tmux set-option -p -t "$pane_id" @current_task "" 2>/dev/null
+            _tmux set-option -p -t "$pane_id" @agent_id "..." 2>/dev/null
+            _tmux set-option -p -t "$pane_id" @model_name "..." 2>/dev/null
+            _tmux set-option -p -t "$pane_id" @current_task "" 2>/dev/null
         fi
     done <<< "$pane_list"
 
@@ -384,18 +544,26 @@ while true; do
 
     # レイアウト適用（ペイン数変化時のみ）
     if [ "$pane_count" -ne "$PREV_PANE_COUNT" ] && [ "$pane_count" -ge 4 ]; then
-        windows=$(tmux list-windows -t "$local_session" -F '#{window_id}' 2>/dev/null)
+        windows=$(_tmux list-windows -t "$local_session" -F '#{window_id}' 2>/dev/null)
         for win in $windows; do
-            win_panes=$(tmux list-panes -t "$win" 2>/dev/null | wc -l | tr -d ' ')
+            win_panes=$(_tmux list-panes -t "$win" 2>/dev/null | wc -l | tr -d ' ')
             if [ "$win_panes" -eq 9 ]; then
                 # 9ペイン = 3x3 グリッド
                 apply_3x3_grid "$win"
             elif [ "$win_panes" -ge 4 ]; then
                 # それ以外は tiled
-                tmux select-layout -t "$win" tiled 2>/dev/null
+                _tmux select-layout -t "$win" tiled 2>/dev/null
                 log "tiled layout applied to window $win ($win_panes panes)"
             fi
         done
+    fi
+
+    # Permission デッドロック検出（5サイクルごと = 約15秒ごと）
+    # ※ 無反応検出より高頻度: デッドロックは即座に全軍停止するため早期検出が重要
+    DEADLOCK_CHECK_COUNTER=$((DEADLOCK_CHECK_COUNTER + 1))
+    if [ "$DEADLOCK_CHECK_COUNTER" -ge 5 ]; then
+        check_permission_deadlock "$local_session"
+        DEADLOCK_CHECK_COUNTER=0
     fi
 
     # 無反応ペイン検出（10サイクルごと = 約30秒ごと）
