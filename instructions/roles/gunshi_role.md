@@ -39,6 +39,42 @@ Gunshi handles tasks that require deep thinking (Bloom's L4-L6):
 | **Strategy Planning** | Multi-step project planning | Execution plan with phases, risks, dependencies |
 | **Evaluation** | Compare approaches, review designs | Evaluation matrix with scored criteria |
 | **Decomposition Aid** | Help Karo split complex cmds | Suggested task breakdown with dependencies |
+| **★ Integration QC** | Mandatory exit gate for multi-subtask cmds | Pass/fail with findings |
+
+## ★ Integration QC (Mandatory Exit Gate)
+
+When Karo sends a task with `qc_type: integration`, this is the **mandatory quality gate** before a cmd is marked done. This is your highest-priority task type.
+
+### What to Check
+
+1. **Acceptance criteria**: Re-read the original cmd's `acceptance_criteria` in `queue/shogun_to_karo.yaml`. Verify each criterion is met by the combined deliverables.
+2. **Cross-subtask integrity**: Do the outputs from different ashigaru work together? (e.g., if ashigaru1 wrote module A and ashigaru2 wrote module B, do they integrate correctly?)
+3. **Completeness**: Were any requirements missed or only partially addressed?
+4. **Fake parallelism damage**: Did dependency chains between subtasks cause any output to be built on stale or missing inputs?
+
+### Report Format for Integration QC
+
+```yaml
+worker_id: gunshi
+task_id: gunshi_qc_cmd_XXX
+parent_cmd: cmd_XXX
+timestamp: "2026-03-01T12:00:00"
+status: done
+result:
+  type: integration_qc
+  qc_result: pass  # pass | fail
+  summary: "全acceptance_criteria達成。成果物間の整合性確認済み。"
+  findings: []     # If fail: list specific issues
+  # findings:
+  #   - "acceptance_criteria 3 未達: テストが未実行"
+  #   - "ashigaru2の出力がashigaru1の旧版を参照している"
+skill_candidate:
+  found: false
+```
+
+### Priority
+
+Integration QC tasks take precedence over regular strategy/analysis tasks. When a `qc_type: integration` task arrives, handle it before other queued work.
 
 ## Report Format
 

@@ -219,9 +219,22 @@ When ashigaru reports task completion, Karo handles these checks directly (no Gu
 
 These are mechanical checks (L1-L2) — Karo can judge pass/fail in seconds.
 
-### Complex QC → Delegate to Gunshi
+### ★ Mandatory Integration QC → Gunshi (cmd completion gate)
 
-Route these to Gunshi via `queue/tasks/gunshi.yaml`:
+**Every multi-subtask cmd MUST pass Gunshi integration QC before being marked done.** This is the exit gate.
+
+Gunshi reviews:
+- Do all deliverables together satisfy the cmd's `acceptance_criteria`?
+- Are there integration gaps between subtasks (e.g., module A calls function X but module B named it Y)?
+- Were any acceptance criteria missed or only partially met?
+
+See [cmd Completion Check (Step 11.7)](#cmd-completion-check-step-117) for the flow.
+
+**Exception**: Single-subtask cmds with purely mechanical output (file rename, config change) may skip — Karo judges directly.
+
+### Complex QC → Delegate to Gunshi (during execution)
+
+Route these to Gunshi via `queue/tasks/gunshi.yaml` at any time during execution:
 
 | Check | Bloom Level | Why Gunshi |
 |-------|-------------|------------|
@@ -231,8 +244,7 @@ Route these to Gunshi via `queue/tasks/gunshi.yaml`:
 
 ### No QC for Ashigaru
 
-**Never assign QC tasks to ashigaru.** Haiku models are unsuitable for quality judgment.
-Ashigaru handle implementation only: article creation, code changes, file operations.
+**Never assign QC tasks to ashigaru.** Ashigaru handle implementation only.
 
 ## SayTask Notifications
 
@@ -253,8 +265,20 @@ Push notifications to the lord's phone via ntfy. Karo manages streaks and notifi
 1. Get `parent_cmd` of completed subtask
 2. Check all subtasks with same `parent_cmd`: `grep -l "parent_cmd: cmd_XXX" queue/tasks/ashigaru*.yaml | xargs grep "status:"`
 3. Not all done → skip notification
-4. All done → **purpose validation**: Re-read the original cmd in `queue/shogun_to_karo.yaml`. Compare the cmd's stated purpose against the combined deliverables. If purpose is not achieved (subtasks completed but goal unmet), do NOT mark cmd as done — instead create additional subtasks or report the gap to shogun via dashboard 🚨.
-5. Purpose validated → update `saytask/streaks.yaml`:
+4. All done → **★ Mandatory Gunshi Integration QC ★**: Before marking cmd as done, delegate integration review to Gunshi via `queue/tasks/gunshi.yaml`:
+   ```yaml
+   task:
+     task_id: gunshi_qc_cmd_XXX
+     parent_cmd: cmd_XXX
+     bloom_level: L5
+     description: "cmd_XXX 統合品質チェック: 全サブタスクの成果物が acceptance_criteria を満たしているか、成果物間の整合性、見落としがないかを検証せよ"
+     qc_type: integration
+     status: assigned
+   ```
+   - Gunshi returns `qc_result: pass` → proceed to step 5
+   - Gunshi returns `qc_result: fail` with findings → create corrective subtasks, do NOT mark cmd done
+   - **Exception**: Single-subtask cmds with mechanical output (file rename, simple edit) may skip Gunshi QC — Karo judges directly
+5. Purpose validated + Gunshi QC passed → update `saytask/streaks.yaml`:
    - `today.completed` += 1 (**per cmd**, not per subtask)
    - Streak logic: last_date=today → keep current; last_date=yesterday → current+1; else → reset to 1
    - Update `streak.longest` if current > longest
@@ -442,10 +466,12 @@ The inbox_write guarantees persistence. inbox_watcher handles delivery.
 
 # Task Flow
 
-## Workflow: Shogun → Karo → Ashigaru
+## Workflow: Shogun → Karo → Ashigaru → Gunshi (exit gate)
 
 ```
-Lord: command → Shogun: write YAML → inbox_write → Karo: decompose → inbox_write → Ashigaru: execute → report YAML → inbox_write → Karo: update dashboard → Shogun: read dashboard
+Lord: command → Shogun: write YAML → inbox_write → Karo: decompose → inbox_write
+  → Ashigaru: execute → report YAML → inbox_write → Karo: mechanical QC
+  → All subtasks done? → Gunshi: ★ integration QC (mandatory) → pass? → Karo: mark cmd done
 ```
 
 ## Status Reference (Single Source)

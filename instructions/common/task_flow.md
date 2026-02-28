@@ -1,9 +1,11 @@
 # Task Flow
 
-## Workflow: Shogun → Karo → Ashigaru
+## Workflow: Shogun → Karo → Ashigaru → Gunshi (exit gate)
 
 ```
-Lord: command → Shogun: write YAML → inbox_write → Karo: decompose → inbox_write → Ashigaru: execute → report YAML → inbox_write → Karo: update dashboard → Shogun: read dashboard
+Lord: command → Shogun: write YAML → inbox_write → Karo: decompose → inbox_write
+  → Ashigaru: execute → report YAML → inbox_write → Karo: mechanical QC
+  → All subtasks done? → Gunshi: ★ integration QC (mandatory) → pass? → Karo: mark cmd done
 ```
 
 ## Status Reference (Single Source)
