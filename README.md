@@ -67,7 +67,7 @@ Most multi-agent frameworks burn API tokens on coordination. Shogun doesn't.
 | | Claude Code `Task` tool | Claude Code Agent Teams | LangGraph | CrewAI | **multi-agent-shogun** |
 |---|---|---|---|---|---|
 | **Architecture** | Subagents inside one process | Team lead + teammates (JSON mailbox) | Graph-based state machine | Role-based agents | Feudal hierarchy via tmux |
-| **Parallelism** | Sequential (one at a time) | Multiple independent sessions | Parallel nodes (v0.2+) | Limited | **8 independent agents** |
+| **Parallelism** | Sequential (one at a time) | Multiple independent sessions | Parallel nodes (v0.2+) | Limited | **Up to 10 agents, scaled to workload** |
 | **Coordination cost** | API calls per Task | Token-heavy (each teammate = separate context) | API + infra (Postgres/Redis) | API + CrewAI platform | **Zero** (YAML + tmux) |
 | **Multi-CLI** | Claude Code only | Claude Code only | Any LLM API | Any LLM API | **4 CLIs** (Claude/Codex/Copilot/Kimi) |
 | **Observability** | Claude logs only | tmux split-panes or in-process | LangSmith integration | OpenTelemetry | **Live tmux panes** + dashboard |
@@ -76,7 +76,9 @@ Most multi-agent frameworks burn API tokens on coordination. Shogun doesn't.
 
 ### What makes this different
 
-**Zero coordination overhead** — Agents talk through YAML files on disk. The only API calls are for actual work, not orchestration. Run 8 agents and pay only for 8 agents' work.
+**Zero coordination overhead** — Agents talk through YAML files on disk. The only API calls are for actual work, not orchestration.
+
+**No fake parallelism** — The Karo (manager) analyzes task dependencies and only spawns agents for truly independent work. If a task depends on another's output, they're assigned to the same agent. 3 independent tasks = 3 agents, not 7 agents with 4 idle.
 
 **Full transparency** — Every agent runs in a visible tmux pane. Every instruction, report, and decision is a plain YAML file you can read, diff, and version-control. No black boxes.
 
@@ -86,16 +88,16 @@ Most multi-agent frameworks burn API tokens on coordination. Shogun doesn't.
 
 ## Why CLI (Not API)?
 
-Most AI coding tools charge per token. Running 8 Opus-grade agents through the API costs **$100+/hour**. CLI subscriptions flip this:
+Most AI coding tools charge per token. Running multiple Opus-grade agents through the API costs **$100+/hour**. CLI subscriptions flip this:
 
 | | API (Per-Token) | CLI (Flat-Rate) |
 |---|---|---|
-| **8 agents × Opus** | ~$100+/hour | ~$200/month |
+| **Multiple agents × Opus** | ~$100+/hour | ~$200/month |
 | **Cost predictability** | Unpredictable spikes | Fixed monthly bill |
 | **Usage anxiety** | Every token counts | Unlimited |
 | **Experimentation budget** | Constrained | Deploy freely |
 
-**"Use AI recklessly"** — With flat-rate CLI subscriptions, deploy 8 agents without hesitation. The cost is the same whether they work 1 hour or 24 hours. No more choosing between "good enough" and "thorough" — just run more agents.
+**"Use AI recklessly"** — With flat-rate CLI subscriptions, deploy agents without hesitation. The cost is the same whether they work 1 hour or 24 hours. No more choosing between "good enough" and "thorough" — just run more agents when your workload has independent tasks.
 
 ### Multi-CLI Support
 
@@ -778,9 +780,9 @@ The listener automatically reconnects if the connection drops. `shutsujin_depart
 <p align="center">
   <img src="images/screenshots/masked/ntfy_bloom_oc_test.jpg" alt="Command completion notification" width="300">
   &nbsp;&nbsp;
-  <img src="images/screenshots/masked/ntfy_persona_eval_complete.jpg" alt="8-agent parallel completion" width="300">
+  <img src="images/screenshots/masked/ntfy_persona_eval_complete.jpg" alt="Multi-agent parallel completion" width="300">
 </p>
-<p align="center"><i>Left: Command completion notification · Right: All 8 Ashigaru completing in parallel</i></p>
+<p align="center"><i>Left: Command completion notification · Right: Ashigaru completing in parallel</i></p>
 
 > *Note: Topic names shown in screenshots are examples. Use your own unique topic name.*
 
@@ -936,7 +938,7 @@ Shogun has two complementary task systems:
 | Eat the Frog 🐸 selection | ✅ | — |
 | Streak tracking | ✅ | ✅ |
 | AI-executed tasks (multi-step) | — | ✅ |
-| 8-agent parallel execution | — | ✅ |
+| Multi-agent parallel execution | — | ✅ |
 
 SayTask handles personal productivity (capture → schedule → remind). The cmd pipeline handles complex work (research, code, multi-step tasks). Both share streak tracking — completing either type of task counts toward your daily streak.
 
@@ -1688,7 +1690,7 @@ Based on [Claude-Code-Communication](https://github.com/Akira-Papa/Claude-Code-C
 
 <div align="center">
 
-**One command. Eight agents. Zero coordination cost.**
+**One command. As many agents as you have independent tasks. Zero coordination cost.**
 
 ⭐ Star this repo if you find it useful — it helps others discover it.
 

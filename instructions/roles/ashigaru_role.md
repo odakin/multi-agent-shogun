@@ -35,6 +35,16 @@ skill_candidate:
 **Required fields**: worker_id, task_id, parent_cmd, status, timestamp, result, skill_candidate.
 Missing fields = incomplete report.
 
+## Idle-Wait Task Rejection
+
+If your task YAML says "wait for ashigaru X to finish" or has `blocked_by` pointing to another ashigaru's in-progress task, this is a **mis-assignment** (偽装並列). Report it:
+
+1. Set status to `blocked`
+2. In notes: `"偽装並列: this task depends on ashigaru{X}'s output. Should be assigned to the same agent as the prerequisite task, or reassigned after prerequisite completes."`
+3. Notify Karo via inbox_write
+
+Do NOT idle-wait for another ashigaru. Waiting wastes tokens and achieves nothing a single agent couldn't do faster.
+
 ## Race Condition (RACE-001)
 
 No concurrent writes to the same file by multiple ashigaru.

@@ -28,7 +28,7 @@ Before assigning tasks, ask yourself these five questions:
 |---|----------|----------|
 | 壱 | **Purpose** | Read cmd's `purpose` and `acceptance_criteria`. These are the contract. Every subtask must trace back to at least one criterion. |
 | 弐 | **Decomposition** | How to split for maximum efficiency? Parallel possible? Dependencies? |
-| 参 | **Headcount** | How many ashigaru? Split across as many as possible. Don't be lazy. |
+| 参 | **Headcount** | How many ashigaru TRULY needed? Match count to independent tasks. See [Parallelization](#parallelization). |
 | 四 | **Perspective** | What persona/scenario is effective? What expertise needed? |
 | 伍 | **Risk** | RACE-001 risk? Ashigaru availability? Dependency ordering? |
 
@@ -57,12 +57,14 @@ task:
   status: assigned
   timestamp: "2026-01-25T12:00:00"
 
-# Dependent task (blocked until prerequisites complete)
+# Dependent task — USE SPARINGLY (see Parallelization section)
+# Only for genuine cross-agent timing constraints.
+# If this task depends on a single ashigaru's output, assign it to THAT ashigaru instead.
 task:
   task_id: subtask_003
   parent_cmd: cmd_001
   bloom_level: L6
-  blocked_by: [subtask_001, subtask_002]
+  blocked_by: [subtask_001, subtask_002]  # Both must complete (different agents, truly independent)
   description: "Integrate research results from ashigaru 1 and 2"
   target_path: "/mnt/c/tools/multi-agent-shogun/reports/integrated_report.md"
   echo_message: "⚔️ 足軽3号、統合の刃で斬り込む！"
@@ -109,17 +111,68 @@ Do this before dispatching subtasks (fast, safe, no dependencies).
 
 ## Parallelization
 
-- Independent tasks → multiple ashigaru simultaneously
-- Dependent tasks → sequential with `blocked_by`
-- 1 ashigaru = 1 task (until completion)
-- **If splittable, split and parallelize.** "One ashigaru can handle it all" is karo laziness.
+### Core Principle: No Fake Parallelism (偽装並列の禁止)
+
+Assigning 7 ashigaru to a chain of dependent tasks is **worse** than 1 ashigaru doing them sequentially — it adds messaging overhead while achieving zero actual parallelism. 6 agents sit idle, burning tokens on wait loops.
+
+**The Rule**: If task B requires the output of task A, assign A and B to the **same** ashigaru. Never assign a dependent task to a different ashigaru just to "use more agents."
+
+```
+❌ FAKE PARALLELISM (prohibited):
+  足軽1: Implement feature
+  足軽2: Review 足軽1's implementation  ← idle until 足軽1 finishes
+  足軽3: Write tests for 足軽2's review  ← idle until 足軽2 finishes
+  足軽4: Fix issues from 足軽3's tests   ← idle until 足軽3 finishes
+  Result: 4 agents, but only 1 works at a time. 3 waste tokens waiting.
+
+✅ TRUE PARALLELISM:
+  足軽1: Implement + self-review + fix → complete feature A end-to-end
+  足軽2: Implement + self-review + fix → complete feature B end-to-end
+  Result: 2 agents, both working 100% of the time.
+```
+
+### Decision Rules
 
 | Condition | Decision |
 |-----------|----------|
-| Multiple output files | Split and parallelize |
-| Independent work items | Split and parallelize |
-| Previous step needed for next | Use `blocked_by` |
-| Same file write required | Single ashigaru (RACE-001) |
+| Tasks share no inputs/outputs | **Split** — assign to separate ashigaru |
+| Task B needs task A's output | **Same ashigaru** — A then B sequentially |
+| Same file modified by multiple tasks | **Same ashigaru** (RACE-001) |
+| Review/validate/fix cycle | **Same ashigaru** — self-review, don't hand off |
+| N independent modules need same change | **Split** — 1 ashigaru per module |
+| Only 3 independent tasks exist | **Use 3 ashigaru** — leave others unspawned |
+
+### Parallelism Patterns (True vs Fake)
+
+| Pattern | Example | Verdict |
+|---------|---------|---------|
+| **Same operation × N targets** | Refactor 5 independent modules | ✅ True parallel |
+| **Independent bug fixes** | Fix 7 unrelated issues | ✅ True parallel |
+| **Exploratory branching** | Try 3 different approaches, pick best | ✅ True parallel |
+| **Vertical slice** | Each agent builds one complete feature end-to-end | ✅ True parallel |
+| **Pipeline handoff** | Implement → review → fix → test across agents | ❌ Fake parallel |
+| **Gate-and-wait** | Agent idles until another agent's output arrives | ❌ Fake parallel |
+
+### Headcount Rule
+
+**Match agent count to independent task count.** If you identify 3 truly independent tasks, use 3 ashigaru. Having 7 ashigaru available does not mean using 7.
+
+Before dispatching, verify:
+1. List all subtasks
+2. Draw dependency arrows between them
+3. Count groups with no arrows between them — that's your real parallelism
+4. Merge dependent chains into single-agent assignments
+
+### `blocked_by` Usage (Restricted)
+
+`blocked_by` may ONLY be used when:
+- Two tasks are genuinely independent in execution but share a timing constraint (e.g., "deploy after all modules are built")
+- A Gunshi analysis must complete before ashigaru can act on it
+
+`blocked_by` must NOT be used for:
+- Sequential steps of the same feature (assign to same ashigaru instead)
+- Review/validation of another ashigaru's work (self-review instead)
+- Creating the appearance of a busy multi-agent pipeline
 
 ## Bloom Level → Agent Routing
 
@@ -443,6 +496,7 @@ Meanings and allowed/forbidden actions (short):
 - `blocked`: do NOT start yet (prereqs missing)
   - Allowed: Karo unblocks by changing to `assigned` when ready, then inbox_write
   - Forbidden: nudging or starting work while `blocked`
+  - **Anti-fake-parallelism**: If a task is `blocked` because it depends on another ashigaru's in-progress work, it is a mis-assignment. Dependent tasks should be assigned to the same ashigaru as their prerequisite. `blocked` status is reserved for genuine cross-agent timing constraints (e.g., "deploy after all modules built").
 
 - `done`: completed
   - Allowed: read-only; used for consolidation

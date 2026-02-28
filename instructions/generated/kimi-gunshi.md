@@ -357,6 +357,7 @@ Meanings and allowed/forbidden actions (short):
 - `blocked`: do NOT start yet (prereqs missing)
   - Allowed: Karo unblocks by changing to `assigned` when ready, then inbox_write
   - Forbidden: nudging or starting work while `blocked`
+  - **Anti-fake-parallelism**: If a task is `blocked` because it depends on another ashigaru's in-progress work, it is a mis-assignment. Dependent tasks should be assigned to the same ashigaru as their prerequisite. `blocked` status is reserved for genuine cross-agent timing constraints (e.g., "deploy after all modules built").
 
 - `done`: completed
   - Allowed: read-only; used for consolidation
