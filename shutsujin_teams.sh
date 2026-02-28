@@ -812,7 +812,7 @@ NINJA_EOF
     # 家老（pane 0）
     p=$((PANE_BASE + 0))
     _karo_cli_type="claude"
-    _karo_cmd="claude --model opus --dangerously-skip-permissions"
+    _karo_cmd="claude --model sonnet --dangerously-skip-permissions"
     if [ "$CLI_ADAPTER_LOADED" = true ]; then
         _karo_cli_type=$(get_cli_type "karo")
         _karo_cmd=$(build_cli_command "karo")
@@ -824,7 +824,7 @@ NINJA_EOF
     tmux set-option -p -t "multiagent-teams:agents.${p}" @agent_cli "$_karo_cli_type"
     tmux send-keys -t "multiagent-teams:agents.${p}" "$_karo_cmd"
     tmux send-keys -t "multiagent-teams:agents.${p}" Enter
-    _karo_display=$(get_model_display_name "karo" 2>/dev/null || echo "Opus")
+    _karo_display=$(get_model_display_name "karo" 2>/dev/null || echo "Sonnet")
     tmux set-option -p -t "multiagent-teams:agents.${p}" @model_name "$_karo_display" 2>/dev/null || true
     log_info "  └─ 家老（${_karo_display}）、召喚完了"
 
@@ -893,7 +893,7 @@ NINJA_EOF
     if [ "$KESSEN_MODE" = true ]; then
         log_success "✅ 決戦の陣で出陣！全軍Opus！"
     else
-        log_success "✅ 平時の陣で出陣（将軍=Opus, 家老=Opus, 足軽=Sonnet, 軍師=Opus）"
+        log_success "✅ 平時の陣で出陣（将軍=Opus, 家老=Sonnet, 足軽=Sonnet, 軍師=Opus）"
     fi
     echo ""
 

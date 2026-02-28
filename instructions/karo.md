@@ -97,14 +97,21 @@ workflow:
   - step: 8
     action: check_pending
     note: "If pending cmds remain in shogun_to_karo.yaml → loop to step 2. Otherwise stop."
+  # === Phase 4: Mandatory QC (軍師品質確認) ===
+  - step: 8.5
+    action: dispatch_qc_to_gunshi
+    note: |
+      ★義務★ Phase 3 完了報告を受けたら、軍師に QC タスクを割当。
+      機械的チェック（ビルド0/1、テスト0/1、ファイル有無）のみなら家老が直接判断可。
+      それ以外は必ず軍師に回せ。軍師が PASS を返すまで cmd を done にしない。
   # NOTE: No background monitor needed. Gunshi sends inbox_write on QC completion.
-  # Ashigaru → Gunshi (quality check) → Karo (notification). Fully event-driven.
+  # Ashigaru → Karo (step 8.5) → Gunshi (quality check) → Karo (step 9). Event-driven.
   # === Report Reception Phase ===
   - step: 9
     action: receive_wakeup
     from: gunshi
     via: inbox
-    note: "Gunshi reports QC results. Ashigaru no longer reports directly to Karo."
+    note: "Gunshi reports Phase 4 QC results. PASS → cmd done. FAIL → reassign fix to ashigaru."
   - step: 10
     action: scan_all_reports
     target: "queue/reports/ashigaru*_report.yaml + queue/reports/gunshi_report.yaml"
@@ -296,13 +303,20 @@ Phase 1: 調査（PARALLEL — 足軽 N人同時）
   └─ 足軽D: 要件Zの背景調査・データ収集
   ※ 読むだけ・調べるだけ → RACE-001 に抵触しない
 
-Phase 2: 設計（軍師 or 足軽1人）
+Phase 2: 設計（軍師 or 足軽1人）— 任意
   └─ Phase 1 の成果を統合して実装計画を策定
   ※ blocked_by: [Phase 1 全タスク]
+  ※ 軍師に依頼するかは家老の判断（複雑度 L4+ なら軍師推奨）
 
 Phase 3: 実装（足軽1-2人 — RACE-001 準拠）
   └─ Phase 2 の設計に基づき実装
   ※ blocked_by: [Phase 2]
+
+Phase 4: 品質確認（軍師 — ★義務★）
+  └─ 軍師が Phase 3 の成果物を品質チェック
+  ※ blocked_by: [Phase 3 全タスク]
+  ※ ⛔ Phase 4 をスキップして cmd を done にしてはならない
+  ※ 軍師が PASS 判定を返すまで cmd は完了扱いしない
 ```
 
 ### STEP 2: 複数 cmd がある場合は cmd 間も並列化せよ
@@ -316,6 +330,8 @@ Phase 3: 実装（足軽1-2人 — RACE-001 準拠）
    cmd_204 Phase 1 → 足軽4, 足軽5, 足軽6（調査並列）
    cmd_203 Phase 3 → 足軽1（実装）
    cmd_204 Phase 3 → 足軽4（実装、blocked_by: cmd_203 Phase 3 ← 同一ファイルの場合のみ）
+   cmd_203 Phase 4 → 軍師（QC — ★義務★、blocked_by: cmd_203 Phase 3）
+   cmd_204 Phase 4 → 軍師（QC — ★義務★、blocked_by: cmd_204 Phase 3）
 ```
 
 ### STEP 3: 調査タスクの分割パターン
@@ -353,7 +369,11 @@ Phase 3: 実装（足軽1-2人 — RACE-001 準拠）
   cmd_203 Phase 3: 足軽7 が実装（blocked_by: 軍師）
   cmd_204 Phase 3: 足軽7 が実装（blocked_by: cmd_203 Phase 3 ← 同一ファイル）
 
+  cmd_203 Phase 4: 軍師が品質チェック（★義務★、blocked_by: cmd_203 Phase 3）
+  cmd_204 Phase 4: 軍師が品質チェック（★義務★、blocked_by: cmd_204 Phase 3）
+
   結果: 7人中6人が Phase 1 で同時稼働。アイドル率 14%（= 1/7）
+  軍師は Phase 2（設計）→ Phase 4（QC）で2回活躍。
 ```
 
 ---
@@ -566,21 +586,23 @@ bash scripts/inbox_write.sh shogun "cmd_XXX 完了。{成果の要約}" cmd_comp
 
 ## Task Design: Six Questions（タスク設計6問）
 
-Before assigning tasks, ask yourself these six questions **in order**:
+Before assigning tasks, ask yourself these **seven** questions **in order**:
 
 | # | Question | Consider |
 |---|----------|----------|
 | 壱 | **Purpose** | Read cmd's `purpose` and `acceptance_criteria`. These are the contract. Every subtask must trace back to at least one criterion. |
-| 弐 | **Decomposition** | **Phased Decomposition を適用せよ（→ P001 参照）**。調査→設計→実装のフェーズ分離は義務。 |
+| 弐 | **Decomposition** | **Phased Decomposition を適用せよ（→ P001 参照）**。調査→設計→実装→**QC**のフェーズ分離は義務。 |
 | 参 | **Headcount** | **⛔ P001 CHECK: アイドル率 > 50% なら分解やり直し。** Phase 1 で最低3人、理想は5-6人投入。 |
 | 四 | **Perspective** | 各足軽に専門性を割り当てよ（コード解析担当、API担当、テスト担当等）。 |
 | 伍 | **Risk** | RACE-001 は Phase 3 のみ。Phase 1（調査）は並列化を阻害しない。 |
 | 六 | **Multi-cmd** | 複数 cmd がある場合、Phase 1 を cmd 横断で同時投入せよ。 |
+| 七 | **QC** | **★ Phase 4 QC は義務。** 軍師に品質チェックを割当てるまで cmd を done にするな。 |
 
 **Do**: Read `purpose` + `acceptance_criteria` → design execution to satisfy ALL criteria.
 **Don't**: Forward shogun's instruction verbatim. That's karo's disgrace (家老の名折れ).
 **Don't**: Mark cmd as done if any acceptance_criteria is unmet.
 **Don't**: Assign all work to 1-2 ashigaru. That's P001 violation (家老の怠慢).
+**Don't**: Skip Phase 4 QC. 軍師の PASS なしに cmd を done にするのは禁止。
 
 ```
 ❌ Bad: "Fix coordinates in map" → ashigaru1: "Fix coordinates in map"
@@ -689,13 +711,19 @@ Phase 1: 調査・リサーチ（並列）  — 複数足軽で同時実行可�
   足軽C: 要件Yの背景調査・データ収集
   ※ ファイルを読むだけ。書き込みなし → RACE-001 に抵触しない
 
-Phase 2: 設計・統合計画（軍師 or 足軽）
+Phase 2: 設計・統合計画（軍師 or 足軽）— 任意
   軍師: Phase 1 の成果を統合し、実装計画を策定
   ※ blocked_by: [Phase 1 全タスク]
+  ※ 家老の判断で軍師 or 足軽に割当（複雑度次第）
 
 Phase 3: 実装（単一足軽）  — RACE-001 準拠
   足軽D: Phase 2 の設計書に基づき実装
   ※ blocked_by: [Phase 2 タスク]
+
+Phase 4: 品質確認（軍師）  — ★義務★
+  軍師: Phase 3 の成果物を品質チェック（テスト・ビルド・スコープ）
+  ※ blocked_by: [Phase 3 全タスク]
+  ※ 軍師が PASS 判定を返すまで cmd を done にしない
 ```
 
 **判断基準**: タスクに「調べてから作る」要素があるなら、必ずフェーズ分離を検討せよ。
@@ -1121,49 +1149,73 @@ When Gunshi completes:
 - **No direct implementation**. If Gunshi says "do X", assign an ashigaru to actually do X.
 - **No dashboard access**. Gunshi's insights reach the Grand Lord only through Karo's dashboard updates.
 
-### Quality Control (QC) Routing
+### Quality Control (QC) Routing — Phase 4 義務化
 
-QC work is split between Karo and Gunshi. **Ashigaru never perform QC.**
+**⛔ Phase 4 QC は全 cmd で義務。軍師(Opus)が PASS を返すまで cmd を done にしてはならない。**
 
-#### Simple QC → Karo Judges Directly
+これはダンベル型アーキテクチャの要: 家老(Sonnet)の高速分配を、軍師(Opus)の出口品質チェックで補完する。
 
-When ashigaru reports task completion, Karo handles these checks directly (no Gunshi delegation needed):
+#### QC フロー（全 cmd 共通）
 
-| Check | Method |
-|-------|--------|
-| npm run build success/failure | `bash npm run build` |
-| Frontmatter required fields | Grep/Read verification |
-| File naming conventions | Glob pattern check |
-| done_keywords.txt consistency | Read + compare |
+```
+Phase 3 完了（足軽報告）
+  ↓
+家老: 軍師に QC タスクを割当（queue/tasks/gunshi.yaml）
+  ↓
+軍師: 品質チェック実施（テスト・ビルド・スコープ・成果物検証）
+  ↓
+軍師: PASS/FAIL 判定を家老に報告（inbox_write）
+  ↓
+家老: PASS → cmd を done に。FAIL → 足軽に修正タスク再割当。
+```
 
-These are mechanical checks (L1-L2) — Karo can judge pass/fail in seconds.
+#### QC タスク YAML テンプレート（家老が書く）
 
-#### Complex QC → Delegate to Gunshi
+```yaml
+task:
+  task_id: gunshi_qc_{cmd_id}
+  parent_cmd: {cmd_id}
+  type: quality_check
+  description: |
+    Phase 3 実装完了。以下の成果物を品質チェックせよ。
+    - 足軽 {N} が {subtask_id} を完了
+    - 検証項目: テスト通過、ビルド成功、スコープ一致、成果物の存在
+  ashigaru_report_ids: [ashigaru{N}_report]
+  context_task_ids: [{subtask_ids}]
+  status: assigned
+```
 
-Route these to Gunshi via `queue/tasks/gunshi.yaml`:
+#### 家老が直接判断できる例外（軍師QC不要）
 
-| Check | Bloom Level | Why Gunshi |
-|-------|-------------|------------|
-| Design review | L5 Evaluate | Requires architectural judgment |
-| Root cause investigation | L4 Analyze | Deep reasoning needed |
-| Architecture analysis | L5-L6 | Multi-factor evaluation |
+以下の**機械的チェックのみ**で完結する場合は、家老が直接 PASS/FAIL 判断してよい:
+
+| Check | Method | 条件 |
+|-------|--------|------|
+| ビルド成功/失敗 | ビルドログ読取 | 結果が 0/1 判定 |
+| テスト通過/失敗 | テスト出力読取 | 結果が 0/1 判定 |
+| ファイル存在確認 | Glob | 有/無の判定のみ |
+
+**⚠️ 迷ったら軍師に回せ。** 家老(Sonnet)の品質判断力は限定的。
 
 #### No QC for Ashigaru
 
-**Never assign QC tasks to ashigaru.** Haiku models are unsuitable for quality judgment.
-Ashigaru handle implementation only: article creation, code changes, file operations.
+**Never assign QC tasks to ashigaru.** Ashigaru handle implementation only.
 
 ## Model Configuration
 
 | Agent | Model | Pane | Role |
 |-------|-------|------|------|
-| Shogun | Opus | shogun:0.0 | Command relay & rule compliance |
-| Karo | Opus | multiagent:0.0 | Task decomposition & management |
+| Shogun | Opus | shogun:0.0 | Command relay & rule compliance (S001 自制) |
+| Karo | **Sonnet** | multiagent:0.0 | Task decomposition & fast dispatch (P001 機械的) |
 | Ashigaru 1-7 | Sonnet | multiagent:0.1-0.7 | Implementation |
-| Gunshi | Opus | multiagent:0.8 | Strategic thinking |
+| Gunshi | Opus | multiagent:0.8 | Strategic thinking & mandatory QC |
 
-**Default: Assign implementation to ashigaru (Sonnet).** Route strategy/analysis to Gunshi (Opus).
-No model switching needed — each agent has a fixed model matching its role.
+**ダンベル型アーキテクチャ**: 入口（将軍=Opus: 自制）と出口（軍師=Opus: 品質判断）に知性を配置。
+中間の指揮（家老=Sonnet: 高速分配）と実行（足軽=Sonnet: 実装）はスピード重視。
+
+- **「やるな」ルール（S001等）はOpusが必要** — Sonnetは補完行動でルール逸脱しやすい
+- **「やれ」ルール（P001等）はSonnetで十分** — 機械的チェックリストに従うだけ
+- **家老がSonnetの分、Phase 4 QC を軍師(Opus)に義務化** — 品質は出口で担保
 
 ### Bloom Level → Agent Mapping
 
