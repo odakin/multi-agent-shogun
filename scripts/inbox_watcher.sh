@@ -1124,6 +1124,21 @@ while true; do
     sleep 0.3
 
     if [ "$rc" -eq 2 ]; then
+        # Timeout tick: check for stuck agents before processing unread
+        if type agent_stuck_check &>/dev/null; then
+            agent_stuck_check "$PANE_TARGET" "$AGENT_ID"
+            local stuck_rc=$?
+            if [ "$stuck_rc" -eq 0 ]; then
+                echo "[$(date)] [STUCK] $AGENT_ID recovered from stuck state — notifying karo" >&2
+                # Notify karo about the recovery (unless this IS karo or shogun)
+                if [ "$AGENT_ID" != "karo" ] && [ "$AGENT_ID" != "shogun" ]; then
+                    local _iw_script="${SCRIPT_DIR}/scripts/inbox_write.sh"
+                    if [ -f "$_iw_script" ]; then
+                        bash "$_iw_script" karo "${AGENT_ID}がスタックしていたため自動復旧した（フィードバックプロンプト等）。タスク状態を確認せよ。" stuck_recovery inbox_watcher 2>/dev/null || true
+                    fi
+                fi
+            fi
+        fi
         if [ "${ASW_PROCESS_TIMEOUT:-1}" = "1" ]; then
             process_unread "timeout"
         fi

@@ -74,6 +74,83 @@ agent_is_busy_check() {
     return 1  # idle (default)
 }
 
+# ═══════════════════════════════════════════════════════════════
+# agent_stuck_check — スタック検知＆自動復旧
+# ═══════════════════════════════════════════════════════════════
+#
+# Claude Code が対話的プロンプト（フィードバック、確認ダイアログ等）で
+# ブロックされているかを検知し、自動的にキー送信で復旧する。
+#
+# 使い方:
+#   agent_stuck_check <pane_target> [agent_id]
+#   → 0=stuck検知＆復旧実施, 1=正常（stuckではない）, 2=ペイン不在
+#
+# 検知パターン:
+#   - フィードバックプロンプト（「このセッションはどうでしたか？」等）
+#   - セッション終了確認
+#   - その他の対話的ブロッキングプロンプト
+#
+# 設計:
+#   インフラ層（watcher）で動作するため F001/F004 に抵触しない。
+#   家老・足軽の役割分担を崩さずにスタック復旧を実現する。
+# ═══════════════════════════════════════════════════════════════
+
+# Stuck pattern list (case-insensitive grep patterns)
+# Each entry: "pattern|recovery_keys|description"
+#   recovery_keys: キーシーケンス（tmux send-keys 形式）
+#     "Enter" = Enter キー, "Escape" = Esc キー, "q Enter" = q → Enter
+STUCK_PATTERNS=(
+    "このセッションはどうでしたか|Escape|feedback_prompt_ja"
+    "How was this session|Escape|feedback_prompt_en"
+    "Would you like to provide feedback|Escape|feedback_request"
+    "Rate this conversation|Escape|rate_conversation"
+    "Press any key to continue|Enter|press_any_key"
+    "Do you want to exit|n Enter|exit_confirmation"
+    "Session ended|Enter|session_ended"
+    "has been compacted.*continue|Enter|compaction_continue"
+)
+
+# agent_stuck_check <pane_target> [agent_id]
+# Returns: 0=stuck (recovered), 1=not stuck, 2=pane absent
+agent_stuck_check() {
+    local pane_target="$1"
+    local agent_id="${2:-unknown}"
+    local pane_content
+
+    # Capture last 15 lines (more than busy check — stuck prompts may appear higher)
+    pane_content=$(timeout 2 tmux capture-pane -t "$pane_target" -p 2>/dev/null | tail -15)
+
+    if [[ -z "$pane_content" ]]; then
+        return 2  # pane doesn't exist
+    fi
+
+    local pattern recovery_keys description
+    for entry in "${STUCK_PATTERNS[@]}"; do
+        IFS='|' read -r pattern recovery_keys description <<< "$entry"
+
+        if echo "$pane_content" | grep -qi "$pattern"; then
+            # Stuck detected — send recovery keys
+            echo "[$(date)] [STUCK-RECOVERY] $agent_id ($pane_target): detected '$description' — sending '$recovery_keys'" >&2
+
+            # Send recovery keys (space-separated keys sent individually)
+            for key in $recovery_keys; do
+                tmux send-keys -t "$pane_target" "$key"
+                sleep 0.3
+            done
+
+            # Log to stuck_recovery.log
+            local log_dir
+            log_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/logs"
+            mkdir -p "$log_dir"
+            echo "[$(date)] agent=$agent_id pane=$pane_target pattern=$description keys=$recovery_keys" >> "$log_dir/stuck_recovery.log"
+
+            return 0  # stuck, recovery attempted
+        fi
+    done
+
+    return 1  # not stuck
+}
+
 # get_pane_state_label <pane_target>
 # 人間が読めるラベルを返す。
 get_pane_state_label() {
