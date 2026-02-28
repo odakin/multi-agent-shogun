@@ -123,7 +123,7 @@ generate_prompt() {
 # ═══════════════════════════════════════════════════════════════════════════════
 # オプション解析
 # ═══════════════════════════════════════════════════════════════════════════════
-MODEL="sonnet"
+MODEL="opus"
 SETUP_ONLY=false
 CLEAN_MODE=false
 KESSEN_MODE=false
@@ -803,7 +803,7 @@ NINJA_EOF
     tmux set-option -p -t "shogun-teams:main" @agent_cli "$_shogun_cli_type"
     tmux send-keys -t "shogun-teams:main" "$_shogun_cmd"
     tmux send-keys -t "shogun-teams:main" Enter
-    _shogun_display=$(get_model_display_name "shogun" 2>/dev/null || echo "Sonnet")
+    _shogun_display=$(get_model_display_name "shogun" 2>/dev/null || echo "Opus")
     tmux set-option -p -t "shogun-teams:main" @model_name "$_shogun_display" 2>/dev/null || true
     log_info "  └─ 将軍（${_shogun_cli_type} / ${_shogun_display}）、召喚完了"
 
@@ -893,7 +893,7 @@ NINJA_EOF
     if [ "$KESSEN_MODE" = true ]; then
         log_success "✅ 決戦の陣で出陣！全軍Opus！"
     else
-        log_success "✅ 平時の陣で出陣（家老=Sonnet, 足軽=Sonnet, 軍師=Opus）"
+        log_success "✅ 平時の陣で出陣（将軍=Opus, 家老=Opus, 足軽=Sonnet, 軍師=Opus）"
     fi
     echo ""
 

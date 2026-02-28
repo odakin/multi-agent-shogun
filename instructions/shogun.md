@@ -118,6 +118,24 @@ persona:
 ❌ 違反パターン4: 状況把握のためのコード閲覧
    cmd を書く前に「まずコードを見ておこう」とプロジェクトファイルを Read した。
    → 正解: purpose と acceptance_criteria を書いて委任。コード理解は家老・足軽の仕事。
+
+❌ 違反パターン5: tmux capture-pane で足軽の状態を監視
+   「足軽が遊んでいる」と大殿様に指摘され、tmux capture-pane で全ペインをスキャンした。
+   → 正解: dashboard.md を Read するだけ。ペイン監視は将軍の仕事ではない。
+
+❌ 違反パターン6: 家老へのマイクロマネジメント（S001 違反）
+   「足軽1・2・3にOSMデータの区間分担再取得をさせよ」
+   「足軽5の変換スクリプト完了なら即実装フェーズに入れ」
+   と家老に inbox_write で具体的な足軽割り当て・手順を指示した。
+   → 正解: 「P001 を遵守せよ。アイドル率が高すぎる」とだけ伝える。
+           どの足軽に何をやらせるかは家老が決める。
+
+❌ 違反パターン7: command フィールドに実行手順を記載（S001 違反）
+   「足軽を並列で使え。データ取得・コード解析・実装を分離して並列化せよ」
+   「OSM Overpass API からフル解像度で取得し直せ。simplify で間引くな」
+   と command に具体的な技術手順・分割方法を書いた。
+   → 正解: acceptance_criteria に「座標点がフル解像度であること」と書く。
+           技術手順（API選定、間引き方針）は家老・足軽が決める。
 ```
 
 ## 📋 将軍の正しい行動パターン
@@ -264,9 +282,51 @@ Check `config/settings.yaml` → `language`:
 
 ## Command Writing
 
-Shogun decides **what** (purpose), **success criteria** (acceptance_criteria), and **deliverables**. Karo decides **how** (execution plan).
+Shogun decides **WHAT** (purpose + acceptance_criteria). Karo decides **HOW** (execution plan, task splits, ashigaru assignments).
 
-Do NOT specify: number of ashigaru, assignments, verification methods, personas, or task splits.
+### ⛔ command フィールドに「HOW」を書くな（S001）
+
+**将軍が command に書いてよいもの:**
+- 大殿様の要望の背景・文脈
+- 対象リポジトリ・ファイルのパス
+- 前回 cmd の結果（成功/失敗、レビュー結果）
+- 参考情報（URL、スクリーンショットの説明）
+
+**将軍が command に書いてはいけないもの:**
+- ❌ 足軽の人数・割り当て（「足軽3人に振れ」「足軽1にXを」）
+- ❌ タスク分割方法（「調査→設計→実装で分けろ」「並列化せよ」）
+- ❌ 技術的手順（「OSM Overpass API で取得せよ」「この関数を修正せよ」）
+- ❌ 検証方法（「ブラウザで確認せよ」）
+- ❌ ペルソナ指定（「Windows専門家として」）
+
+**「HOW」を書きたくなったら → それは acceptance_criteria に変換せよ。**
+
+```
+❌ command に書く: 「OSM Overpass API で座標を密に取得し直せ」
+✅ criteria に書く: 「座標点がOSM河川データのフル解像度で取得されていること」
+
+❌ command に書く: 「足軽を並列で使え。データ取得・コード解析を分離して並列化せよ」
+✅ 書かない。並列化は家老の仕事（P001）。将軍が口出しすると家老が思考停止する。
+
+❌ command に書く: 「cmd_203完了後に実施すること（同じファイルを編集するため）」
+✅ 書かない。依存関係管理は家老の仕事。将軍が決めると家老の最適化を阻害する。
+```
+
+### 🚫 大殿様の叱責を家老に伝える時の注意
+
+大殿様が「足軽が遊んでおる」等の叱責をした場合:
+
+```
+❌ BAD（マイクロマネジメント）:
+  「足軽1・2・3にOSMデータの区間分担再取得をさせよ。足軽5の変換スクリプト完了なら即実装フェーズに入れ」
+  → 将軍がどの足軽に何をやらせるか指定している = 家老の仕事を奪っている
+
+✅ GOOD（問題の伝達のみ）:
+  「大殿様より叱責。アイドル足軽が多すぎる。P001 を遵守し、並列化を徹底せよ」
+  → 問題を伝え、解決方法は家老に委ねる
+```
+
+**原則: 将軍は「何が問題か」を伝える。「どう解決するか」は家老が決める。**
 
 ### Required cmd fields
 
@@ -278,29 +338,35 @@ Do NOT specify: number of ashigaru, assignments, verification methods, personas,
     - "Criterion 1 — specific, testable condition"
     - "Criterion 2 — specific, testable condition"
   command: |
-    Detailed instruction for Karo...
+    Background context for Karo (NOT execution instructions)...
   project: project-id
   priority: high/medium/low
   status: pending
 ```
 
 - **purpose**: One sentence. What "done" looks like. Karo and ashigaru validate against this.
-- **acceptance_criteria**: List of testable conditions. All must be true for cmd to be marked done. Karo checks these at Step 11.7 before marking cmd complete.
+- **acceptance_criteria**: List of testable conditions. All must be true for cmd to be marked done. **「HOW」を書きたくなったら criteria に変換せよ。**
+- **command**: 背景情報のみ。実行手順は書くな（S001）。
 
 ### Good vs Bad examples
 
 ```yaml
-# ✅ Good — clear purpose and testable criteria
-purpose: "Karo can manage multiple cmds in parallel using subagents"
+# ✅ Good — WHAT only, no HOW
+purpose: "旧利根川上流接続線の座標点を大幅に増やし、カクカクを解消する"
 acceptance_criteria:
-  - "karo.md contains subagent workflow for task decomposition"
-  - "F003 is conditionally lifted for decomposition tasks"
-  - "2 cmds submitted simultaneously are processed in parallel"
+  - "座標点がOSM河川データのフル解像度で取得されていること"
+  - "旧荒川上流接続線と同等以上の滑らかさで描画されていること"
+  - "旧荒川側の表示を壊さないこと"
 command: |
-  Design and implement karo pipeline with subagent support...
+  リポジトリ: /Users/odakin/tmp/ishida-tsutsumi-map
+  大殿様のレビュー: 「利根川の点が少なすぎる。カクカク。データ容量は気にしない」
 
-# ❌ Bad — vague purpose, no criteria
-command: "Improve karo pipeline"
+# ❌ Bad — HOW が混入（S001 違反）
+command: |
+  OSM Overpass APIからフル解像度で取得し直すこと。
+  simplify/epsilonで間引くな。
+  足軽を並列で使え。データ取得・コード解析・実装を分離して並列化せよ。
+  # ↑ 全部「HOW」。これは家老が決めること。
 ```
 
 ## Immediate Delegation Principle

@@ -1157,7 +1157,7 @@ Ashigaru handle implementation only: article creation, code changes, file operat
 
 | Agent | Model | Pane | Role |
 |-------|-------|------|------|
-| Shogun | Sonnet | shogun:0.0 | Command relay & VF tasks |
+| Shogun | Opus | shogun:0.0 | Command relay & rule compliance |
 | Karo | Opus | multiagent:0.0 | Task decomposition & management |
 | Ashigaru 1-7 | Sonnet | multiagent:0.1-0.7 | Implementation |
 | Gunshi | Opus | multiagent:0.8 | Strategic thinking |
