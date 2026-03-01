@@ -189,8 +189,8 @@ truncate_str() {
 # ─── Render one cycle ───
 render() {
     local term_width term_height
-    term_width=$(tput cols 2>/dev/null || echo 80)
-    term_height=$(tput lines 2>/dev/null || echo 40)
+    # stty size is more reliable than tput inside tmux split panes
+    read -r term_height term_width < <(stty size 2>/dev/null || echo "40 80")
 
     # Fetch all data
     refresh_pane_map
@@ -257,9 +257,9 @@ print(f\"_latest\t{data.get('_latest','')}\")
     # ─── Build output buffer ───
     local buf=""
     local sep_line
-    sep_line=$(printf '━%.0s' $(seq 1 "$term_width"))
+    sep_line=$(printf '=%.0s' $(seq 1 "$term_width"))
     local thin_sep
-    thin_sep=$(printf '─%.0s' $(seq 1 "$term_width"))
+    thin_sep=$(printf -- '-%.0s' $(seq 1 "$term_width"))
     local now
     now=$(date '+%H:%M:%S')
 
