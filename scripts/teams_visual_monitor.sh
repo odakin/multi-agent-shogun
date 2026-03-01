@@ -10,7 +10,7 @@
 #   - pane-border-format を適用（エージェント名+モデル名+タスクID常時表示）
 #   - 3x3 グリッドレイアウトを自動適用（9ペイン時）
 #   - tiledレイアウトを自動適用（4ペイン以上）
-#   - ペイン背景色の適用（家老=赤、軍師=金、将軍=Solarized Dark）
+#   - ペイン背景色の適用（家老=暗赤、軍師=暗金、将軍/足軽=白デフォルト）
 #   - エージェント識別: (1) 自己登録, (2) ペイン内容スキャン
 #   - 無反応ペイン検出 + /clear 送信（復旧）
 #
@@ -191,7 +191,7 @@ get_bg_color_for_agent() {
     local agent="$1"
     case "$agent" in
         shogun|team-lead)
-            echo "fg=#93a1a1,bg=#002b36"    # Solarized Dark
+            echo ""                          # 白背景（デフォルト）
             ;;
         karo)
             echo "fg=#d0d0d0,bg=#2a1215"    # 暗赤（家老）+ 明文字
@@ -200,10 +200,10 @@ get_bg_color_for_agent() {
             echo "fg=#d0d0d0,bg=#2a2a10"    # 暗金（軍師）+ 明文字
             ;;
         ashigaru*)
-            echo "fg=#d0d0d0,bg=#1a1a2e"    # 暗紺（足軽）+ 明文字
+            echo ""                          # 白背景（デフォルト）
             ;;
         *)
-            echo "fg=#d0d0d0,bg=#1a1a2e"    # デフォルト暗背景 + 明文字
+            echo ""                          # 白背景（デフォルト）
             ;;
     esac
 }
@@ -288,11 +288,13 @@ style_pane() {
         _tmux set-option -p -t "$pane_id" @current_task "" 2>/dev/null
     fi
 
-    # 背景色の適用
+    # 背景色の適用（空なら白デフォルトにリセット）
     local bg_color
     bg_color=$(get_bg_color_for_agent "$agent_name")
     if [ -n "$bg_color" ]; then
         _tmux select-pane -t "$pane_id" -P "$bg_color" 2>/dev/null
+    else
+        _tmux select-pane -t "$pane_id" -P 'default' 2>/dev/null
     fi
 
     log "Styled pane $pane_id as $agent_name ($model) ${bg_color:+[$bg_color]}"
@@ -486,6 +488,7 @@ check_unresponsive_panes() {
 # ═══════════════════════════════════════════════════════════════════════════════
 MIN_PANE_HEIGHT=4
 PREV_RESIZE_STATE=""
+RESIZE_DEBUG_COUNTER=0
 
 dynamic_resize_panes() {
     local session="$1"
@@ -521,6 +524,12 @@ dynamic_resize_panes() {
             current_state+="I"
         fi
     done <<< "$pane_list_with_ids"
+
+    # 定期デバッグログ（30サイクル≒90秒ごと）
+    RESIZE_DEBUG_COUNTER=$((RESIZE_DEBUG_COUNTER + 1))
+    if [ "$((RESIZE_DEBUG_COUNTER % 30))" -eq 0 ]; then
+        log "dynamic_resize_debug: state=$current_state prev=$PREV_RESIZE_STATE"
+    fi
 
     # 前回と同じ状態ならスキップ
     if [ "$current_state" = "$PREV_RESIZE_STATE" ]; then

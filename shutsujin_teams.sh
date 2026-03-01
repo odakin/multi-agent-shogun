@@ -719,7 +719,7 @@ NINJA_EOF
 
     SHOGUN_PROMPT=$(generate_prompt "将軍" "magenta" "$SHELL_SETTING")
     tmux send-keys -t "shogun-teams:main" "cd \"$(pwd)\" && export PS1='${SHOGUN_PROMPT}' && clear" Enter
-    tmux select-pane -t "shogun-teams:main" -P 'fg=#93a1a1,bg=#002b36'  # 将軍: Solarized Dark
+    # 将軍: 白背景（デフォルト）— 色設定なし
     tmux set-option -p -t "shogun-teams:main" @agent_id "shogun"
 
     # ── 将軍セッションに戦況モニターペインを追加（右半分） ──
@@ -849,11 +849,9 @@ NINJA_EOF
     tmux set-option -t multiagent-teams -w pane-border-format \
       '#{?pane_active,#[reverse],}#[bold]#{@agent_id}#[default] (#{@model_name}) #{@current_task}'
 
-    # 全ペインに前景色+背景色を適用（ライトモードでも文字が読めるように）
+    # 家老・軍師のみ暗背景（fg明示でライトモードでも読める）
+    # 将軍・足軽は白背景デフォルト — 色設定不要
     tmux select-pane -t "multiagent-teams:agents.${PANE_BASE}" -P 'fg=#d0d0d0,bg=#2a1215'  # 家老: 暗赤
-    for _ci in $(seq 1 ${_ASHIGARU_COUNT}); do
-        tmux select-pane -t "multiagent-teams:agents.$((PANE_BASE + _ci))" -P 'fg=#d0d0d0,bg=#1a1a2e'  # 足軽: 暗紺
-    done
     tmux select-pane -t "multiagent-teams:agents.$((PANE_BASE + _ASHIGARU_COUNT + 1))" -P 'fg=#d0d0d0,bg=#2a2a10'  # 軍師: 暗金
 
     # 家老ペインを選択状態にしておく（ビューワーで見やすいように）
