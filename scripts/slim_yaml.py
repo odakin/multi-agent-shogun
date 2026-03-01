@@ -52,12 +52,20 @@ def slim_shogun_to_karo():
         return True
 
     data = load_yaml(shogun_file)
-    # Support both 'commands' and 'queue' keys for backwards compatibility
-    key = 'commands' if 'commands' in data else 'queue'
-    if not data or key not in data:
+    if not data:
         return True
 
-    queue = data.get(key, [])
+    # Support flat list format (primary) and dict format with 'commands'/'queue' keys
+    ARCHIVE_STATUSES = {'done', 'done_ng', 'stalled', 'cancelled', 'qc_pass'}
+    is_flat_list = isinstance(data, list)
+    if is_flat_list:
+        queue = data
+    else:
+        key = 'commands' if 'commands' in data else 'queue'
+        if key not in data:
+            return True
+        queue = data[key]
+
     if not isinstance(queue, list):
         print("Error: queue is not a list", file=sys.stderr)
         return False
@@ -68,7 +76,7 @@ def slim_shogun_to_karo():
 
     for cmd in queue:
         status = cmd.get('status', 'unknown')
-        if status in ['done', 'cancelled']:
+        if status in ARCHIVE_STATUSES:
             archived.append(cmd)
         else:
             active.append(cmd)
@@ -81,15 +89,20 @@ def slim_shogun_to_karo():
     archive_timestamp = get_timestamp()
     archive_file = archive_dir / f'shogun_to_karo_{archive_timestamp}.yaml'
 
-    archive_data = {key: archived}
+    archive_data = archived if is_flat_list else {key: archived}
     if not save_yaml(archive_file, archive_data):
         return False
 
     # Update main file with active commands only
-    data[key] = active
-    if not save_yaml(shogun_file, data):
-        print(f"Error: Failed to update {shogun_file}, but archive was created", file=sys.stderr)
-        return False
+    if is_flat_list:
+        if not save_yaml(shogun_file, active):
+            print(f"Error: Failed to update {shogun_file}, but archive was created", file=sys.stderr)
+            return False
+    else:
+        data[key] = active
+        if not save_yaml(shogun_file, data):
+            print(f"Error: Failed to update {shogun_file}, but archive was created", file=sys.stderr)
+            return False
 
     print(f"Archived {len(archived)} commands to {archive_file.name}", file=sys.stderr)
     return True
