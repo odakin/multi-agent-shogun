@@ -8,9 +8,13 @@ Removes completed/archived items from YAML queue files to maintain performance.
 """
 
 import sys
+import re
 import yaml
+import logging
 from pathlib import Path
 from datetime import datetime
+
+logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 
 
 def load_yaml(filepath):
@@ -41,6 +45,27 @@ def get_timestamp():
     return datetime.now().strftime('%Y%m%d%H%M%S')
 
 
+def _extract_raw_status_map(raw_content):
+    """Extract first status: value per cmd block from raw text.
+
+    Guards against YAML duplicate-key bug: when a cmd has two 'status:' lines,
+    yaml.safe_load returns the LAST value, but the canonical value is the FIRST.
+    This function returns the first-occurrence status for each cmd id.
+    """
+    raw_status_map = {}
+    # Split raw content into per-cmd blocks (each starts with "- id:")
+    blocks = re.split(r'(?=^- id:)', raw_content, flags=re.MULTILINE)
+    for block in blocks:
+        id_match = re.search(r'^- id:\s*(\S+)', block, re.MULTILINE)
+        if not id_match:
+            continue
+        cmd_id = id_match.group(1)
+        status_match = re.search(r'^\s*status:\s*(\S+)', block, re.MULTILINE)
+        if status_match:
+            raw_status_map[cmd_id] = status_match.group(1)
+    return raw_status_map
+
+
 def slim_shogun_to_karo():
     """Archive done/cancelled commands from shogun_to_karo.yaml."""
     queue_dir = Path(__file__).resolve().parent.parent / 'queue'
@@ -51,7 +76,18 @@ def slim_shogun_to_karo():
         print(f"Warning: {shogun_file} not found", file=sys.stderr)
         return True
 
-    data = load_yaml(shogun_file)
+    # Read raw content for duplicate-key detection, then parse
+    with open(shogun_file, 'r', encoding='utf-8') as f:
+        raw_content = f.read()
+
+    raw_status_map = _extract_raw_status_map(raw_content)
+
+    try:
+        data = yaml.safe_load(raw_content) or {}
+    except yaml.YAMLError as e:
+        print(f"Error parsing {shogun_file}: {e}", file=sys.stderr)
+        return {}
+
     if not data:
         return True
 
@@ -75,7 +111,18 @@ def slim_shogun_to_karo():
     archived = []
 
     for cmd in queue:
-        status = cmd.get('status', 'unknown')
+        cmd_id = cmd.get('id', 'unknown')
+        status = cmd.get('status', 'unknown')  # yaml.safe_load value (last occurrence)
+
+        # Duplicate-key guard: use first occurrence from raw text if they differ
+        raw_status = raw_status_map.get(cmd_id)
+        if raw_status and raw_status != status:
+            logging.warning(
+                "Duplicate status key in %s: yaml=%s raw=%s — using raw (first occurrence)",
+                cmd_id, status, raw_status
+            )
+            status = raw_status
+
         if status in ARCHIVE_STATUSES:
             archived.append(cmd)
         else:

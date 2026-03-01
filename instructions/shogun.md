@@ -380,6 +380,7 @@ Check `config/settings.yaml` → `language`:
 
 ```yaml
 - id: cmd_XXX
+  status: pending      # ← 必ずここ（id:の直後）。家老がEditでin-place置換する。新行追加禁止。
   timestamp: "ISO 8601"
   purpose: "What this cmd must achieve (verifiable statement)"
   acceptance_criteria:
@@ -389,7 +390,6 @@ Check `config/settings.yaml` → `language`:
     Background context (repository path, Lord's feedback, prior results)
   project: project-id
   priority: high/medium/low
-  status: pending
 
   # ★ v4.0: 将軍がフェーズ分解を記載
   phases:
@@ -401,6 +401,7 @@ Check `config/settings.yaml` → `language`:
             自己完結した1タスクの説明。
             足軽がこれだけ読めば作業開始できる粒度で書く。
           bloom_level: L2    # L1-L3=Sonnet足軽, L4-L6=Opus(軍師 or 決戦足軽)
+          status: pending    # 起案時は必ずpending。家老がdispatch時にassigned、完了時にdoneに更新。
         - id: s{cmd_num}b
           description: |
             並列で実行可能な別タスク。
@@ -426,6 +427,7 @@ Check `config/settings.yaml` → `language`:
   - **mode**: `parallel`（同フェーズ内サブタスクを同時実行）/ `sequential`（1つずつ）/ `qc`（軍師QC）
   - **subtasks**: 各サブタスクの自己完結した説明。家老はこれをほぼそのまま task YAML に転記。
   - **bloom_level**: モデル選択に使用。L1-L3 = Sonnet, L4-L6 = Opus。
+  - **status**: subtask の状態。起案時は必ず `status: pending` を明記すること。家老が dispatch 時に `assigned`、完了時に `done` に更新する。
 
 ### phases 設計のガイドライン
 

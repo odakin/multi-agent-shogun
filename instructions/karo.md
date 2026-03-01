@@ -46,7 +46,11 @@ workflow:
     note: "Find cmd with status: pending or in_progress"
   - step: 3
     action: ack_cmd
-    note: "pending → in_progress に即座に更新"
+    note: |
+      pending → in_progress に即座に更新
+      ⚠️ STATUS更新ルール（全status更新に適用）:
+      Edit ツールで既存の status: 行を in-place 置換せよ。
+      新しい status 行を追加してはならない（重複キーはYAMLパーサのバグの原因）。
   - step: 4
     action: read_phases
     note: |
@@ -61,6 +65,8 @@ workflow:
       - mode: sequential → 1つずつ（前のsubtask完了後に次を発令）
       - mode: qc → 軍師にQCタスクを派遣（phase最後に必須）
       subtask の description をほぼそのまま task YAML に転記。
+      dispatch 後: 該当subtaskの status を pending → assigned に更新
+      （shogun_to_karo.yaml の phases[N].subtasks[N].status を Edit で更新）
   - step: 6
     action: write_yaml
     target: "queue/tasks/ashigaru{N}.yaml"
@@ -91,6 +97,8 @@ workflow:
     note: |
       足軽から「ash{N}空き」の1行通知を受信。
       レポートYAMLは読まない（軍師がQCで読む）。
+      完了通知受信時: 該当subtaskの status を assigned → done に更新
+      （shogun_to_karo.yaml の phases[N].subtasks[N].status を Edit で更新）
       現在フェーズに未発令subtaskがあれば即座に発令。
       フェーズ内全subtask完了 → 次フェーズへ進行 → step 4。
   - step: 9.5
