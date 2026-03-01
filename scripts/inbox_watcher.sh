@@ -542,18 +542,23 @@ send_cli_command() {
 send_codex_startup_prompt() {
     # Poll until agent becomes idle (prompt ready) instead of fixed sleep.
     # Max 15s (3 attempts × 5s). If still busy after 15s, proceed anyway.
+    # NOTE: Use agent_is_busy_check directly (bypass /clear cooldown).
     local attempt
     for attempt in 1 2 3; do
         sleep 5
-        if ! agent_is_busy; then
-            echo "[$(date)] [STARTUP] $AGENT_ID idle after ${attempt}×5s — sending startup prompt" >&2
+        if type agent_is_busy_check &>/dev/null; then
+            if ! agent_is_busy_check "$PANE_TARGET"; then
+                echo "[$(date)] [STARTUP] $AGENT_ID idle after ${attempt}×5s — sending startup prompt" >&2
+                break
+            fi
+        else
+            echo "[$(date)] [STARTUP] $AGENT_ID idle after ${attempt}×5s (no busy check) — sending startup prompt" >&2
             break
         fi
         echo "[$(date)] [STARTUP] $AGENT_ID still busy after ${attempt}×5s — retrying" >&2
     done
-    if agent_is_busy; then
-        echo "[$(date)] [STARTUP] $AGENT_ID still busy after 15s — proceeding with startup prompt anyway" >&2
-    fi
+    # Clear /clear cooldown so main loop can nudge after startup prompt
+    LAST_CLEAR_TS=0
 
     local startup_prompt=""
     if type get_startup_prompt &>/dev/null; then
@@ -634,18 +639,27 @@ send_context_reset() {
 
     # Poll until agent becomes idle (prompt ready) instead of fixed sleep.
     # Max 15s (3 attempts × 5s). If still busy after 15s, proceed anyway.
+    # NOTE: Use agent_is_busy_check directly (bypass /clear cooldown).
+    # The 30s cooldown in agent_is_busy() would make this loop never terminate
+    # early, defeating its purpose.
     local attempt
     for attempt in 1 2 3; do
         sleep 5
-        if ! agent_is_busy; then
-            echo "[$(date)] [CONTEXT-RESET] $AGENT_ID idle after ${attempt}×5s — ready for nudge" >&2
+        if type agent_is_busy_check &>/dev/null; then
+            if ! agent_is_busy_check "$PANE_TARGET"; then
+                echo "[$(date)] [CONTEXT-RESET] $AGENT_ID idle after ${attempt}×5s — ready for nudge" >&2
+                break
+            fi
+        else
+            echo "[$(date)] [CONTEXT-RESET] $AGENT_ID idle after ${attempt}×5s (no busy check) — ready for nudge" >&2
             break
         fi
         echo "[$(date)] [CONTEXT-RESET] $AGENT_ID still busy after ${attempt}×5s — retrying" >&2
     done
-    if agent_is_busy; then
-        echo "[$(date)] [CONTEXT-RESET] $AGENT_ID still busy after 15s — proceeding anyway" >&2
-    fi
+    # Clear /clear cooldown — agent is ready (or we gave up waiting).
+    # Without this, the main loop's nudge is blocked by the 30s cooldown
+    # and the agent sits at an empty prompt forever.
+    LAST_CLEAR_TS=0
 }
 
 # ─── Agent self-watch detection ───
@@ -925,6 +939,9 @@ for s in data.get('specials', []):
         # Wait for Karo to update task YAML status (cancellation race condition mitigation).
         # send_cli_command already slept 3s for /clear; add 5s more = ~8s total before check.
         sleep 5
+        # Clear /clear cooldown after waiting — agent should be ready.
+        # Without this, the nudge below is blocked by the 30s cooldown.
+        LAST_CLEAR_TS=0
         local recovery_id
         recovery_id=$(enqueue_recovery_task_assigned)
         if [[ "$recovery_id" == SKIP_CANCELLED:* ]]; then
@@ -1033,7 +1050,10 @@ for s in data.get('specials', []):
                 else
                     echo "[$(date)] ESCALATION Phase 3: Agent $AGENT_ID unresponsive for ${age}s. Sending /clear." >&2
                     send_cli_command "/clear"
-                    LAST_CLEAR_TS=$now
+                    # send_cli_command sets LAST_CLEAR_TS; clear it after
+                    # waiting so nudge isn't blocked by 30s cooldown
+                    sleep 5
+                    LAST_CLEAR_TS=0
                     FIRST_UNREAD_SEEN=0  # Reset — will re-detect on next cycle
                     NEW_CONTEXT_SENT=0
                 fi
