@@ -55,6 +55,12 @@ C_CYAN=$'\033[36m'
 C_WHITE=$'\033[37m'
 C_BG_NONE=$'\033[49m'
 
+# ─── Activity feed state ───
+declare -a ACTIVITY_LOG=()       # ring buffer of "[HH:MM] from: content"
+declare -A PREV_MSG_COUNT=()     # per-agent inbox message count tracker
+MAX_ACTIVITY=200                 # max entries to keep
+FEED_INITIALIZED=false           # skip existing msgs on first run, load last N
+
 # ─── Terminal setup ───
 setup_terminal() {
     tput smcup 2>/dev/null   # alternate screen
@@ -106,13 +112,24 @@ capture_pane_tail() {
 }
 
 # ─── Python bulk data fetch ───
-# Returns JSON with task_id, status, unread per agent + _cmd + _latest
+# Returns JSON with task_id, status, unread per agent + _cmd + _new_events + _msg_counts
 fetch_yaml_data() {
+    # Serialize prev msg counts as Python dict
+    local prev_counts_py="{"
+    local _first=true
+    for _agent in "${!PREV_MSG_COUNT[@]}"; do
+        $_first || prev_counts_py+=","
+        prev_counts_py+="\"$_agent\":${PREV_MSG_COUNT[$_agent]}"
+        _first=false
+    done
+    prev_counts_py+="}"
+
     "$PYTHON" -c "
 import yaml, json, os, sys
 
 root = '$SCRIPT_DIR'
 agents = $( printf "'%s'," "${AGENTS[@]}" | sed 's/,$//' | sed 's/^/[/;s/$/]/' )
+prev_counts = ${prev_counts_py}
 result = {}
 
 for agent in agents:
@@ -133,23 +150,57 @@ for agent in agents:
 # Current cmd
 try:
     with open(f'{root}/queue/shogun_to_karo.yaml') as f:
-        cmd = yaml.safe_load(f) or {}
-    result['_cmd'] = f\"{cmd.get('id','?')}: {cmd.get('purpose','?')}\"
+        cmds = yaml.safe_load(f) or {}
+    if isinstance(cmds, list):
+        cmd = cmds[-1] if cmds else {}
+    else:
+        cmd = cmds
+    cid = cmd.get('cmd_id') or cmd.get('id') or '?'
+    purpose = cmd.get('purpose') or cmd.get('description', '?')
+    if isinstance(purpose, str) and len(purpose) > 40:
+        purpose = purpose[:40]
+    result['_cmd'] = f'{cid}: {purpose}'
 except: result['_cmd'] = '(指令なし)'
 
-# Latest event from karo inbox
-try:
-    with open(f'{root}/queue/inbox/karo.yaml') as f:
-        msgs = (yaml.safe_load(f) or {}).get('messages', []) or []
-    if msgs:
-        last = msgs[-1]
-        ts = str(last.get('timestamp', '?'))
-        ts_short = ts[11:16] if len(ts) > 16 else ts
-        content_str = str(last.get('content', ''))[:50].replace(chr(10), ' ')
-        result['_latest'] = f'[{ts_short}] {last.get(\"from\",\"?\")}: {content_str}'
-    else:
-        result['_latest'] = ''
-except: result['_latest'] = ''
+# Collect inbox events from ALL agents + shogun
+new_events = []
+msg_counts = {}
+first_run = not bool(prev_counts)  # empty dict = first run
+all_targets = agents + ['shogun']
+
+# On first run: collect last N messages across all inboxes for initial context
+all_msgs_for_seed = []
+for target in all_targets:
+    try:
+        with open(f'{root}/queue/inbox/{target}.yaml') as f:
+            msgs = (yaml.safe_load(f) or {}).get('messages', []) or []
+    except:
+        msgs = []
+    msg_counts[target] = len(msgs)
+    prev = prev_counts.get(target, 0)
+    if first_run:
+        # Seed: collect last 3 messages per inbox for initial display
+        for m in msgs[-3:]:
+            ts = str(m.get('timestamp', ''))
+            ts_short = ts[11:16] if len(ts) > 16 else ts[-5:]
+            frm = str(m.get('from', '?'))
+            content = str(m.get('content', ''))[:40].replace(chr(10), ' ')
+            all_msgs_for_seed.append((ts, f'[{ts_short}] {frm}: {content}'))
+    elif len(msgs) > prev:
+        for m in msgs[prev:]:
+            ts = str(m.get('timestamp', ''))
+            ts_short = ts[11:16] if len(ts) > 16 else ts[-5:]
+            frm = str(m.get('from', '?'))
+            content = str(m.get('content', ''))[:40].replace(chr(10), ' ')
+            new_events.append(f'[{ts_short}] {frm}: {content}')
+
+if first_run:
+    # Sort seed messages by timestamp, take last 20
+    all_msgs_for_seed.sort(key=lambda x: x[0])
+    new_events = [m[1] for m in all_msgs_for_seed[-20:]]
+
+result['_new_events'] = new_events
+result['_msg_counts'] = msg_counts
 
 json.dump(result, sys.stdout, ensure_ascii=False)
 " 2>/dev/null || echo '{}'
@@ -176,14 +227,26 @@ state_icon() {
     esac
 }
 
-# ─── Truncate string to fit width ───
+# ─── Truncate string to fit terminal width ───
+# Accounts for CJK double-width characters
 truncate_str() {
     local str="$1" max="$2"
-    if [[ ${#str} -gt $max ]]; then
-        echo "${str:0:$((max-1))}…"
-    else
-        echo "$str"
-    fi
+    local i=0 w=0 c
+    while [[ $i -lt ${#str} ]]; do
+        c="${str:$i:1}"
+        # ASCII = width 1, non-ASCII (CJK etc.) = width 2 (approximation)
+        if [[ "$c" == [[:ascii:]] ]]; then
+            ((w++))
+        else
+            ((w+=2))
+        fi
+        if [[ $w -ge $max ]]; then
+            echo "${str:0:$i}…"
+            return
+        fi
+        ((i++))
+    done
+    echo "$str"
 }
 
 # ─── Render one cycle ───
@@ -207,23 +270,34 @@ for a in agents:
     d = data.get(a, {})
     print(f\"{a}\t{d.get('task_id','---')}\t{d.get('status','---')}\t{d.get('unread',0)}\")
 print(f\"_cmd\t{data.get('_cmd','')}\")
-print(f\"_latest\t{data.get('_latest','')}\")
+# New events (one per line)
+for e in data.get('_new_events', []):
+    print(f'_event\t{e}')
+# Message counts (agent\tcount)
+for k, v in data.get('_msg_counts', {}).items():
+    print(f'_count\t{k}\t{v}')
 " <<< "$yaml_json" 2>/dev/null)
 
     # Parse into arrays
     declare -A TASK_ID TASK_STATUS UNREAD
-    local CMD_LINE="" LATEST_LINE=""
+    local CMD_LINE=""
     while IFS=$'\t' read -r key v1 v2 v3; do
-        if [[ "$key" == "_cmd" ]]; then
-            CMD_LINE="$v1"
-        elif [[ "$key" == "_latest" ]]; then
-            LATEST_LINE="$v1"
-        else
-            TASK_ID["$key"]="$v1"
-            TASK_STATUS["$key"]="$v2"
-            UNREAD["$key"]="$v3"
-        fi
+        case "$key" in
+            _cmd)   CMD_LINE="$v1" ;;
+            _event) [[ -n "$v1" ]] && ACTIVITY_LOG+=("$v1") ;;
+            _count) [[ -n "$v1" && -n "$v2" ]] && PREV_MSG_COUNT["$v1"]="$v2" ;;
+            *)
+                TASK_ID["$key"]="$v1"
+                TASK_STATUS["$key"]="$v2"
+                UNREAD["$key"]="$v3"
+                ;;
+        esac
     done <<< "$parsed"
+
+    # Trim activity log to max
+    while [[ ${#ACTIVITY_LOG[@]} -gt $MAX_ACTIVITY ]]; do
+        ACTIVITY_LOG=("${ACTIVITY_LOG[@]:1}")
+    done
 
     # Classify agents
     local busy_agents=() idle_agents=()
@@ -323,12 +397,32 @@ print(f\"_latest\t{data.get('_latest','')}\")
         done
     fi
 
-    # Footer
+    # ─── Activity feed ───
     buf+="${C_DIM}${sep_line}${C_RESET}\n"
-    if [[ -n "$LATEST_LINE" ]]; then
-        local latest_short
-        latest_short=$(truncate_str "$LATEST_LINE" $((term_width - 2)))
-        buf+=" ${C_DIM}${latest_short}${C_RESET}\n"
+    local line_count=0
+    # Count lines used so far (count \n in buf)
+    local tmp="${buf//[!\\]/}"
+    # Approximate: header(3) + busy(busy_count*(lines_per_busy+2)) + idle(1+idle_count) + separator(1)
+    local used_lines=$((3 + busy_count * (lines_per_busy + 2) + idle_count + 2))
+    [[ ${#idle_agents[@]} -gt 0 ]] && used_lines=$((used_lines + 1))  # blank line before idle
+    local feed_lines=$((term_height - used_lines))
+    [[ $feed_lines -lt 1 ]] && feed_lines=1
+    [[ $feed_lines -gt 30 ]] && feed_lines=30  # cap at 30
+
+    local log_count=${#ACTIVITY_LOG[@]}
+    if [[ $log_count -eq 0 ]]; then
+        buf+=" ${C_DIM}(通信記録なし)${C_RESET}\n"
+    else
+        # Newest first (reverse order), fill available lines
+        local start_idx=$((log_count - 1))
+        local shown=0
+        for ((i=start_idx; i>=0 && shown<feed_lines; i--)); do
+            local entry="${ACTIVITY_LOG[$i]}"
+            local entry_short
+            entry_short=$(truncate_str "$entry" $((term_width - 2)))
+            buf+=" ${C_DIM}${entry_short}${C_RESET}\n"
+            ((shown++))
+        done
     fi
 
     # Output: cursor home + buffer + clear remaining
