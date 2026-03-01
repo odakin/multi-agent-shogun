@@ -985,6 +985,11 @@ for s in data.get('specials', []):
         info=$(get_unread_info)
     fi
 
+    # slim_yaml: karo への nudge 前にキューを自動スリム
+    if [ "$AGENT_ID" = "karo" ]; then
+        bash "$SCRIPT_DIR/scripts/slim_yaml.sh" karo 2>/dev/null || true
+    fi
+
     # Send wake-up nudge for normal messages (with escalation)
     local normal_count
     normal_count=$(echo "$info" | "$SCRIPT_DIR/.venv/bin/python3" -c "import sys,json; print(json.load(sys.stdin).get('count',0))" 2>/dev/null)
