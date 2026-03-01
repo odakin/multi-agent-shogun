@@ -53,19 +53,28 @@ agent_is_busy_check() {
         return 0  # busy — status bar confirms active processing
     fi
 
-    # ── Idle checks ──
+    # ── Idle checks (BEFORE text-based busy markers) ──
+    # These take priority over historical busy text that may linger in pane.
     # Codex idle prompt
     if echo "$pane_tail" | grep -qE '(\? for shortcuts|context left)'; then
         return 1
     fi
-    # Claude Code bare prompt
-    if echo "$pane_tail" | grep -qE '^(❯|›)\s*$'; then
+    # Claude Code bare prompt (❯ at start or after whitespace, line-final)
+    # Removed ^ anchor: tmux capture may have leading spaces in some layouts.
+    if echo "$pane_tail" | grep -qE '(❯|›)\s*$'; then
+        return 1
+    fi
+    # Claude Code status bar with no 'esc to' = idle
+    # (bypass permissions / auto-compact info visible = definitely at prompt)
+    if echo "$pane_tail" | grep -qiE '(bypass permissions|auto-compact)'; then
         return 1
     fi
 
     # ── Text-based busy markers (bottom 5 lines) ──
     # These catch non-Claude-Code CLIs and edge cases where status bar
     # isn't present but spinner text indicates active work.
+    # NOTE: These run AFTER idle checks. If prompt is visible, agent is idle
+    # even if old "Thinking..." text lingers in scroll-back.
     if echo "$pane_tail" | grep -qiF 'background terminal running'; then
         return 0
     fi

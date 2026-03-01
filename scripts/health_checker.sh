@@ -129,16 +129,39 @@ check_agent() {
         return 0
     fi
 
+    # === Karo special case (BEFORE busy check) ===
+    # Karo's "task" is in shogun_to_karo.yaml (not queue/tasks/karo.yaml).
+    # If cmd is in_progress → send_nudge (which internally skips if truly busy).
+    # Must run before generic busy check because old "thinking" text in pane
+    # history causes false-busy detection for karo after compaction.
+    if [ "$agent" = "karo" ]; then
+        local has_active_cmd
+        has_active_cmd=$("$SCRIPT_DIR/.venv/bin/python3" -c "
+import yaml
+with open('$SCRIPT_DIR/queue/shogun_to_karo.yaml') as f:
+    data = yaml.safe_load(f) or []
+cmds = data if isinstance(data, list) else [data]
+print('yes' if any(c.get('status') == 'in_progress' for c in cmds if isinstance(c, dict)) else 'no')
+" 2>/dev/null || echo "no")
+        if [ "$has_active_cmd" = "yes" ]; then
+            # send_nudge internally calls agent_is_busy_check — skips if truly busy
+            send_nudge "$agent" "$pane" "compact-recovery: cmd in_progress あり。queue/shogun_to_karo.yaml を読んで指揮を再開せよ"
+        fi
+        return 0
+    fi
+
+    # Check if agent is actually idle (not busy processing)
+    if type agent_is_busy_check &>/dev/null; then
+        if agent_is_busy_check "$pane"; then
+            return 0  # busy = working on it, all good
+        fi
+    fi
+
+    # === Ashigaru / Gunshi ===
     local task_status
     task_status=$(get_task_status "$agent")
-    if [ "$task_status" = "assigned" ]; then
-        # Check if agent is actually idle (not busy processing)
-        if type agent_is_busy_check &>/dev/null; then
-            if agent_is_busy_check "$pane"; then
-                return 0  # busy = working on it, all good
-            fi
-        fi
-        # Agent is idle + has assigned task = likely post-compact
+    if [ "$task_status" = "assigned" ] || [ "$task_status" = "in_progress" ]; then
+        # Agent is idle + has assigned/in_progress task = likely post-compact
         send_nudge "$agent" "$pane" "compact-recovery: queue/tasks/${agent}.yaml を読んでタスクを再開せよ"
     fi
 }
@@ -149,7 +172,7 @@ log "started (interval=${INTERVAL}s)"
 while true; do
     # Discover all agent panes dynamically
     while IFS=' ' read -r agent pane; do
-        check_agent "$agent" "$pane" 2>/dev/null || true
+        check_agent "$agent" "$pane" || true
     done < <(get_agent_panes)
 
     sleep "$INTERVAL"
