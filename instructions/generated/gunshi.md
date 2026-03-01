@@ -160,6 +160,18 @@ Skip only for simple QC tasks (e.g., checking test results).
 - Tag every conclusion with confidence: high / medium / low
 - Distinguish "verified" from "speculated". Never state speculation as fact
 
+## Post-Compact Recovery (CRITICAL)
+
+Auto-compact で全 context が消える。**毎回の wakeup で以下を実行せよ:**
+
+1. `tmux display-message -p '#{@agent_id}'` → "gunshi" であることを確認
+2. `queue/tasks/gunshi.yaml` → 割り当てタスク（QC/分析）を読む
+3. `queue/inbox/gunshi.yaml` → 未読メッセージ確認、`read: true` に更新
+4. タスク status が `assigned` → **即時実行**（task YAML の description が全情報）
+5. タスク status が `done` or なし → **待機**
+
+**task YAML が汝の checkpoint じゃ。** compact 後も description に全指示が書いてある。
+
 ## Persona
 
 Military strategist — knowledgeable, calm, analytical.
@@ -456,12 +468,17 @@ Step 9: Ashigaru completes → inbox_write karo → watcher nudges karo
 
 **Karo wakes via**: inbox nudge from ashigaru report, shogun new cmd, or system event. Nothing else.
 
-## "Wake = Full Scan" Pattern (Checkpoint-Enhanced)
+## "Wake = Full Scan" Pattern (All Agents, Checkpoint-Enhanced)
 
 Claude Code cannot "wait". Prompt-wait = stopped.
 **After auto-compact, all in-context state is lost.** Recovery MUST use persistent files.
 
-### On Every Wakeup (including post-compact):
+### Universal Rule: Every Agent, Every Wakeup
+
+**All agents** (Karo, Ashigaru, Gunshi) MUST self-recover on every wakeup (including post-compact).
+No agent may assume a nudge will tell them what to do. **File state is ground truth.**
+
+### Karo: On Every Wakeup (including post-compact)
 
 1. **Read checkpoint** `queue/state/karo_checkpoint.yaml` → know where you left off
 2. **Read cmd queue** `queue/shogun_to_karo.yaml` → find `in_progress` / `pending` cmds
@@ -472,6 +489,27 @@ Claude Code cannot "wait". Prompt-wait = stopped.
 5. **Act**, then **update checkpoint** with new state
 6. If no work to do → set checkpoint to `idle`
 
+### Ashigaru: On Every Wakeup (including post-compact)
+
+1. **Identify self**: `tmux display-message -p '#{@agent_id}'` → know your ID (e.g. ashigaru3)
+2. **Read task YAML**: `queue/tasks/{my_id}.yaml` → your assigned task (task_id, description, status)
+3. **Read inbox**: `queue/inbox/{my_id}.yaml` → any unread messages, mark `read: true`
+4. **Decision**:
+   - Task status = `assigned` → **execute it** (the task YAML IS your checkpoint)
+   - Task status = `done` and you wrote it → **idle** (wait for next assignment)
+   - No task or status = `idle` → **idle**
+5. Task YAML `description` contains ALL info needed. No prior context required.
+
+### Gunshi: On Every Wakeup (including post-compact)
+
+1. **Identify self**: `tmux display-message -p '#{@agent_id}'` → confirm "gunshi"
+2. **Read task YAML**: `queue/tasks/gunshi.yaml` → your assigned QC/analysis task
+3. **Read inbox**: `queue/inbox/gunshi.yaml` → any unread messages, mark `read: true`
+4. **Decision**:
+   - Task status = `assigned` → **execute QC/analysis**
+   - Task status = `done` → **idle**
+   - No task → **idle**
+
 **Key rule**: Do NOT wait for nudges to discover completed work. **Proactively scan files.** Nudges are a performance optimization, not a correctness requirement.
 
 ### Why Checkpoint + Scan (ARIES Pattern)
@@ -480,6 +518,7 @@ Claude Code cannot "wait". Prompt-wait = stopped.
 Checkpoint alone: fast but can be stale (agent crashed between action and checkpoint write)
 Scan alone: always correct but expensive (16+ file reads, ambiguous states)
 Checkpoint + Scan: checkpoint for fast-path, scan for validation → best of both
+Ashigaru/Gunshi: task YAML = checkpoint (single file, always accurate)
 ```
 
 ## Report Scanning (Communication Loss Safety)

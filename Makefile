@@ -1,4 +1,4 @@
-.PHONY: test build lint check help install-deps clean dashboard dashboard-watch
+.PHONY: test build lint check help install-deps clean dashboard dashboard-watch health-check
 
 # Default target
 help:
@@ -13,6 +13,7 @@ help:
 	@echo "  make install-deps  - Install test dependencies (bats, helpers)"
 	@echo "  make dashboard     - Generate/update dashboard.md"
 	@echo "  make dashboard-watch - Auto-update dashboard on file changes"
+	@echo "  make health-check  - Start agent health checker (replaces inbox_watchers)"
 	@echo "  make clean         - Clean test artifacts"
 	@echo ""
 
@@ -132,6 +133,10 @@ dashboard:
 # Watch mode: auto-update dashboard on file changes
 dashboard-watch:
 	@bash scripts/update_dashboard.sh --watch
+
+# Health checker: single-process agent monitor (replaces 10 inbox_watchers)
+health-check:
+	@bash scripts/health_checker.sh
 
 # Quick development workflow
 dev: lint test
