@@ -1145,19 +1145,18 @@ while true; do
 
     if [ "$rc" -eq 2 ]; then
         # Timeout tick: check for stuck agents before processing unread
-        if type agent_stuck_check &>/dev/null; then
-            agent_stuck_check "$PANE_TARGET" "$AGENT_ID"
-            local stuck_rc=$?
-            if [ "$stuck_rc" -eq 0 ]; then
+        # NOTE: agent_stuck_check returns 0=stuck(recovered), 1=not-stuck.
+        #   Must be in `if` condition to avoid set -e killing the script on rc=1.
+        #   Must NOT use `local` here — we're outside any function (bash 3.2 crashes).
+        if type agent_stuck_check &>/dev/null && agent_stuck_check "$PANE_TARGET" "$AGENT_ID"; then
                 echo "[$(date)] [STUCK] $AGENT_ID recovered from stuck state — notifying karo" >&2
                 # Notify karo about the recovery (unless this IS karo or shogun)
                 if [ "$AGENT_ID" != "karo" ] && [ "$AGENT_ID" != "shogun" ]; then
-                    local _iw_script="${SCRIPT_DIR}/scripts/inbox_write.sh"
+                    _iw_script="${SCRIPT_DIR}/scripts/inbox_write.sh"
                     if [ -f "$_iw_script" ]; then
                         bash "$_iw_script" karo "${AGENT_ID}がスタックしていたため自動復旧した（フィードバックプロンプト等）。タスク状態を確認せよ。" stuck_recovery inbox_watcher 2>/dev/null || true
                     fi
                 fi
-            fi
         fi
         if [ "${ASW_PROCESS_TIMEOUT:-1}" = "1" ]; then
             process_unread "timeout"
