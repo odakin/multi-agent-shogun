@@ -797,6 +797,9 @@ NINJA_EOF
     tmux split-window -v
     tmux split-window -v
 
+    # 均等配置: tiled レイアウトで全9ペインを等分割
+    tmux select-layout -t "multiagent-teams:agents" tiled
+
     # ペインラベル・エージェントID設定 — settings.yaml から動的に構築
     PANE_LABELS=("karo")
     AGENT_IDS=("karo")
