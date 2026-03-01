@@ -282,7 +282,9 @@ print(f\"_latest\t{data.get('_latest','')}\")
         # Header line
         local short_name="$agent"
         [[ "$agent" =~ ^ashigaru ]] && short_name="ash${agent#ashigaru}"
-        buf+="${C_BOLD}▶ ${short_name}${C_RESET} $(state_icon busy) ${icon}${tid} │ inbox:${unread}\n"
+        local tid_short
+        tid_short=$(truncate_str "$tid" $((term_width - 22)))
+        buf+="${C_BOLD}▶ ${short_name}${C_RESET} $(state_icon busy) ${icon}${tid_short} │ inbox:${unread}\n"
 
         # Pane content
         if [[ -n "$pane" ]]; then
@@ -297,8 +299,16 @@ print(f\"_latest\t{data.get('_latest','')}\")
         buf+="${C_DIM}${thin_sep}${C_RESET}\n"
     done
 
-    # Idle agents (compact — multiple per line)
+    # Idle agents (compact — adaptive columns based on width)
     if [[ ${#idle_agents[@]} -gt 0 ]]; then
+        # Calculate column layout based on terminal width
+        # Each entry: name(5) + ⚪(2) + icon(2) + tid + spacing(2) ≈ 11 + tid_len
+        local max_tid_len=8
+        local entry_width=$(( 11 + max_tid_len + 2 ))  # ~21 per entry
+        local cols_per_line=$(( (term_width - 2) / entry_width ))
+        [[ $cols_per_line -lt 1 ]] && cols_per_line=1
+        [[ $cols_per_line -gt 3 ]] && cols_per_line=3
+
         local idle_line=""
         local count=0
         for agent in "${idle_agents[@]}"; do
@@ -309,15 +319,18 @@ print(f\"_latest\t{data.get('_latest','')}\")
             local short_name="$agent"
             [[ "$agent" =~ ^ashigaru ]] && short_name="ash${agent#ashigaru}"
 
-            local entry="${C_DIM}${short_name}⚪${icon}${tid}${C_RESET}"
+            # Truncate task_id to fit
+            local tid_short
+            tid_short=$(truncate_str "$tid" "$max_tid_len")
+
+            local entry="${C_DIM}${short_name}⚪${icon}${tid_short}${C_RESET}"
             if [[ $count -gt 0 ]]; then
                 idle_line+="  "
             fi
             idle_line+="$entry"
             count=$((count + 1))
 
-            # 3 per line
-            if [[ $((count % 3)) -eq 0 ]]; then
+            if [[ $((count % cols_per_line)) -eq 0 ]]; then
                 buf+="  ${idle_line}\n"
                 idle_line=""
             fi
