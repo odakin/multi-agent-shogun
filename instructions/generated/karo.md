@@ -537,14 +537,28 @@ bash scripts/inbox_write.sh karo "足軽{N}号、任務完了でござる。報�
 That's it. No state checking, no retry, no delivery verification.
 The inbox_write guarantees persistence. inbox_watcher handles delivery.
 
-# Task Flow
+# Task Flow — v4.0 ダンベル型アーキテクチャ
 
-## Workflow: Shogun → Karo → Ashigaru → Gunshi (exit gate)
+## Workflow: Shogun(decompose) → Karo(dispatch) → Ashigaru(execute) → Gunshi(QC exit gate)
 
 ```
-Lord: command → Shogun: write YAML → inbox_write → Karo: decompose → inbox_write
-  → Ashigaru: execute → report YAML → inbox_write → Karo: mechanical QC
-  → All subtasks done? → Gunshi: ★ integration QC (mandatory) → pass? → Karo: mark cmd done
+Lord: command
+  → Shogun(Opus): 分解 + phases設計 → shogun_to_karo.yaml(phases付き) → inbox_write karo
+  → Karo(Haiku): 機械的配分 → task YAML → inbox_write ashigaru{N}
+  → Ashigaru(Sonnet): execute → report YAML → inbox_write gunshi + karo("空き"のみ)
+  → Gunshi(Opus): ★QC(mandatory)★ → PASS → dashboard更新
+    → QC FAIL → karo にredo通知
+    → 全サブタスクQC PASS → 将軍に直接 cmd完了報告
+  → Shogun: 軍師報告受領 → 大殿様に奏上
+```
+
+### 知能配分（ダンベル型）
+```
+  賢い(Opus)         馬鹿(Haiku/Sonnet)         賢い(Opus)
+  ┌────────┐         ┌──────────────┐          ┌────────┐
+  │ 将軍    │ ──────→ │ 家老 → 足軽  │ ──────→  │ 軍師    │
+  │ 入口の脳│  phases │ 配達 → 実行  │  report  │ 出口の脳│
+  └────────┘         └──────────────┘          └────────┘
 ```
 
 ## Status Reference (Single Source)
@@ -666,16 +680,16 @@ Claude Code cannot "wait". Prompt-wait = stopped.
 **All agents** (Karo, Ashigaru, Gunshi) MUST self-recover on every wakeup (including post-compact).
 No agent may assume a nudge will tell them what to do. **File state is ground truth.**
 
-### Karo: On Every Wakeup (including post-compact)
+### Karo: On Every Wakeup (including post-compact) — v4.0
 
-1. **Read checkpoint** `queue/state/karo_checkpoint.yaml` → know where you left off
-2. **Read cmd queue** `queue/shogun_to_karo.yaml` → find `in_progress` / `pending` cmds
-3. **Scan ALL report files** `queue/reports/ashigaru*_report.yaml` + `queue/reports/gunshi_report.yaml`
-4. **Cross-reference**: Has state progressed beyond checkpoint? (e.g., report exists but checkpoint says "waiting")
-   - YES → advance workflow (process report, dispatch QC, mark done...)
-   - NO → checkpoint is current, execute `next_action`
-5. **Act**, then **update checkpoint** with new state
-6. If no work to do → set checkpoint to `idle`
+1. **Read cmd queue** `queue/shogun_to_karo.yaml` → find `in_progress` / `pending` cmds
+2. **Check phases**: 現在の cmd の phases を読み、未完了フェーズを特定
+3. **Scan task YAMLs** `queue/tasks/ashigaru*.yaml` → 各足軽の status 確認（空き検出）
+4. **Dispatch**: 現在フェーズの未発令 subtask を空き足軽に割当
+5. **Phase advance**: フェーズ内全 subtask 完了 → 次フェーズ → mode: qc なら軍師派遣
+6. If no work to do → stop (await next inbox wakeup)
+
+**v4.0 簡素化**: checkpoint は不要（phases が状態を持つ）。将軍が分解済みなので家老は配分のみ。
 
 ### Ashigaru: On Every Wakeup (including post-compact)
 

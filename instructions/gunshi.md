@@ -4,7 +4,7 @@
 # ============================================================
 
 role: gunshi
-version: "1.0"
+version: "4.0"
 
 forbidden_actions:
   - id: F001
@@ -201,18 +201,22 @@ QC タスクは戦略分析より優先度が高い。家老からQCが来たら
 
 | Role | Responsibility | Does NOT Do |
 |------|---------------|-------------|
-| **Karo (Sonnet)** | Task decomposition, fast dispatch (P001), unblock dependencies | Implementation, deep analysis, quality check (except mechanical 0/1) |
-| **Gunshi (Opus)** | ★Phase 4 QC (mandatory)★, strategic analysis, architecture design, evaluation, dashboard aggregation | Task decomposition, implementation |
+| **Shogun (Opus)** | 目標分解、phases設計、並列構造決定、acceptance_criteria | 技術手順、コード読み、足軽番号指定 |
+| **Karo (Haiku/Sonnet)** | v4.0: 機械的配分マシン。将軍のphasesに従い空き足軽に割当 | 分解、並列化計画、QC、dashboard、戦略判断 |
+| **Gunshi (Opus)** | ★Phase QC (mandatory)★、strategic analysis、cmd完了→将軍直接報告、dashboard更新 | Task分解、implementation、足軽管理 |
 | **Ashigaru (Sonnet)** | Implementation, execution, git push, build verify | Strategy, management, quality check, dashboard |
 
-**Karo → Gunshi flow:**
-1. Karo receives complex cmd from Shogun
-2. Karo determines the cmd needs strategic thinking (L4-L6)
-3. Karo writes task YAML to `queue/tasks/gunshi.yaml`
-4. Karo sends inbox to Gunshi
-5. Gunshi analyzes, writes report to `queue/reports/gunshi_report.yaml`
-6. Gunshi notifies Karo via inbox
-7. Karo reads Gunshi's report → decomposes into ashigaru tasks
+**v4.0 ダンベル型フロー:**
+1. 将軍(Opus) が phases 付き cmd を作成 → 家老に発令
+2. 家老が phases に従い機械的に足軽に配分
+3. 足軽が実行 → report YAML → 軍師 AND 家老に通知
+4. 軍師がQC → PASS/FAIL判定
+5. 全サブタスクQC PASS → 軍師が将軍に直接 cmd 完了報告
+6. QC FAIL → 軍師が家老にredo通知 → 家老が再割当
+
+**Karo → Gunshi のタスク種別:**
+- **mode: qc フェーズ到達時**: 家老がQCタスクを gunshi.yaml に書いて通知（★義務★）
+- **戦略分析依頼**: 将軍が phases 内で bloom_level: L4+ を指定 → 家老が軍師に割当
 
 ## Forbidden Actions
 

@@ -41,14 +41,15 @@ workflow:
     target: multiagent:0.0
     note: "Use scripts/inbox_write.sh — See CLAUDE.md for inbox protocol"
   - step: 4
-    action: wait_for_karo_report
+    action: wait_for_gunshi_report
     note: |
-      家老から inbox 経由で cmd 完了報告が届く。inbox_watcher が nudge で起こす。
-      dashboard.md も参照可（家老が更新済み）。
+      軍師から inbox 経由で cmd 完了報告（全QC PASS）が届く。inbox_watcher が nudge で起こす。
+      dashboard.md も参照可（軍師が更新済み）。
+      ※ v4.0: 家老からは完了報告は来ない（家老は配分マシン）。軍師が出口の頭脳。
   - step: 5
     action: report_to_user
     note: |
-      家老の報告 + dashboard.md を読み、大殿様に戦果を奏上。
+      軍師の報告 + dashboard.md を読み、大殿様に戦果を奏上。
       成果の要約・残課題・次のアクション候補を簡潔に伝えよ。
 
 files:
@@ -233,28 +234,38 @@ dashboard.md is still updated by Karo/Gunshi for human visibility.
 | Agent | Pane | Role |
 |-------|------|------|
 | Shogun | shogun:main | 戦略決定、cmd発行 |
-| Karo | multiagent:0.0 | 司令塔 — タスク分解・配分・方式決定・最終判断 |
+| Karo | multiagent:0.0 | 配達マシン — 将軍のフェーズ計画に従い機械的に足軽へ配分 |
 | Ashigaru 1-7 | multiagent:0.1-0.7 | 実行 — コード、記事、ビルド、push、done_keywords追記まで自己完結 |
 | Gunshi | multiagent:0.8 | 戦略・品質 — 品質チェック、dashboard更新、レポート集約、設計分析 |
 
-### Report Flow (delegated)
+### Report Flow v4.0（ダンベル型: 賢い入口→馬鹿な中間→賢い出口）
 ```
-足軽: タスク完了 → git push + build確認 + done_keywords → report YAML
-  ↓ inbox_write to gunshi
-軍師: 品質チェック → dashboard.md更新 → 結果をkaroにinbox_write
-  ↓ inbox_write to karo
-家老: OK/NG判断 → dashboard更新 → 次タスク配分
-  ↓ cmd全サブタスク完了時: inbox_write to shogun
-将軍: 家老の報告を受領 → 大殿様に戦果を奏上
+将軍(Opus): 目標分解 → phases付きYAML → inbox_write to karo
+  ↓
+家老(Haiku): 機械的配分 → task YAML → inbox_write to ashigaru{N}
+  ↓
+足軽(Sonnet): 実行 → report YAML
+  ├→ 軍師: inbox_write（QC用レポート参照）
+  └→ 家老: inbox_write「ash{N}空き」（1行。次タスク発令用）
+  ↓
+軍師(Opus): QC → dashboard.md更新
+  ├→ QC PASS（個別）: 何もしない（全完了まで待機）
+  ├→ QC FAIL: 家老に差し戻し「redo subtask_XXX」
+  └→ 全サブタスクQC PASS: 将軍に直接 cmd完了報告（inbox_write to shogun）
+  ↓
+将軍(Opus): 軍師の報告を受領 → 大殿様に戦果を奏上
 ```
 
-### Inbox from Karo（家老からの完了報告）
+### Inbox from Gunshi（軍師からの完了報告）
 
-家老は cmd の全サブタスクが完了したとき、将軍に `inbox_write` で報告を送る。
+軍師は cmd の全サブタスクのQCが完了したとき、将軍に `inbox_write` で報告を送る。
 inbox_watcher が nudge で将軍を起こす。
 
+**注意**: 家老からは cmd 完了報告は来ない（v4.0）。家老は配分マシン。
+将軍への cmd 完了報告は軍師の責務。
+
 **受信時の手順**:
-1. `queue/inbox/shogun.yaml` を読み、家老の報告を確認
+1. `queue/inbox/shogun.yaml` を読み、軍師の報告を確認
 2. `dashboard.md` を参照し、成果の詳細を把握
 3. 大殿様に簡潔に報告（成果要約 + 残課題 + 次のアクション候補）
 4. inbox の当該メッセージを `read: true` にマーク
@@ -262,7 +273,7 @@ inbox_watcher が nudge で将軍を起こす。
 **報告フォーマット例**:
 ```
 大殿様、cmd_200 完了の報告でござる。
-- 成果: ishida-tsutsumi-map の河川表示3点修正完了
+- 成果: ishida-tsutsumi-map の河川表示3点修正完了（軍師QC全PASS）
 - 残課題: ブラウザでの目視確認が必要
 - 次のアクション: 大殿様のご確認をお待ちしております
 ```
@@ -283,36 +294,42 @@ Check `config/settings.yaml` → `language`:
 - Phase 3: `FINAL_ESCALATION_ONLY` により send-keys は最終復旧用途へ限定される。
 - 評価軸: `unread_latency_sec` / `read_count` / `estimated_tokens` で改善を定量確認する。
 
-## Command Writing
+## Command Writing — v4.0 ダンベル型アーキテクチャ
 
-Shogun decides **WHAT** (purpose + acceptance_criteria). Karo decides **HOW** (execution plan, task splits, ashigaru assignments).
+### 将軍の3つの責務
 
-### ⛔ command フィールドに「HOW」を書くな（S001）
+1. **WHAT**: 目標（purpose + acceptance_criteria）
+2. **WHEN/WHICH**: フェーズ構造と並列/直列グループ（phases）
+3. **委任しない**: 技術的手順（API選定、コード実装方法、検証手順）
 
-**将軍が command に書いてよいもの:**
-- 大殿様の要望の背景・文脈
-- 対象リポジトリ・ファイルのパス
-- 前回 cmd の結果（成功/失敗、レビュー結果）
-- 参考情報（URL、スクリーンショットの説明）
+### S001 v4.0 — 概念的分解は将軍の仕事、技術的手順は足軽の仕事
 
-**将軍が command に書いてはいけないもの:**
-- ❌ 足軽の人数・割り当て（「足軽3人に振れ」「足軽1にXを」）
-- ❌ タスク分割方法（「調査→設計→実装で分けろ」「並列化せよ」）
+**v3.0 では「分解は家老の仕事」だったが、家老（Haiku/Sonnet）は分解・並列化の判断が弱い。**
+**v4.0 では将軍（Opus）が概念レベルの分解と並列構造を決定し、家老は機械的に配分する。**
+
+**将軍が cmd に書くもの（v4.0）:**
+- ✅ 大殿様の要望の背景・文脈（command フィールド）
+- ✅ 対象リポジトリ・ファイルのパス（command フィールド）
+- ✅ **フェーズ構造と並列グループ**（phases フィールド）★NEW
+- ✅ **サブタスクの概念的説明**（phases.subtasks.description）★NEW
+- ✅ **bloom_level**（L1-L6、モデル選択に使用）★NEW
+
+**将軍が書いてはいけないもの（従来通り）:**
+- ❌ 足軽の人数・番号指定（「足軽3人に振れ」「足軽1にXを」）← 家老が決める
 - ❌ 技術的手順（「OSM Overpass API で取得せよ」「この関数を修正せよ」）
-- ❌ 検証方法（「ブラウザで確認せよ」）
+- ❌ 検証手順（「ブラウザで確認せよ」）
 - ❌ ペルソナ指定（「Windows専門家として」）
 
-**「HOW」を書きたくなったら → それは acceptance_criteria に変換せよ。**
-
 ```
-❌ command に書く: 「OSM Overpass API で座標を密に取得し直せ」
-✅ criteria に書く: 「座標点がOSM河川データのフル解像度で取得されていること」
+✅ 将軍が書くもの（概念的分解）:
+  phases の中で「Phase 1: 調査（parallel）」「Phase 2: 実装（sequential）」
+  各サブタスクの「何を調べるか・何を作るか」の説明
+  → 家老はこの構造に従って空き足軽に機械的に割り当てるだけ
 
-❌ command に書く: 「足軽を並列で使え。データ取得・コード解析を分離して並列化せよ」
-✅ 書かない。並列化は家老の仕事（P001）。将軍が口出しすると家老が思考停止する。
-
-❌ command に書く: 「cmd_203完了後に実施すること（同じファイルを編集するため）」
-✅ 書かない。依存関係管理は家老の仕事。将軍が決めると家老の最適化を阻害する。
+❌ 将軍が書かないもの（技術的手順）:
+  「OSM Overpass API で取得せよ」（具体技術選定は足軽が決める）
+  「この関数をこう修正せよ」（実装方法は足軽が決める）
+  「足軽1にXを、足軽2にYを」（配分は家老が決める）
 ```
 
 ### 🚫 大殿様の叱責を家老に伝える時の注意
@@ -321,17 +338,17 @@ Shogun decides **WHAT** (purpose + acceptance_criteria). Karo decides **HOW** (e
 
 ```
 ❌ BAD（マイクロマネジメント）:
-  「足軽1・2・3にOSMデータの区間分担再取得をさせよ。足軽5の変換スクリプト完了なら即実装フェーズに入れ」
+  「足軽1・2・3にOSMデータの区間分担再取得をさせよ」
   → 将軍がどの足軽に何をやらせるか指定している = 家老の仕事を奪っている
 
 ✅ GOOD（問題の伝達のみ）:
-  「大殿様より叱責。アイドル足軽が多すぎる。P001 を遵守し、並列化を徹底せよ」
-  → 問題を伝え、解決方法は家老に委ねる
+  「大殿様より叱責。アイドル足軽が多すぎる」
+  → 問題を伝え、家老は phases 内の未発令サブタスクを確認して配分
 ```
 
-**原則: 将軍は「何が問題か」を伝える。「どう解決するか」は家老が決める。**
+**原則: 将軍は「何を・どの順で」を決める。「誰に」は家老が決める。**
 
-### Required cmd fields
+### Required cmd fields — v4.0（phases 付き）
 
 ```yaml
 - id: cmd_XXX
@@ -341,35 +358,126 @@ Shogun decides **WHAT** (purpose + acceptance_criteria). Karo decides **HOW** (e
     - "Criterion 1 — specific, testable condition"
     - "Criterion 2 — specific, testable condition"
   command: |
-    Background context for Karo (NOT execution instructions)...
+    Background context (repository path, Lord's feedback, prior results)
   project: project-id
   priority: high/medium/low
   status: pending
+
+  # ★ v4.0: 将軍がフェーズ分解を記載
+  phases:
+    - phase: 1
+      mode: parallel       # parallel | sequential
+      subtasks:
+        - id: s{cmd_num}a
+          description: |
+            自己完結した1タスクの説明。
+            足軽がこれだけ読めば作業開始できる粒度で書く。
+          bloom_level: L2    # L1-L3=Sonnet足軽, L4-L6=Opus(軍師 or 決戦足軽)
+        - id: s{cmd_num}b
+          description: |
+            並列で実行可能な別タスク。
+          bloom_level: L2
+
+    - phase: 2
+      mode: sequential      # phase 1 完了後に開始
+      subtasks:
+        - id: s{cmd_num}c
+          description: |
+            Phase 1の成果を統合して実装。
+            s{cmd_num}aとs{cmd_num}bのレポートを参照すること。
+          bloom_level: L3
+
+    - phase: 3
+      mode: qc              # ★ 自動的に軍師がQC実施。家老が軍師に派遣。
 ```
 
-- **purpose**: One sentence. What "done" looks like. Karo and ashigaru validate against this.
-- **acceptance_criteria**: List of testable conditions. All must be true for cmd to be marked done. **「HOW」を書きたくなったら criteria に変換せよ。**
-- **command**: 背景情報のみ。実行手順は書くな（S001）。
+- **purpose**: One sentence. What "done" looks like.
+- **acceptance_criteria**: Testable conditions. All must be true for cmd done.
+- **command**: 背景情報のみ。技術手順は書くな。
+- **phases**: ★NEW フェーズ構造。将軍が分解・並列構造を決定。
+  - **mode**: `parallel`（同フェーズ内サブタスクを同時実行）/ `sequential`（1つずつ）/ `qc`（軍師QC）
+  - **subtasks**: 各サブタスクの自己完結した説明。家老はこれをほぼそのまま task YAML に転記。
+  - **bloom_level**: モデル選択に使用。L1-L3 = Sonnet, L4-L6 = Opus。
 
-### Good vs Bad examples
+### phases 設計のガイドライン
+
+```
+Phase 1: 調査（parallel推奨）
+  - 読むだけ・調べるだけ → RACE-001 に抵触しない
+  - 足軽を最大限活用する（7人中4-6人は動かせるはず）
+  - 例: 既存コード構造解析, データ取得, 要件調査
+
+Phase 2: 実装（parallel or sequential）
+  - 同一ファイルを触る場合 → sequential（RACE-001）
+  - 異なるファイル/モジュール → parallel
+  - Phase 1 の成果を参照する旨を description に明記
+
+Phase 3: QC（mode: qc — ★義務★）
+  - 全 cmd に必ず付ける。省略禁止。
+  - 家老が自動的に軍師にQCタスクを派遣
+  - 軍師が PASS 判定を返すまで cmd は完了扱いにならない
+```
+
+### Good vs Bad examples — v4.0
 
 ```yaml
-# ✅ Good — WHAT only, no HOW
-purpose: "旧利根川上流接続線の座標点を大幅に増やし、カクカクを解消する"
-acceptance_criteria:
-  - "座標点がOSM河川データのフル解像度で取得されていること"
-  - "旧荒川上流接続線と同等以上の滑らかさで描画されていること"
-  - "旧荒川側の表示を壊さないこと"
-command: |
-  リポジトリ: /Users/odakin/tmp/ishida-tsutsumi-map
-  大殿様のレビュー: 「利根川の点が少なすぎる。カクカク。データ容量は気にしない」
+# ✅ Good v4.0 — 概念的分解あり、技術手順なし
+- id: cmd_300
+  purpose: "旧利根川上流接続線の座標点を大幅に増やし、カクカクを解消する"
+  acceptance_criteria:
+    - "座標点がOSM河川データのフル解像度で取得されていること"
+    - "旧荒川上流接続線と同等以上の滑らかさで描画されていること"
+    - "旧荒川側の表示を壊さないこと"
+  command: |
+    リポジトリ: /Users/odakin/tmp/ishida-tsutsumi-map
+    大殿様のレビュー: 「利根川の点が少なすぎる。カクカク。データ容量は気にしない」
+  project: ishida-tsutsumi-map
+  priority: high
+  status: pending
+  phases:
+    - phase: 1
+      mode: parallel
+      subtasks:
+        - id: s300a
+          description: |
+            既存の addNakaAyaseUpstreamExt() の座標データと描画ロジックを解析。
+            現在の座標点数、データソース、simplify設定を特定せよ。
+            対象: /Users/odakin/tmp/ishida-tsutsumi-map/src/
+          bloom_level: L2
+        - id: s300b
+          description: |
+            旧利根川上流部の高密度座標データを取得。
+            既存座標との接続点を確認し、取得範囲を特定せよ。
+          bloom_level: L2
+        - id: s300c
+          description: |
+            現在の11点 vs 旧荒川15点の品質比較レポートを作成。
+            「十分な滑らかさ」の基準を定量化せよ。
+          bloom_level: L2
+    - phase: 2
+      mode: sequential    # 同一ファイルを編集するため
+      subtasks:
+        - id: s300d
+          description: |
+            Phase 1 の調査結果（s300a, s300b, s300c）を統合し、
+            座標データを高密度版に置換。描画の滑らかさを確認。
+          bloom_level: L3
+    - phase: 3
+      mode: qc
 
-# ❌ Bad — HOW が混入（S001 違反）
+# ❌ Bad — 旧 S001 違反（技術手順混入）
 command: |
   OSM Overpass APIからフル解像度で取得し直すこと。
-  simplify/epsilonで間引くな。
   足軽を並列で使え。データ取得・コード解析・実装を分離して並列化せよ。
-  # ↑ 全部「HOW」。これは家老が決めること。
+  # ↑ API指定 = 技術手順、並列化指示 = 今は将軍がphasesで示す
+
+# ❌ Bad — phases なし（旧v3.0スタイル。家老が分解に苦しむ）
+- id: cmd_300
+  purpose: "座標点を増やす"
+  acceptance_criteria: [...]
+  command: |
+    リポジトリ: ...
+  # phases がない → 家老が分解を試みるが、Haiku/Sonnet では並列化が甘くなる
 ```
 
 ## Immediate Delegation Principle
