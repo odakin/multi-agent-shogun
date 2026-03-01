@@ -27,6 +27,9 @@
 if [ "${__INBOX_WATCHER_TESTING__:-}" != "1" ]; then
     set -euo pipefail
 
+    # Debug trap: log unexpected exits from set -e
+    trap 'echo "[$(date)] [FATAL] inbox_watcher (${AGENT_ID:-?}) exited unexpectedly at line $LINENO (exit=$?)" >&2' EXIT
+
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     AGENT_ID="$1"
     PANE_TARGET="$2"
