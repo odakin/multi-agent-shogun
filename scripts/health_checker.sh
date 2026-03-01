@@ -199,22 +199,25 @@ check_agent() {
     fi
 
     # === Karo special case (BEFORE busy check) ===
-    # Karo's "task" is in shogun_to_karo.yaml (not queue/tasks/karo.yaml).
-    # If cmd is in_progress → send_nudge (which internally skips if truly busy).
+    # Karo's "task" is in queue/cmds/ (per-cmd files).
+    # If any cmd is in_progress → send_nudge (which internally skips if truly busy).
     # Must run before generic busy check because old "thinking" text in pane
     # history causes false-busy detection for karo after compaction.
     if [ "$agent" = "karo" ]; then
         local has_active_cmd
         has_active_cmd=$("$SCRIPT_DIR/.venv/bin/python3" -c "
-import yaml
-with open('$SCRIPT_DIR/queue/shogun_to_karo.yaml') as f:
-    data = yaml.safe_load(f) or []
-cmds = data if isinstance(data, list) else [data]
-print('yes' if any(c.get('status') == 'in_progress' for c in cmds if isinstance(c, dict)) else 'no')
+import yaml, glob
+found = False
+for f in glob.glob('$SCRIPT_DIR/queue/cmds/*.yaml'):
+    with open(f) as fh:
+        data = yaml.safe_load(fh) or {}
+    if isinstance(data, dict) and data.get('status') == 'in_progress':
+        found = True; break
+print('yes' if found else 'no')
 " 2>/dev/null || echo "no")
         if [ "$has_active_cmd" = "yes" ]; then
             # send_nudge internally calls agent_is_busy_check — skips if truly busy
-            send_nudge "$agent" "$pane" "compact-recovery: cmd in_progress あり。queue/shogun_to_karo.yaml を読んで指揮を再開せよ"
+            send_nudge "$agent" "$pane" "compact-recovery: cmd in_progress あり。queue/cmds/ を読んで指揮を再開せよ"
         fi
         return 0
     fi

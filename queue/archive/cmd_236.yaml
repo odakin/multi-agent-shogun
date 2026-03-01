@@ -1,0 +1,46 @@
+id: cmd_236
+timestamp: '2026-03-02T07:50:00+09:00'
+purpose: モニタに足軽・軍師の現在タスク概要を表示 — task_idだけでなくdescription冒頭を表示
+acceptance_criteria:
+- モニタの各エージェント行にタスクdescriptionの冒頭（切り詰め+…）が表示されること
+- task_id変化時のみYAML読み取り（キャッシュ動作）であること
+- task YAMLが空やpendingの場合は従来通りtask_idのみ表示であること
+- 既存の表示（状態アイコン、inbox数、滞留アイコン等）が崩れないこと
+- commit + push済みであること
+command: "対象リポジトリ: ~/Claude/multi-agent-shogun（このリポジトリ自体）\n\n■ 概要\nteams_visual_monitor.sh\
+  \ のエージェント行に、現在処理中タスクの description 冒頭を表示する。\n\n■ 表示例\n現在:   ⚪ash1   s231d ✉1\n改善後:\
+  \ ⚪ash1   s231d モニタ表示ゴミテキスト修正… ✉1\n\n■ 実装詳細\n1. description キャッシュ用の連想配列を追加（declare\
+  \ -A TASK_DESC_CACHE, TASK_ID_CACHE）\n2. build_agent_line() 内で:\n   a. 現在の task_id\
+  \ を取得\n   b. TASK_ID_CACHE[$agent] と比較し、変化時のみ task YAML を読む\n   c. description の1行目から先頭N文字を抽出（表示幅に収まる範囲）\n\
+  \   d. 長い場合は「…」で切り詰め\n   e. task_id の後に description 概要を挿入\n3. データソース: queue/tasks/ashigaruN.yaml\
+  \ / gunshi.yaml の task.description\n\n■ パフォーマンス\n- task_id が変わったときだけ YAML を読む\n\
+  - 毎サイクルの grep/awk は避ける\n\n■ 注意\n- 既存の表示要素（状態アイコン ⚪\U0001F7E2\U0001F534、inbox数 ✉N、滞留アイコン\
+  \ ⏰等）と干渉しないこと\n- 軍師行にも同様に適用すること\n"
+project: multi-agent-shogun
+priority: medium
+status: qc_pass
+phases:
+- phase: 1
+  mode: sequential
+  subtasks:
+  - id: s236a
+    description: 'teams_visual_monitor.sh にタスク概要表示を実装:
+
+      1. declare -A TASK_DESC_CACHE TASK_ID_CACHE を追加
+
+      2. build_agent_line() で task_id 変化検知 + description 読み取り
+
+      3. description 1行目の先頭N文字を抽出、「…」切り詰め
+
+      4. エージェント行に description 概要を挿入
+
+      5. 足軽7人 + 軍師に適用
+
+      6. 動作テスト: task YAML に description を設定して表示確認
+
+      7. commit + push
+
+      '
+    bloom_level: L3
+- phase: 2
+  mode: qc

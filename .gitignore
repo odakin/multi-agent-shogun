@@ -106,11 +106,16 @@
 !scripts/teams_visual_monitor.sh
 !scripts/health_checker.sh
 !scripts/battle_monitor.sh
+!scripts/migrate_to_per_cmd.py
 
 # Queue archive (completed cmd history)
 !queue/
 !queue/archive/
 !queue/archive/*.yaml
+
+# Per-cmd files (active commands)
+!queue/cmds/
+!queue/cmds/*.yaml
 
 # Lord pending decisions
 !queue/lord_pending.yaml

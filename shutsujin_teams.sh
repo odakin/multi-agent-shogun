@@ -341,10 +341,8 @@ if [ "$CLEAN_MODE" = true ]; then
         fi
     fi
 
-    if [ -f "./queue/shogun_to_karo.yaml" ]; then
-        if grep -q "id: cmd_" "./queue/shogun_to_karo.yaml" 2>/dev/null; then
-            NEED_BACKUP=true
-        fi
+    if [ -d "./queue/cmds" ] && ls ./queue/cmds/*.yaml >/dev/null 2>&1; then
+        NEED_BACKUP=true
     fi
 
     if [ "$NEED_BACKUP" = true ]; then
@@ -352,7 +350,7 @@ if [ "$CLEAN_MODE" = true ]; then
         cp "./dashboard.md" "$BACKUP_DIR/" 2>/dev/null || true
         cp -r "./queue/reports" "$BACKUP_DIR/" 2>/dev/null || true
         cp -r "./queue/tasks" "$BACKUP_DIR/" 2>/dev/null || true
-        cp "./queue/shogun_to_karo.yaml" "$BACKUP_DIR/" 2>/dev/null || true
+        cp -r "./queue/cmds" "$BACKUP_DIR/" 2>/dev/null || true
         log_info "📦 前回の記録をバックアップ: $BACKUP_DIR"
     fi
 fi

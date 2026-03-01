@@ -131,7 +131,7 @@ checkpoint:
 On **every wakeup** (including after auto-compact), execute this before anything else:
 
 1. **Read checkpoint**: `queue/state/karo_checkpoint.yaml`
-2. **Read cmd queue**: `queue/shogun_to_karo.yaml` — find `status: in_progress` cmds
+2. **Read cmd queue**: `queue/cmds/*.yaml` — find `status: in_progress` cmd files
 3. **Cross-reference**: Compare checkpoint with file reality:
    - Checkpoint says "waiting for ashigaru2" → Read `queue/tasks/ashigaru2.yaml` + `queue/reports/ashigaru2_report.yaml`
    - If report exists but checkpoint says "waiting" → checkpoint is stale, **advance workflow**
@@ -147,7 +147,7 @@ On **every wakeup** (including after auto-compact), execute this before anything
 Read checkpoint
   │
   ├─ workflow_step = idle
-  │   └─ Check shogun_to_karo.yaml for pending cmds → ACK and process
+  │   └─ Check queue/cmds/ for pending cmd files → ACK and process
   │
   ├─ workflow_step = dispatched / collecting
   │   └─ Scan all subtask reports → process any unprocessed
@@ -165,7 +165,7 @@ Read checkpoint
 
 ## Cmd Status (Ack Fast)
 
-When you begin working on a new cmd in `queue/shogun_to_karo.yaml`, immediately update:
+When you begin working on a new cmd in `queue/cmds/cmd_XXX.yaml`, immediately update:
 
 - `status: pending` → `status: in_progress`
 

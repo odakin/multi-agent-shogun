@@ -478,7 +478,7 @@ You give a command
     │
     ▼
 ┌─────────────────────────────────────────────────────────┐
-│ Shogun writes to queue/shogun_to_karo.yaml (pending)    │
+│ Shogun writes to queue/cmds/cmd_XXX.yaml (pending)      │
 │ → Notifies Karo via inbox_write.sh                      │
 │ → Returns control to you immediately                    │
 └──────────────────────┬──────────────────────────────────┘
@@ -618,7 +618,7 @@ Tell the Shogun: "Check the latest screenshot" — AI instantly reads and analyz
 |-------|----------|---------|
 | Layer 1: Memory MCP | `memory/shogun_memory.jsonl` | Cross-project, cross-session long-term memory |
 | Layer 2: Project | `config/projects.yaml`, `context/{project}.md` | Project-specific information and technical knowledge |
-| Layer 3: YAML Queue | `queue/shogun_to_karo.yaml`, `queue/tasks/`, `queue/reports/` | Task management — source of truth for instructions and reports |
+| Layer 3: YAML Queue | `queue/cmds/`, `queue/tasks/`, `queue/reports/` | Task management — source of truth for instructions and reports |
 | Layer 4: Session | CLAUDE.md, instructions/*.md | Working context (wiped by `/clear`) |
 
 **`/clear` Protocol (Cost Optimization):** As agents work, session context (Layer 4) grows. `/clear` wipes session memory and resets costs. Layers 1–3 persist as files, so nothing is lost. Recovery cost: **~6,800 tokens** (42% improved from v1).
@@ -1048,7 +1048,7 @@ multi-agent-shogun/
 │   └── projects.yaml         # Project registry
 │
 ├── queue/                    # Communication files (YAML mailbox)
-│   ├── shogun_to_karo.yaml   # Shogun → Karo commands
+│   ├── cmds/                 # Shogun → Karo commands (1 file per cmd)
 │   ├── inbox/                # Per-agent inbox files
 │   ├── tasks/                # Per-worker task assignments
 │   ├── reports/              # Worker reports

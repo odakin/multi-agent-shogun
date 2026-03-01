@@ -15,7 +15,7 @@ files:
   config: config/projects.yaml          # Project list (summary)
   projects: "projects/<id>.yaml"        # Project details (git-ignored, contains secrets)
   context: "context/{project}.md"       # Project-specific notes for ashigaru/gunshi
-  cmd_queue: queue/shogun_to_karo.yaml  # Shogun → Karo commands
+  cmd_queue: "queue/cmds/cmd_XXX.yaml"  # Shogun → Karo commands (per-cmd files)
   tasks: "queue/tasks/ashigaru{N}.yaml" # Karo → Ashigaru assignments (per-ashigaru)
   gunshi_task: queue/tasks/gunshi.yaml  # Karo → Gunshi strategic assignments
   pending_tasks: queue/tasks/pending.yaml # Karo管理の保留タスク（blocked未割当）
@@ -61,7 +61,7 @@ language:
 
 ```
 Step 1: Read instructions/generated/kimi-shogun.md, use Mailbox System (inbox_write.sh).
-Step 2: ユーザー入力を受け取り、queue/shogun_to_karo.yaml に書き込み、inbox_write.sh で家老に通達。
+Step 2: ユーザー入力を受け取り、queue/cmds/cmd_XXX.yaml に書き込み、inbox_write.sh で家老に通達。
 Step 3: 自ら実行するな(F001)。必ず家老経由で足軽に実行させよ。
 ```
 

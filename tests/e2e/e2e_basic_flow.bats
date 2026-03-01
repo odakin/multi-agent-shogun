@@ -86,9 +86,10 @@ setup() {
 # ═══════════════════════════════════════════════════════════════
 
 @test "E2E-001-B: karo receives cmd, dispatches subtask to ashigaru" {
-    # 1. Place cmd YAML for karo
+    # 1. Place cmd YAML for karo (per-cmd file)
+    mkdir -p "$E2E_QUEUE/queue/cmds"
     cp "$PROJECT_ROOT/tests/e2e/fixtures/cmd_basic.yaml" \
-       "$E2E_QUEUE/queue/shogun_to_karo.yaml"
+       "$E2E_QUEUE/queue/cmds/cmd_test_001.yaml"
 
     # 2. Write cmd_new to karo's inbox
     bash "$E2E_QUEUE/scripts/inbox_write.sh" "karo" \
@@ -118,9 +119,10 @@ setup() {
 # ═══════════════════════════════════════════════════════════════
 
 @test "E2E-001-C: full flow from cmd to completion report" {
-    # 1. Place cmd YAML
+    # 1. Place cmd YAML (per-cmd file)
+    mkdir -p "$E2E_QUEUE/queue/cmds"
     cp "$PROJECT_ROOT/tests/e2e/fixtures/cmd_basic.yaml" \
-       "$E2E_QUEUE/queue/shogun_to_karo.yaml"
+       "$E2E_QUEUE/queue/cmds/cmd_test_001.yaml"
 
     local karo_pane ashigaru1_pane
     karo_pane=$(pane_target 0)

@@ -147,19 +147,20 @@ for agent in agents:
     except: pass
     result[agent] = {'task_id': str(tid), 'status': str(status), 'unread': unread}
 
-# Current cmd
+# Current cmd (per-cmd files)
 try:
-    with open(f'{root}/queue/shogun_to_karo.yaml') as f:
-        cmds = yaml.safe_load(f) or {}
-    if isinstance(cmds, list):
-        cmd = cmds[-1] if cmds else {}
-    else:
-        cmd = cmds
-    cid = cmd.get('cmd_id') or cmd.get('id') or '?'
-    purpose = cmd.get('purpose') or cmd.get('description', '?')
-    if isinstance(purpose, str) and len(purpose) > 40:
-        purpose = purpose[:40]
-    result['_cmd'] = f'{cid}: {purpose}'
+    import glob
+    cmd_parts = []
+    for cf in sorted(glob.glob(f'{root}/queue/cmds/*.yaml')):
+        with open(cf) as f:
+            cmd = yaml.safe_load(f) or {}
+        if isinstance(cmd, dict):
+            cid = cmd.get('id') or '?'
+            purpose = cmd.get('purpose') or cmd.get('description', '?')
+            if isinstance(purpose, str) and len(purpose) > 40:
+                purpose = purpose[:40]
+            cmd_parts.append(f'{cid}: {purpose}')
+    result['_cmd'] = ' / '.join(cmd_parts) if cmd_parts else '(指令なし)'
 except: result['_cmd'] = '(指令なし)'
 
 # Collect inbox events from ALL agents + shogun

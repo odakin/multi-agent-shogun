@@ -186,10 +186,15 @@ handle_clear() {
 }
 
 # ─── Karo-specific: dispatch cmd as subtasks to ashigaru (v4.0) ───
-# When karo receives a cmd_new, it reads shogun_to_karo.yaml,
+# When karo receives a cmd_new, it reads per-cmd files from queue/cmds/,
 # creates task YAMLs for ashigaru, and sends inbox notifications.
 karo_dispatch_cmd() {
-    local cmd_file="$MOCK_PROJECT_ROOT/queue/shogun_to_karo.yaml"
+    local cmd_file
+    # Try per-cmd files first, fall back to legacy
+    cmd_file=$(ls "$MOCK_PROJECT_ROOT/queue/cmds/"*.yaml 2>/dev/null | head -1)
+    if [ -z "$cmd_file" ]; then
+        cmd_file="$MOCK_PROJECT_ROOT/queue/shogun_to_karo.yaml"
+    fi
     if [ ! -f "$cmd_file" ]; then
         echo "[mock/karo] No cmd file found"
         return 1

@@ -372,7 +372,7 @@ Act without waiting for Karo's instruction:
 
 **On task completion** (in this order):
 1. Self-review deliverables (re-read your output)
-2. **Purpose validation**: Read `parent_cmd` in `queue/shogun_to_karo.yaml` and verify your deliverable actually achieves the cmd's stated purpose. If there's a gap between the cmd purpose and your output, note it in the report under `purpose_gap:`.
+2. **Purpose validation**: Read `parent_cmd` in `queue/cmds/cmd_XXX.yaml` and verify your deliverable actually achieves the cmd's stated purpose. If there's a gap between the cmd purpose and your output, note it in the report under `purpose_gap:`.
 3. Write report YAML
 4. **Dual-notify**: 家老（空き通知）と軍師（YAML参照）に同時送信
 5. (No delivery verification needed — inbox_write guarantees persistence)

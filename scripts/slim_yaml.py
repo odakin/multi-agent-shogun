@@ -155,6 +155,45 @@ def slim_shogun_to_karo():
     return True
 
 
+def slim_per_cmd_files():
+    """Archive completed per-cmd files from queue/cmds/ to queue/archive/.
+
+    Moves cmd files whose status is in ARCHIVE_STATUSES to the archive directory.
+    This is the per-cmd equivalent of slim_shogun_to_karo().
+    """
+    queue_dir = Path(__file__).resolve().parent.parent / 'queue'
+    cmds_dir = queue_dir / 'cmds'
+    archive_dir = queue_dir / 'archive'
+
+    if not cmds_dir.exists():
+        return True
+
+    ARCHIVE_STATUSES = {'done', 'done_ng', 'stalled', 'cancelled', 'qc_pass'}
+    archived_count = 0
+
+    for cmd_file in sorted(cmds_dir.glob('*.yaml')):
+        try:
+            with open(cmd_file, 'r', encoding='utf-8') as f:
+                raw = f.read()
+            # Use regex to get first status (same duplicate-key defense)
+            status_match = re.search(r'^\s*status:\s*(\S+)', raw, re.MULTILINE)
+            if not status_match:
+                continue
+            status = status_match.group(1)
+            if status in ARCHIVE_STATUSES:
+                archive_dir.mkdir(parents=True, exist_ok=True)
+                dest = archive_dir / cmd_file.name
+                cmd_file.rename(dest)
+                archived_count += 1
+                print(f"Archived {cmd_file.name} -> archive/", file=sys.stderr)
+        except Exception as e:
+            print(f"Error processing {cmd_file.name}: {e}", file=sys.stderr)
+
+    if archived_count:
+        print(f"Archived {archived_count} per-cmd file(s)", file=sys.stderr)
+    return True
+
+
 def slim_inbox(agent_id):
     """Archive read: true messages from inbox file."""
     queue_dir = Path(__file__).resolve().parent.parent / 'queue'
@@ -220,9 +259,11 @@ def main():
     archive_dir = Path(__file__).resolve().parent.parent / 'queue' / 'archive'
     archive_dir.mkdir(parents=True, exist_ok=True)
 
-    # Process shogun_to_karo if this is Karo
+    # Process shogun_to_karo and per-cmd files if this is Karo
     if agent_id == 'karo':
         if not slim_shogun_to_karo():
+            sys.exit(1)
+        if not slim_per_cmd_files():
             sys.exit(1)
 
     # Process inbox for all agents

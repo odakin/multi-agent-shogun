@@ -478,7 +478,7 @@ JavaScriptフレームワーク上位5つを調査して比較表を作れ
     │
     ▼
 ┌─────────────────────────────────────────────────────────┐
-│ 将軍がqueue/shogun_to_karo.yamlに書込（pending）        │
+│ 将軍がqueue/cmds/cmd_XXX.yamlに書込（pending）           │
 │ → inbox_write.sh で家老に通知                           │
 │ → 即座にあなたに制御を返す                               │
 └──────────────────────┬──────────────────────────────────┘
@@ -618,7 +618,7 @@ screenshot:
 |---|------|------|
 | Layer 1: Memory MCP | `memory/shogun_memory.jsonl` | プロジェクト横断・セッション横断の長期記憶 |
 | Layer 2: Project | `config/projects.yaml`, `context/{project}.md` | プロジェクト固有の情報と技術知識 |
-| Layer 3: YAML Queue | `queue/shogun_to_karo.yaml`, `queue/tasks/`, `queue/reports/` | タスク管理 — 指示と報告の正 |
+| Layer 3: YAML Queue | `queue/cmds/`, `queue/tasks/`, `queue/reports/` | タスク管理 — 指示と報告の正 |
 | Layer 4: Session | CLAUDE.md, instructions/*.md | ワーキングコンテキスト（`/clear`で消去） |
 
 **`/clear`プロトコル（コスト最適化）:** エージェントが作業するとセッションコンテキスト（Layer 4）が肥大化。`/clear`でセッションメモリをリセット。Layer 1-3はファイルとして永続するため、何も失われない。復旧コスト: **約6,800トークン**（v1から42%改善）。
@@ -1048,7 +1048,7 @@ multi-agent-shogun/
 │   └── projects.yaml         # プロジェクト登録
 │
 ├── queue/                    # 通信ファイル（YAMLメールボックス）
-│   ├── shogun_to_karo.yaml   # 将軍 → 家老コマンド
+│   ├── cmds/                 # 将軍 → 家老コマンド（1ファイル/cmd）
 │   ├── inbox/                # エージェント別inboxファイル
 │   ├── tasks/                # ワーカー別タスク割り当て
 │   ├── reports/              # ワーカー報告

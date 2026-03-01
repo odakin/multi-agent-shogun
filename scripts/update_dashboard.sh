@@ -18,7 +18,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DASHBOARD="$ROOT_DIR/dashboard.md"
 TASKS_DIR="$ROOT_DIR/queue/tasks"
 REPORTS_DIR="$ROOT_DIR/queue/reports"
-CMD_QUEUE="$ROOT_DIR/queue/shogun_to_karo.yaml"
+CMD_QUEUE="$ROOT_DIR/queue/cmds"
 STREAKS_FILE="$ROOT_DIR/saytask/streaks.yaml"
 
 # ─── ヘルパー関数 ───
@@ -143,17 +143,23 @@ FROG
 FROG
 }
 
-# 現在のコマンド（将軍からの指令）
+# 現在のコマンド（将軍からの指令 — per-cmd files）
 current_cmd() {
-    if [ ! -f "$CMD_QUEUE" ]; then
+    if [ ! -d "$CMD_QUEUE" ]; then
         echo "（指令なし）"
         return
     fi
-    local cmd_id purpose status
-    cmd_id=$(yaml_get "$CMD_QUEUE" "id")
-    purpose=$(yaml_get "$CMD_QUEUE" "purpose")
-    status=$(yaml_get "$CMD_QUEUE" "status")
-    echo "${cmd_id:-???}: ${purpose:-???} [${status:-???}]"
+    local output=""
+    for f in "$CMD_QUEUE"/*.yaml; do
+        [ -f "$f" ] || continue
+        local cmd_id purpose cmd_status
+        cmd_id=$(yaml_get "$f" "id")
+        purpose=$(yaml_get "$f" "purpose")
+        cmd_status=$(yaml_get "$f" "status")
+        if [ -n "$output" ]; then output="$output / "; fi
+        output="${output}${cmd_id:-???}: ${purpose:-???} [${cmd_status:-???}]"
+    done
+    echo "${output:-（指令なし）}"
 }
 
 # ─── ダッシュボード生成 ───

@@ -39,7 +39,7 @@ Gunshi handles tasks that require deep thinking (Bloom's L4-L6):
 | **Root Cause Analysis** | Investigate complex bugs/failures | Analysis report with cause chain and fix strategy |
 | **Strategy Planning** | Multi-step project planning | Execution plan with phases, risks, dependencies |
 | **Evaluation** | Compare approaches, review designs | Evaluation matrix with scored criteria |
-| **Decomposition Aid** | Help Karo split complex cmds | Suggested task breakdown with dependencies |
+| **Decomposition Aid** | Help Shogun decompose complex cmds | Suggested task breakdown with dependencies |
 | **★ Integration QC** | Mandatory exit gate for multi-subtask cmds | Pass/fail with findings |
 
 ## ★ Integration QC (Mandatory Exit Gate)
@@ -48,7 +48,7 @@ When Karo sends a task with `qc_type: integration`, this is the **mandatory qual
 
 ### What to Check
 
-1. **Acceptance criteria**: Re-read the original cmd's `acceptance_criteria` in `queue/shogun_to_karo.yaml`. Verify each criterion is met by the combined deliverables.
+1. **Acceptance criteria**: Re-read the original cmd's `acceptance_criteria` in `queue/cmds/cmd_XXX.yaml`. Verify each criterion is met by the combined deliverables.
 2. **Cross-subtask integrity**: Do the outputs from different ashigaru work together? (e.g., if ashigaru1 wrote module A and ashigaru2 wrote module B, do they integrate correctly?)
 3. **Completeness**: Were any requirements missed or only partially addressed?
 4. **Fake parallelism damage**: Did dependency chains between subtasks cause any output to be built on stale or missing inputs?
@@ -199,6 +199,7 @@ Military strategist — knowledgeable, calm, analytical.
 - Every recommendation must have a clear rationale
 - Trade-off analysis must cover at least 2 alternatives
 - If data is insufficient for a confident analysis → say so. Don't fabricate.
+- commit後は必ずpushまで行うこと。pushできなかった場合はレポートに理由を明記すること。
 
 **Anomaly handling:**
 - Context below 30% → write progress to report YAML, tell Karo "context running low"
@@ -355,7 +356,7 @@ The inbox_write guarantees persistence. inbox_watcher handles delivery.
 
 ```
 Lord: command
-  → Shogun(Opus): 分解 + phases設計 → shogun_to_karo.yaml(phases付き) → inbox_write karo
+  → Shogun(Opus): 分解 + phases設計 → queue/cmds/cmd_XXX.yaml → inbox_write karo
   → Karo(Haiku): 機械的配分 → task YAML → inbox_write ashigaru{N}
   → Ashigaru(Sonnet): execute → report YAML → inbox_write gunshi + karo("空き"のみ)
   → Gunshi(Opus): ★QC(mandatory)★ → PASS → dashboard更新
@@ -378,14 +379,14 @@ Lord: command
 Status is defined per YAML file type. **Keep it minimal. Simple is best.**
 
 Fixed status set (do not add casually):
-- `queue/shogun_to_karo.yaml`: `pending`, `in_progress`, `done`, `cancelled`
+- `queue/cmds/cmd_XXX.yaml`: `pending`, `in_progress`, `done`, `cancelled`
 - `queue/tasks/ashigaruN.yaml`: `assigned`, `blocked`, `done`, `failed`
 - `queue/tasks/pending.yaml`: `pending_blocked`
 - `queue/ntfy_inbox.yaml`: `pending`, `processed`
 
 Do NOT invent new status values without updating this section.
 
-### Command Queue: `queue/shogun_to_karo.yaml`
+### Command Queue: `queue/cmds/cmd_XXX.yaml` (per-cmd files)
 
 Meanings and allowed/forbidden actions (short):
 
@@ -494,7 +495,7 @@ No agent may assume a nudge will tell them what to do. **File state is ground tr
 
 ### Karo: On Every Wakeup (including post-compact) — v4.0
 
-1. **Read cmd queue** `queue/shogun_to_karo.yaml` → find `in_progress` / `pending` cmds
+1. **Read cmd queue** `queue/cmds/*.yaml` → find `in_progress` / `pending` cmd files
 2. **Check phases**: 現在の cmd の phases を読み、未完了フェーズを特定
 3. **Scan task YAMLs** `queue/tasks/ashigaru*.yaml` → 各足軽の status 確認（空き検出）
 4. **Dispatch**: 現在フェーズの未発令 subtask を空き足軽に割当

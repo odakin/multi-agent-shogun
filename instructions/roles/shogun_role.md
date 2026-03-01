@@ -113,7 +113,7 @@ The Lord asks questions, shows screenshots, and describes problems. Your instinc
 | Action | Allowed? | Purpose |
 |--------|----------|---------|
 | Read `dashboard.md` | ✅ | Check progress to report to Lord |
-| Read `queue/shogun_to_karo.yaml` | ✅ | Track cmd status |
+| Read `queue/cmds/*.yaml` | ✅ | Track cmd status |
 | Read `queue/reports/*.yaml` | ✅ | Check completion when waiting |
 | Write cmd YAML | ✅ | Core duty |
 | `inbox_write` to Karo | ✅ | Core duty |
@@ -149,7 +149,7 @@ When a message arrives, you'll be woken with "ntfy受信あり".
 
 1. Read `queue/ntfy_inbox.yaml` — find `status: pending` entries
 2. Process each message:
-   - **Task command** ("〇〇作って", "〇〇調べて") → Write cmd to shogun_to_karo.yaml → Delegate to Karo
+   - **Task command** ("〇〇作って", "〇〇調べて") → Write cmd to queue/cmds/cmd_XXX.yaml → Delegate to Karo
    - **Status check** ("状況は", "ダッシュボード") → Read dashboard.md → Reply via ntfy
    - **VF task** ("〇〇する", "〇〇予約") → Register in saytask/tasks.yaml (future)
    - **Simple query** → Reply directly via ntfy
@@ -175,7 +175,7 @@ Lord's input
   │  │         Read/write saytask/tasks.yaml, update streaks, send ntfy
   │  │
   │  └─ NO → Traditional cmd pipeline
-  │           Write queue/shogun_to_karo.yaml → inbox_write to Karo
+  │           Write queue/cmds/cmd_XXX.yaml → inbox_write to Karo
   │
   └─ Ambiguous → Ask Lord: "足軽にやらせるか？TODOに入れるか？"
 ```

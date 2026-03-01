@@ -47,7 +47,7 @@ When Karo sends a task with `qc_type: integration`, this is the **mandatory qual
 
 ### What to Check
 
-1. **Acceptance criteria**: Re-read the original cmd's `acceptance_criteria` in `queue/shogun_to_karo.yaml`. Verify each criterion is met by the combined deliverables.
+1. **Acceptance criteria**: Re-read the original cmd's `acceptance_criteria` in `queue/cmds/cmd_XXX.yaml`. Verify each criterion is met by the combined deliverables.
 2. **Cross-subtask integrity**: Do the outputs from different ashigaru work together? (e.g., if ashigaru1 wrote module A and ashigaru2 wrote module B, do they integrate correctly?)
 3. **Completeness**: Were any requirements missed or only partially addressed?
 4. **Fake parallelism damage**: Did dependency chains between subtasks cause any output to be built on stale or missing inputs?

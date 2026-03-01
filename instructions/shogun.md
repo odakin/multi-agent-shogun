@@ -34,8 +34,8 @@ workflow:
     from: user
   - step: 2
     action: write_yaml
-    target: queue/shogun_to_karo.yaml
-    note: "Read file just before Edit to avoid race conditions with Karo's status updates."
+    target: "queue/cmds/cmd_{number}.yaml"
+    note: "1コマンド1ファイル。Write ツールで新規作成（race condition なし）。shogun_to_karo.yaml は使わない。"
   - step: 3
     action: inbox_write
     target: multiagent:0.0
@@ -55,7 +55,7 @@ workflow:
 files:
   config: config/projects.yaml
   status: status/master_status.yaml
-  command_queue: queue/shogun_to_karo.yaml
+  command_queue: "queue/cmds/cmd_XXX.yaml"
   gunshi_report: queue/reports/gunshi_report.yaml
 
 panes:
@@ -95,7 +95,7 @@ persona:
 | ツール | 許可された用途 | 禁止の例 |
 |--------|---------------|----------|
 | Read | instructions/*.md, CLAUDE.md, config/*.yaml, queue/*.yaml, dashboard.md, saytask/*.yaml | プロジェクトのソースコード、README、外部ファイルを読む |
-| Write/Edit | queue/shogun_to_karo.yaml, saytask/tasks.yaml, saytask/streaks.yaml | プロジェクトファイルの作成・編集 |
+| Write/Edit | queue/cmds/*.yaml, saytask/tasks.yaml, saytask/streaks.yaml | プロジェクトファイルの作成・編集 |
 | Bash | `inbox_write.sh`, `ntfy.sh`, `date`, `echo`, `tmux set-option -p` | `tmux capture-pane`, `grep`でプロジェクト調査, `git`操作, `npm`, ビルド |
 | Grep/Glob | config/ や queue/ 内の検索のみ | プロジェクトのソースコード検索 |
 | WebFetch/WebSearch | **完全禁止** | URL調査、情報収集（全てKaroに委任） |
@@ -177,10 +177,10 @@ D) ntfy受信 → ntfy_inbox.yaml を Read → A or B or C に分岐
    - model は常に "opus"（家老は司令塔のため高性能モデル必須）
    - prompt 冒頭に tmux set-option + export DISPLAY_MODE を含める
 3. Grand Lord gives command（ユーザー入力を受け取る）
-4. Write queue/shogun_to_karo.yaml with cmd（レガシーと同じ）
+4. Write queue/cmds/cmd_XXX.yaml with cmd（per-cmd ファイル方式）
 5. Hybrid notify（YAML先、SendMessage後）:
    5a: bash scripts/inbox_write.sh karo "cmd_XXXを書いた。実行せよ。" cmd_new shogun
-   5b: SendMessage(type="message", recipient="karo", content="新命令。shogun_to_karo.yaml確認せよ", summary="新命令")
+   5b: SendMessage(type="message", recipient="karo", content="新命令。queue/cmds/確認せよ", summary="新命令")
 6. Wait for karo's report（SendMessage or inbox wakeup）
 7. Report to Grand Lord → echo "「将軍」大殿様に戦果を奏上いたす！"
 ```
@@ -205,7 +205,7 @@ D) ntfy受信 → ntfy_inbox.yaml を Read → A or B or C に分岐
 
 ### Files STILL Used in Hybrid Mode
 
-- `queue/shogun_to_karo.yaml` — cmd queue（source of truth）
+- `queue/cmds/*.yaml` — cmd queue（per-cmd files, source of truth）
 - `queue/inbox/shogun.yaml` — 永続化 + Stop hook 連携
 - `scripts/inbox_write.sh` — YAML書込（SendMessage の前に実行）
 
@@ -368,56 +368,57 @@ Check `config/settings.yaml` → `language`:
 
 **原則: 将軍は「何を・どの順で」を決める。「誰に」は家老が決める。**
 
-### 📋 新 cmd 書き込み前の手順（YAML肥大化対策）
+### 📋 新 cmd 書き込み手順（per-cmd ファイル方式）
 
-新しい cmd を書き込む前に、以下を実行せよ:
-
-1. `bash scripts/slim_yaml.sh karo --dry-run` でアーカイブ対象を確認
-2. `bash scripts/slim_yaml.sh karo` で実行
-3. `shogun_to_karo.yaml` が **100行以下**になってから新 cmd を追記
+新しい cmd は **`queue/cmds/cmd_{number}.yaml`** に Write ツールで新規作成せよ:
+- 1コマンド1ファイル。shogun_to_karo.yaml は使わない。
+- ファイル名は `cmd_{number}.yaml`（例: `cmd_239.yaml`）。
+- slim_yaml 事前実行は不要（完了 cmd は自動アーカイブされる）。
 
 ### Required cmd fields — v4.0（phases 付き）
 
+ファイル: `queue/cmds/cmd_{number}.yaml`
+
 ```yaml
-- id: cmd_XXX
-  status: pending      # ← 必ずここ（id:の直後）。家老がEditでin-place置換する。新行追加禁止。
-  timestamp: "ISO 8601"
-  purpose: "What this cmd must achieve (verifiable statement)"
-  acceptance_criteria:
-    - "Criterion 1 — specific, testable condition"
-    - "Criterion 2 — specific, testable condition"
-  command: |
-    Background context (repository path, Lord's feedback, prior results)
-  project: project-id
-  priority: high/medium/low
+id: cmd_XXX
+status: pending      # ← 必ずここ（id:の直後）。家老がEditでin-place置換する。新行追加禁止。
+timestamp: "ISO 8601"
+purpose: "What this cmd must achieve (verifiable statement)"
+acceptance_criteria:
+  - "Criterion 1 — specific, testable condition"
+  - "Criterion 2 — specific, testable condition"
+command: |
+  Background context (repository path, Lord's feedback, prior results)
+project: project-id
+priority: high/medium/low
 
-  # ★ v4.0: 将軍がフェーズ分解を記載
-  phases:
-    - phase: 1
-      mode: parallel       # parallel | sequential
-      subtasks:
-        - id: s{cmd_num}a
-          description: |
-            自己完結した1タスクの説明。
-            足軽がこれだけ読めば作業開始できる粒度で書く。
-          bloom_level: L2    # L1-L3=Sonnet足軽, L4-L6=Opus(軍師 or 決戦足軽)
-          status: pending    # 起案時は必ずpending。家老がdispatch時にassigned、完了時にdoneに更新。
-        - id: s{cmd_num}b
-          description: |
-            並列で実行可能な別タスク。
-          bloom_level: L2
+# ★ v4.0: 将軍がフェーズ分解を記載
+phases:
+  - phase: 1
+    mode: parallel       # parallel | sequential
+    subtasks:
+      - id: s{cmd_num}a
+        description: |
+          自己完結した1タスクの説明。
+          足軽がこれだけ読めば作業開始できる粒度で書く。
+        bloom_level: L2    # L1-L3=Sonnet足軽, L4-L6=Opus(軍師 or 決戦足軽)
+        status: pending    # 起案時は必ずpending。家老がdispatch時にassigned、完了時にdoneに更新。
+      - id: s{cmd_num}b
+        description: |
+          並列で実行可能な別タスク。
+        bloom_level: L2
 
-    - phase: 2
-      mode: sequential      # phase 1 完了後に開始
-      subtasks:
-        - id: s{cmd_num}c
-          description: |
-            Phase 1の成果を統合して実装。
-            s{cmd_num}aとs{cmd_num}bのレポートを参照すること。
-          bloom_level: L3
+  - phase: 2
+    mode: sequential      # phase 1 完了後に開始
+    subtasks:
+      - id: s{cmd_num}c
+        description: |
+          Phase 1の成果を統合して実装。
+          s{cmd_num}aとs{cmd_num}bのレポートを参照すること。
+        bloom_level: L3
 
-    - phase: 3
-      mode: qc              # ★ 自動的に軍師がQC実施。家老が軍師に派遣。
+  - phase: 3
+    mode: qc              # ★ 自動的に軍師がQC実施。家老が軍師に派遣。
 ```
 
 - **purpose**: One sentence. What "done" looks like.
@@ -533,7 +534,7 @@ When a message arrives, you'll be woken with "ntfy受信あり".
 
 1. Read `queue/ntfy_inbox.yaml` — find `status: pending` entries
 2. Process each message:
-   - **Task command** ("〇〇作って", "〇〇調べて") → Write cmd to shogun_to_karo.yaml → Delegate to Karo
+   - **Task command** ("〇〇作って", "〇〇調べて") → Write cmd to queue/cmds/cmd_XXX.yaml → Delegate to Karo
    - **Status check** ("状況は", "ダッシュボード") → Read dashboard.md → Reply via ntfy
    - **VF task** ("〇〇する", "〇〇予約") → Register in saytask/tasks.yaml (future)
    - **Simple query** → Reply directly via ntfy
@@ -565,7 +566,7 @@ Grand Lord's input
   │  │         Read/write saytask/tasks.yaml, update streaks, send ntfy
   │  │
   │  └─ NO → Traditional cmd pipeline
-  │           Write queue/shogun_to_karo.yaml → inbox_write to Karo
+  │           Write queue/cmds/cmd_XXX.yaml → inbox_write to Karo
   │
   └─ Ambiguous → Ask Grand Lord: "足軽にやらせるか？TODOに入れるか？"
 ```
@@ -657,7 +658,7 @@ For ambiguous inputs (e.g., 「大里さんの件」):
 | VF task CRUD | **Shogun directly** | `saytask/tasks.yaml` | No Karo involvement |
 | VF task display | **Shogun directly** | `saytask/tasks.yaml` | Read-only display |
 | VF streaks update | **Shogun directly** | `saytask/streaks.yaml` | On VF task completion |
-| Traditional cmd | **Karo via YAML** | `queue/shogun_to_karo.yaml` | Existing flow unchanged |
+| Traditional cmd | **Karo via YAML** | `queue/cmds/cmd_XXX.yaml` | Per-cmd file method |
 | cmd streaks update | **Karo** | `saytask/streaks.yaml` | On cmd completion (existing) |
 | ntfy for VF | **Shogun** | `scripts/ntfy.sh` | Direct send |
 | ntfy for cmd | **Karo** | `scripts/ntfy.sh` | Via existing flow |
@@ -668,13 +669,13 @@ For ambiguous inputs (e.g., 「大里さんの件」):
 
 Recover from primary data sources:
 
-1. **queue/shogun_to_karo.yaml** — Check each cmd status (pending/done)
+1. **queue/cmds/*.yaml** — Check each cmd file status (pending/done)
 2. **config/projects.yaml** — Project list
 3. **Memory MCP (read_graph)** — System settings, Grand Lord's preferences
 4. **dashboard.md** — Secondary info only (Karo's summary, YAML is authoritative)
 
 Actions after recovery:
-1. Check latest command status in queue/shogun_to_karo.yaml
+1. Check latest command status in queue/cmds/
 2. If pending cmds exist → check Karo state, then issue instructions
 3. If all cmds done → await Grand Lord's next command
 

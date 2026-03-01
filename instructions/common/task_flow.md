@@ -4,7 +4,7 @@
 
 ```
 Lord: command
-  → Shogun(Opus): 分解 + phases設計 → shogun_to_karo.yaml(phases付き) → inbox_write karo
+  → Shogun(Opus): 分解 + phases設計 → queue/cmds/cmd_XXX.yaml → inbox_write karo
   → Karo(Haiku): 機械的配分 → task YAML → inbox_write ashigaru{N}
   → Ashigaru(Sonnet): execute → report YAML → inbox_write gunshi + karo("空き"のみ)
   → Gunshi(Opus): ★QC(mandatory)★ → PASS → dashboard更新
@@ -27,14 +27,14 @@ Lord: command
 Status is defined per YAML file type. **Keep it minimal. Simple is best.**
 
 Fixed status set (do not add casually):
-- `queue/shogun_to_karo.yaml`: `pending`, `in_progress`, `done`, `cancelled`
+- `queue/cmds/cmd_XXX.yaml`: `pending`, `in_progress`, `done`, `cancelled`
 - `queue/tasks/ashigaruN.yaml`: `assigned`, `blocked`, `done`, `failed`
 - `queue/tasks/pending.yaml`: `pending_blocked`
 - `queue/ntfy_inbox.yaml`: `pending`, `processed`
 
 Do NOT invent new status values without updating this section.
 
-### Command Queue: `queue/shogun_to_karo.yaml`
+### Command Queue: `queue/cmds/cmd_XXX.yaml` (per-cmd files)
 
 Meanings and allowed/forbidden actions (short):
 
@@ -143,7 +143,7 @@ No agent may assume a nudge will tell them what to do. **File state is ground tr
 
 ### Karo: On Every Wakeup (including post-compact) — v4.0
 
-1. **Read cmd queue** `queue/shogun_to_karo.yaml` → find `in_progress` / `pending` cmds
+1. **Read cmd queue** `queue/cmds/*.yaml` → find `in_progress` / `pending` cmd files
 2. **Check phases**: 現在の cmd の phases を読み、未完了フェーズを特定
 3. **Scan task YAMLs** `queue/tasks/ashigaru*.yaml` → 各足軽の status 確認（空き検出）
 4. **Dispatch**: 現在フェーズの未発令 subtask を空き足軽に割当

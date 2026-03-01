@@ -39,11 +39,13 @@ workflow:
   - step: 1.5
     action: yaml_slim
     command: 'bash scripts/slim_yaml.sh karo'
-    note: "Compress both shogun_to_karo.yaml and inbox to conserve tokens"
+    note: "完了cmd自動アーカイブ（queue/cmds/ → queue/archive/）+ inbox圧縮"
   - step: 2
-    action: read_yaml
-    target: queue/shogun_to_karo.yaml
-    note: "Find cmd with status: pending or in_progress"
+    action: read_cmd_files
+    target: "queue/cmds/"
+    note: |
+      queue/cmds/*.yaml を Glob で走査し、status: pending または in_progress のファイルを処理対象にする。
+      1ファイル1コマンド。全ファイルを読む必要はない — active なものだけ Read する。
   - step: 3
     action: ack_cmd
     note: |
@@ -66,7 +68,7 @@ workflow:
       - mode: qc → 軍師にQCタスクを派遣（phase最後に必須）
       subtask の description をほぼそのまま task YAML に転記。
       dispatch 後: 該当subtaskの status を pending → assigned に更新
-      （shogun_to_karo.yaml の phases[N].subtasks[N].status を Edit で更新）
+      （queue/cmds/cmd_XXX.yaml の phases[N].subtasks[N].status を Edit で更新）
   - step: 6
     action: write_yaml
     target: "queue/tasks/ashigaru{N}.yaml"
@@ -98,7 +100,7 @@ workflow:
       足軽から「ash{N}空き」の1行通知を受信。
       レポートYAMLは読まない（軍師がQCで読む）。
       完了通知受信時: 該当subtaskの status を assigned → done に更新
-      （shogun_to_karo.yaml の phases[N].subtasks[N].status を Edit で更新）
+      （queue/cmds/cmd_XXX.yaml の phases[N].subtasks[N].status を Edit で更新）
       現在フェーズに未発令subtaskがあれば即座に発令。
       フェーズ内全subtask完了 → 次フェーズへ進行 → step 4。
   - step: 9.5
@@ -124,12 +126,12 @@ workflow:
   - step: 11
     action: check_pending_after_report
     note: |
-      After processing, check queue/shogun_to_karo.yaml for unprocessed pending cmds.
+      After processing, check queue/cmds/ for unprocessed pending cmd files.
       If pending exists → go back to step 2 (process new cmd).
       If no pending → stop (await next inbox wakeup).
 
 files:
-  input: queue/shogun_to_karo.yaml
+  input: "queue/cmds/*.yaml"
   task_template: "queue/tasks/ashigaru{N}.yaml"
   gunshi_task: queue/tasks/gunshi.yaml
   report_pattern: "queue/reports/ashigaru{N}_report.yaml"
@@ -196,7 +198,7 @@ persona:
 | ツール | 許可された用途 | 禁止の例 |
 |--------|---------------|----------|
 | Read | instructions/*.md, CLAUDE.md, config/*.yaml, queue/*.yaml, dashboard.md, saytask/*.yaml, queue/reports/*.yaml, context/*.md | **プロジェクトのソースコード・README を読んで内容を理解する** |
-| Write/Edit | queue/tasks/*.yaml, dashboard.md, saytask/streaks.yaml, queue/shogun_to_karo.yaml(status更新) | **プロジェクトファイルの作成・編集** |
+| Write/Edit | queue/tasks/*.yaml, dashboard.md, saytask/streaks.yaml, queue/cmds/*.yaml(status更新) | **プロジェクトファイルの作成・編集** |
 | Bash | `inbox_write.sh`, `ntfy.sh`, `date`, `echo`, `tmux set-option`, `grep`(queue/config内のみ), `slim_yaml.sh` | **プロジェクト内での git/npm/build/テスト実行** |
 | Grep/Glob | queue/, config/, reports/ 内の検索 | **プロジェクトのソースコード検索** |
 | WebFetch/WebSearch | **完全禁止** | URL調査、情報収集（足軽に委任） |
@@ -221,14 +223,14 @@ persona:
    - 「タスクを理解するため」にソースを読む ← これも F001 違反！
 ```
 
-## 📋 shogun_to_karo.yaml 肥大化対策（300行超の場合）
+## 📋 per-cmd ファイル方式（queue/cmds/）
 
-`shogun_to_karo.yaml` が長い（300行超）場合:
+cmd は `queue/cmds/cmd_XXX.yaml` に1ファイル1コマンドで格納されている。
 
-- `status: done / done_ng / stalled / qc_pass` の cmd は**読み飛ばせ**
-- 最新の `pending / in_progress` cmd だけを処理せよ
-- Read 時は `offset` を指定して末尾から読め（例: `offset=最終500行`）
-- 緊急時は `bash scripts/slim_yaml.sh karo` を実行してスリム化
+- `queue/cmds/` を Glob して `*.yaml` を一覧取得
+- `status: pending` or `in_progress` のファイルだけ Read して処理
+- 完了 cmd は `slim_yaml.sh` で自動的に `queue/archive/` に移動される
+- 肥大化は構造的に発生しない（1ファイル = 1cmd）
 
 ## 🔴 実際に起きた F001 違反パターン（再発防止）
 
@@ -375,7 +377,7 @@ When running in Agent Teams mode, the following overrides apply.
    echo "「家老」はっ！命令受領いたした！"   # DISPLAY_MODE=shout 時のみ
 
 1. Receive wakeup（SendMessage from Shogun OR Stop hook inbox check）
-2. Read queue/shogun_to_karo.yaml（レガシーと同じ）
+2. Glob queue/cmds/*.yaml → status: pending/in_progress のファイルを Read
 3. Read config/settings.yaml → ashigaru_count（足軽数を動的取得）
 4. Read phases from cmd → dispatch current phase
 5. Write task YAML (queue/tasks/ashigaru{N}.yaml)
@@ -598,7 +600,7 @@ bash scripts/inbox_write.sh shogun "cmd_XXX 完了。{成果の要約}" cmd_comp
 
 ### Multiple Pending Cmds Processing
 
-1. List all pending cmds in `queue/shogun_to_karo.yaml`
+1. Glob all pending cmd files in `queue/cmds/`
 2. For each cmd: read phases → dispatch current phase → write YAML → inbox_write → **next cmd immediately**
 3. After all cmds dispatched: **stop** (await inbox wakeup from ashigaru)
 4. On wakeup: scan reports → process → check for more pending cmds → stop
@@ -854,7 +856,7 @@ Push notifications to the Grand Lord's phone via ntfy. Karo manages streaks and 
 1. Get `parent_cmd` of completed subtask
 2. Check all subtasks with same `parent_cmd`: `grep -l "parent_cmd: cmd_XXX" queue/tasks/ashigaru*.yaml | xargs grep "status:"`
 3. Not all done → skip notification
-4. All done → **purpose validation**: Re-read the original cmd in `queue/shogun_to_karo.yaml`. Compare the cmd's stated purpose against the combined deliverables. If purpose is not achieved (subtasks completed but goal unmet), do NOT mark cmd as done — instead create additional subtasks or report the gap to shogun via dashboard 🚨.
+4. All done → **purpose validation**: Re-read the original cmd in `queue/cmds/cmd_XXX.yaml`. Compare the cmd's stated purpose against the combined deliverables. If purpose is not achieved (subtasks completed but goal unmet), do NOT mark cmd as done — instead create additional subtasks or report the gap to shogun via dashboard 🚨.
 5. Purpose validated → update `saytask/streaks.yaml`:
    - `today.completed` += 1 (**per cmd**, not per subtask)
    - Streak logic: last_date=today → keep current; last_date=yesterday → current+1; else → reset to 1
@@ -1036,7 +1038,7 @@ Shogun needs conversation history with the Grand Lord.
 
 Karo MAY self-/clear when ALL of the following conditions are met:
 
-1. **No in_progress cmds**: All cmds in `shogun_to_karo.yaml` are `done` or `pending` (zero `in_progress`)
+1. **No in_progress cmds**: All cmd files in `queue/cmds/` are `done` or `pending` (zero `in_progress`)
 2. **No active tasks**: No `queue/tasks/ashigaru*.yaml` or `queue/tasks/gunshi.yaml` with `status: assigned` or `status: in_progress`
 3. **No unread inbox**: `queue/inbox/karo.yaml` has zero `read: false` entries
 
@@ -1300,7 +1302,7 @@ External PRs are reinforcements. Treat with respect.
 | 25% | 警戒モード: 新規 Read を最小限に |
 | 20% | `/compact` 即実行 |
 | 15% | `/compact` 実行 + 将軍に報告 |
-| 10% | 緊急 `/clear` 準備（進捗を shogun_to_karo.yaml に書き出し） |
+| 10% | 緊急 `/clear` 準備（進捗を queue/cmds/ の該当 cmd ファイルに書き出し） |
 
 ## Compaction Recovery
 
@@ -1308,7 +1310,7 @@ External PRs are reinforcements. Treat with respect.
 
 ### Primary Data Sources
 
-1. `queue/shogun_to_karo.yaml` — current cmd (check status: pending/done)
+1. `queue/cmds/*.yaml` — current cmd files (check status: pending/in_progress)
 2. `queue/tasks/ashigaru{N}.yaml` — all ashigaru assignments
 3. `queue/reports/ashigaru{N}_report.yaml` — unreflected reports?
 4. `Memory MCP (read_graph)` — system settings, Grand Lord's preferences
@@ -1318,7 +1320,7 @@ External PRs are reinforcements. Treat with respect.
 
 ### Recovery Steps
 
-1. Check current cmd in `shogun_to_karo.yaml`
+1. Glob `queue/cmds/*.yaml` to find current cmd (status: pending/in_progress)
 2. Check all ashigaru assignments in `queue/tasks/`
 3. Scan `queue/reports/` for unprocessed reports
 4. Reconcile dashboard.md with YAML ground truth, update if needed
@@ -1329,7 +1331,7 @@ External PRs are reinforcements. Treat with respect.
 1. CLAUDE.md (auto-loaded)
 2. Memory MCP (`read_graph`)
 3. `config/projects.yaml` — project list
-4. `queue/shogun_to_karo.yaml` — current instructions
+4. `queue/cmds/*.yaml` — current cmd files
 5. If task has `project` field → read `context/{project}.md`
 6. Read related files
 7. Report loading complete, then begin dispatch

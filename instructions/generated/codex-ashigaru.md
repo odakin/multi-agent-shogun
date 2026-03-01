@@ -87,7 +87,7 @@ Act without waiting for Karo's instruction:
 
 **On task completion** (in this order):
 1. Self-review deliverables (re-read your output)
-2. **Purpose validation**: Read `parent_cmd` in `queue/shogun_to_karo.yaml` and verify your deliverable actually achieves the cmd's stated purpose. If there's a gap between the cmd purpose and your output, note it in the report under `purpose_gap:`.
+2. **Purpose validation**: Read `parent_cmd` in `queue/cmds/cmd_XXX.yaml` and verify your deliverable actually achieves the cmd's stated purpose. If there's a gap between the cmd purpose and your output, note it in the report under `purpose_gap:`.
 3. Write report YAML
 4. Notify Karo via inbox_write
 5. **Check own inbox** (MANDATORY): Read `queue/inbox/ashigaru{N}.yaml`, process any `read: false` entries. This catches redo instructions that arrived during task execution. Skip = stuck idle until the next nudge escalation or task reassignment.
@@ -97,6 +97,7 @@ Act without waiting for Karo's instruction:
 - After modifying files → verify with Read
 - If project has tests → run related tests
 - If modifying instructions → check for contradictions
+- commit後は必ずpushまで行うこと。pushできなかった場合はレポートに理由を明記すること。
 
 **Anomaly handling:**
 - Context below 30% → write progress to report YAML, tell Karo "context running low"
@@ -263,7 +264,7 @@ The inbox_write guarantees persistence. inbox_watcher handles delivery.
 
 ```
 Lord: command
-  → Shogun(Opus): 分解 + phases設計 → shogun_to_karo.yaml(phases付き) → inbox_write karo
+  → Shogun(Opus): 分解 + phases設計 → queue/cmds/cmd_XXX.yaml → inbox_write karo
   → Karo(Haiku): 機械的配分 → task YAML → inbox_write ashigaru{N}
   → Ashigaru(Sonnet): execute → report YAML → inbox_write gunshi + karo("空き"のみ)
   → Gunshi(Opus): ★QC(mandatory)★ → PASS → dashboard更新
@@ -286,14 +287,14 @@ Lord: command
 Status is defined per YAML file type. **Keep it minimal. Simple is best.**
 
 Fixed status set (do not add casually):
-- `queue/shogun_to_karo.yaml`: `pending`, `in_progress`, `done`, `cancelled`
+- `queue/cmds/cmd_XXX.yaml`: `pending`, `in_progress`, `done`, `cancelled`
 - `queue/tasks/ashigaruN.yaml`: `assigned`, `blocked`, `done`, `failed`
 - `queue/tasks/pending.yaml`: `pending_blocked`
 - `queue/ntfy_inbox.yaml`: `pending`, `processed`
 
 Do NOT invent new status values without updating this section.
 
-### Command Queue: `queue/shogun_to_karo.yaml`
+### Command Queue: `queue/cmds/cmd_XXX.yaml` (per-cmd files)
 
 Meanings and allowed/forbidden actions (short):
 
@@ -402,7 +403,7 @@ No agent may assume a nudge will tell them what to do. **File state is ground tr
 
 ### Karo: On Every Wakeup (including post-compact) — v4.0
 
-1. **Read cmd queue** `queue/shogun_to_karo.yaml` → find `in_progress` / `pending` cmds
+1. **Read cmd queue** `queue/cmds/*.yaml` → find `in_progress` / `pending` cmd files
 2. **Check phases**: 現在の cmd の phases を読み、未完了フェーズを特定
 3. **Scan task YAMLs** `queue/tasks/ashigaru*.yaml` → 各足軽の status 確認（空き検出）
 4. **Dispatch**: 現在フェーズの未発令 subtask を空き足軽に割当
