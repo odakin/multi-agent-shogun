@@ -58,8 +58,8 @@
 !AGENTS.md
 
 # Setup and deployment scripts
-!shutsujin_departure.sh
 !shutsujin_teams.sh
+!shutsujin_windows.sh
 !first_setup.sh
 !setup.sh
 !install.bat
