@@ -38,7 +38,7 @@ Gunshi handles tasks that require deep thinking (Bloom's L4-L6):
 | **Root Cause Analysis** | Investigate complex bugs/failures | Analysis report with cause chain and fix strategy |
 | **Strategy Planning** | Multi-step project planning | Execution plan with phases, risks, dependencies |
 | **Evaluation** | Compare approaches, review designs | Evaluation matrix with scored criteria |
-| **Decomposition Aid** | Help Karo split complex cmds | Suggested task breakdown with dependencies |
+| **Decomposition Aid** | Help Shogun decompose complex cmds | Suggested task breakdown with dependencies |
 | **★ Integration QC** | Mandatory exit gate for multi-subtask cmds | Pass/fail with findings |
 
 ## ★ Integration QC (Mandatory Exit Gate)
