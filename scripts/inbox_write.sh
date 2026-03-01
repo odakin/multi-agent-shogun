@@ -106,10 +106,13 @@ except Exception as e:
 
             [ -z "$target_pane" ] && return 0
 
-            # Simple idle check: only nudge if agent prompt (❯) is visible
-            local pane_tail
-            pane_tail=$(timeout 2 tmux capture-pane -t "$target_pane" -p 2>/dev/null | tail -5 || true)
-            if ! echo "$pane_tail" | grep -q "❯"; then
+            # Busy check: skip nudge only if agent is actively processing.
+            # Uses busy-pattern detection (not idle-pattern) because Claude Code
+            # renders multiple status lines below ❯ (permissions, context %, etc.)
+            # making tail-N unreliable for finding the prompt.
+            local pane_content
+            pane_content=$(timeout 2 tmux capture-pane -t "$target_pane" -p 2>/dev/null || true)
+            if echo "$pane_content" | grep -qE "thinking|thought for|esc to interrupt"; then
                 return 0  # Agent is busy; Stop hook or inbox_watcher will deliver
             fi
 
