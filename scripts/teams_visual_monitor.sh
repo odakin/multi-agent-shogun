@@ -32,6 +32,7 @@ BORDER_APPLIED=false
 # /clear recovery settings
 UNRESPONSIVE_THRESHOLD=240   # 4分間無反応で /clear 送信
 CLEAR_COOLDOWN=300           # /clear は5分に1回まで
+STALE_TASK_THRESHOLD=600     # 10分でタスク滞留 ⏰ 表示
 
 # claude-swarm tmux サーバー検出用
 TMUX_SOCKET=""               # -L オプションの値（空なら デフォルトサーバー）
@@ -473,15 +474,106 @@ except:
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 全スタイル済みペインの @current_task を task YAML から定期更新
+# ⏰ 滞留検知（STALE_TASK_THRESHOLD 超過）と 📬 idle+inbox未読検知を統合
 # ═══════════════════════════════════════════════════════════════════════════════
 update_current_tasks() {
-    local pane_id agent_name task_id_val
+    local pane_id agent_name
     for pane_id in "${!STYLED_PANES[@]}"; do
         agent_name="${STYLED_PANES[$pane_id]}"
         [ -z "$agent_name" ] || [ "$agent_name" = "..." ] && continue
-        task_id_val=$(get_task_id_from_yaml "$agent_name")
-        _tmux set-option -p -t "$pane_id" @current_task "$task_id_val" 2>/dev/null
+
+        # task YAML から task_id を取得（⏰滞留チェック付き）
+        local task_yaml="$SCRIPT_DIR/queue/tasks/${agent_name}.yaml"
+        local display_val=""
+        if [ -f "$task_yaml" ]; then
+            display_val=$("$SCRIPT_DIR/.venv/bin/python3" -c "
+import yaml, datetime
+try:
+    with open('$task_yaml') as f:
+        data = yaml.safe_load(f) or {}
+    task = data.get('task', {}) or {}
+    status = task.get('status', '')
+    if status in ('assigned', 'in_progress', 'pending'):
+        tid = (task.get('task_id', '') or '')[:15]
+        ts_str = task.get('timestamp', '') or ''
+        prefix = ''
+        if ts_str and tid:
+            try:
+                ts = datetime.datetime.fromisoformat(ts_str)
+                age = (datetime.datetime.now() - ts.replace(tzinfo=None)).total_seconds()
+                if age > $STALE_TASK_THRESHOLD:
+                    prefix = chr(0x23f0)
+            except Exception:
+                pass
+        print(prefix + tid)
+except Exception:
+    pass
+" 2>/dev/null || echo "")
+        fi
+
+        # idle + inbox未読チェック（📬）— 将軍・家老は対象外
+        local mailbox=""
+        if [[ "$agent_name" != "shogun" && "$agent_name" != "team-lead" && "$agent_name" != "karo" ]]; then
+            local inbox_file="$SCRIPT_DIR/queue/inbox/${agent_name}.yaml"
+            if [ -f "$inbox_file" ]; then
+                local unread
+                unread=$(grep -c "read: false" "$inbox_file" 2>/dev/null || echo "0")
+                if [ "$unread" -gt 0 ]; then
+                    local is_busy=false
+                    if type agent_is_busy_check &>/dev/null; then
+                        agent_is_busy_check "$pane_id" 2>/dev/null && is_busy=true
+                    fi
+                    [ "$is_busy" = "false" ] && mailbox=" 📬"
+                fi
+            fi
+        fi
+
+        _tmux set-option -p -t "$pane_id" @current_task "${display_val}${mailbox}" 2>/dev/null
     done
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# idle + inbox未読 自動 re-nudge
+# idle（プロンプト待ち）かつ inbox に未読がある足軽/軍師に inboxN を送信。
+# 60秒間隔制限で連打防止。表示更新は update_current_tasks() が担当。
+# 対象: 足軽1-7 + 軍師（家老は将軍が直接監視するため除外）
+# ═══════════════════════════════════════════════════════════════════════════════
+check_idle_inbox_unread() {
+    local session="$1"
+    local now
+    now=$(date +%s)
+
+    local pane_list
+    pane_list=$(_tmux list-panes -s -t "$session" -F '#{pane_id} #{@agent_id}' 2>/dev/null)
+
+    while IFS=' ' read -r pane_id agent_id; do
+        [ -z "$pane_id" ] && continue
+        [ -z "$agent_id" ] || [ "$agent_id" = "..." ] && continue
+        # 将軍・家老はスキップ
+        [[ "$agent_id" == "shogun" || "$agent_id" == "team-lead" || "$agent_id" == "karo" ]] && continue
+
+        # inbox未読件数を確認
+        local inbox_file="$SCRIPT_DIR/queue/inbox/${agent_id}.yaml"
+        [ -f "$inbox_file" ] || continue
+        local unread
+        unread=$(grep -c "read: false" "$inbox_file" 2>/dev/null || echo "0")
+        [ "$unread" -gt 0 ] || continue
+
+        # idle 判定（busy なら re-nudge しない）
+        if type agent_is_busy_check &>/dev/null; then
+            agent_is_busy_check "$pane_id" 2>/dev/null && continue
+        fi
+
+        # re-nudge (60秒間隔制限)
+        local last_nudge="${LAST_RENUDGE_TS[$agent_id]:-0}"
+        if [ "$((now - last_nudge))" -ge 60 ]; then
+            log "IDLE-INBOX: $agent_id ($pane_id) — idle+unread(${unread}件) 検出、re-nudge送信"
+            _tmux send-keys -t "$pane_id" "inbox${unread}" 2>/dev/null
+            sleep 0.3
+            _tmux send-keys -t "$pane_id" Enter 2>/dev/null
+            LAST_RENUDGE_TS[$agent_id]=$now
+        fi
+    done <<< "$pane_list"
 }
 
 declare -A PANE_PERMISSION_FIRST_SEEN
@@ -555,6 +647,7 @@ check_permission_deadlock() {
 # ═══════════════════════════════════════════════════════════════════════════════
 declare -A PANE_LAST_ACTIVITY
 declare -A PANE_LAST_CLEAR
+declare -A LAST_RENUDGE_TS
 
 check_unresponsive_panes() {
     local session="$1"
@@ -797,6 +890,7 @@ RECOVERY_CHECK_COUNTER=0
 DEADLOCK_CHECK_COUNTER=0
 TASK_UPDATE_COUNTER=0
 LORD_PENDING_COUNTER=0
+IDLE_INBOX_CHECK_COUNTER=0
 
 # テストモード: __TEAMS_MONITOR_TESTING__=1 の場合は関数定義のみロードしてループを起動しない
 [ "${__TEAMS_MONITOR_TESTING__:-}" = "1" ] && return 0 2>/dev/null || true
@@ -908,10 +1002,18 @@ while true; do
     fi
 
     # @current_task を task YAML から定期更新（5サイクルごと = 約15秒ごと）
+    # ⏰ 滞留検知 + 📬 idle+inbox未読検知を含む
     TASK_UPDATE_COUNTER=$((TASK_UPDATE_COUNTER + 1))
     if [ "$TASK_UPDATE_COUNTER" -ge 5 ]; then
         update_current_tasks
         TASK_UPDATE_COUNTER=0
+    fi
+
+    # idle + inbox未読 自動 re-nudge（10サイクルごと = 約30秒ごと）
+    IDLE_INBOX_CHECK_COUNTER=$((IDLE_INBOX_CHECK_COUNTER + 1))
+    if [ "$IDLE_INBOX_CHECK_COUNTER" -ge 10 ]; then
+        check_idle_inbox_unread "$local_session" 2>/dev/null || true
+        IDLE_INBOX_CHECK_COUNTER=0
     fi
 
     # 大殿裁可待ち表示更新（10サイクルごと = 約30秒ごと）
