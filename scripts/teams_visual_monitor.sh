@@ -184,25 +184,26 @@ get_model_for_agent() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# エージェント名に基づく背景色
+# エージェント名に基づくペインスタイル（fg + bg）
+# fg を明示指定しないとライトモードのデフォルト黒文字が暗背景で読めなくなる
 # ═══════════════════════════════════════════════════════════════════════════════
 get_bg_color_for_agent() {
     local agent="$1"
     case "$agent" in
         shogun|team-lead)
-            echo "bg=#002b36"    # Solarized Dark
+            echo "fg=#93a1a1,bg=#002b36"    # Solarized Dark
             ;;
         karo)
-            echo "bg=#2a1215"    # 暗赤（家老）
+            echo "fg=#d0d0d0,bg=#2a1215"    # 暗赤（家老）+ 明文字
             ;;
         gunshi)
-            echo "bg=#2a2a10"    # 暗金（軍師）
+            echo "fg=#d0d0d0,bg=#2a2a10"    # 暗金（軍師）+ 明文字
             ;;
         ashigaru*)
-            echo ""              # 足軽はデフォルト背景
+            echo "fg=#d0d0d0,bg=#1a1a2e"    # 暗紺（足軽）+ 明文字
             ;;
         *)
-            echo ""
+            echo "fg=#d0d0d0,bg=#1a1a2e"    # デフォルト暗背景 + 明文字
             ;;
     esac
 }
