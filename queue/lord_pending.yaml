@@ -4,7 +4,7 @@ pending_decisions:
     title: "家老Haiku化"
     summary: "条件付きGO。subtask status明示化が前提条件"
     reported_at: "2026-03-02T06:00:00"
-    status: awaiting_lord
+    status: approved
   - cmd_id: cmd_222
     title: "モニタ3段階リサイズ"
     summary: "推奨: BUSY/RECENT/IDLE 3段階。~25行変更"

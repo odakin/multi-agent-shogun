@@ -15,6 +15,8 @@ shell: zsh
 agents:
   ashigaru_count: 7   # 足軽の人数（1-9）。Karoがspawn時に参照。
   bloom_routing: manual  # off | manual | auto — タスク難度に基づくモデル動的選択
+  karo:
+    model: haiku
 
 # スキル設定
 skill:
