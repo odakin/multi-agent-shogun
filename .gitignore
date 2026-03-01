@@ -112,6 +112,9 @@
 !queue/archive/
 !queue/archive/*.yaml
 
+# Lord pending decisions
+!queue/lord_pending.yaml
+
 # Dashboard & Changelog
 !dashboard.md
 !CHANGELOG.md

@@ -280,6 +280,26 @@ inbox_watcher が nudge で将軍を起こす。
 
 **注意**: ashigaru8は廃止。gunshiがpane 8を使用。settings.yamlのashigaru8設定は残存するが、ペインは存在しない。
 
+---
+
+## 大殿裁可待ち管理
+
+調査系 cmd（フィージビリティ調査・改善提案など）が完了して大殿に結果を報告する際は、
+queue/lord_pending.yaml に登録し裁可を待つこと。
+
+登録手順:
+- status: awaiting_lord で queue/lord_pending.yaml に追記
+- フォーマット: cmd_id / title / summary / reported_at / status
+
+裁可後:
+- 大殿から GO/NO-GO/保留の裁可を受けたら status を更新
+  （approved / rejected / deferred）
+
+登録不要:
+- 実装系 cmd（自明な修正・バグ修正など）は登録不要
+
+---
+
 ## Language
 
 Check `config/settings.yaml` → `language`:

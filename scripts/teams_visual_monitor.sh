@@ -696,12 +696,70 @@ dynamic_resize_panes() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# 大殿裁可待ち表示 — lord_pending.yaml から awaiting_lord 案件を抽出・表示
+# tmux ステータスバー（画面最下部）に "═══ 裁可待ち ═══" セクションを表示。
+# 0件の場合はセクション自体を非表示にする。
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# awaiting_lord 案件の "cmd_id<TAB>title（summary）" 行を返す（0件なら空）
+get_lord_pending_items() {
+    local yaml="$SCRIPT_DIR/queue/lord_pending.yaml"
+    [ -f "$yaml" ] || return 0
+
+    awk '
+        /cmd_id:/  { cmd = $2; gsub(/["'"'"']/, "", cmd) }
+        /title:/   {
+            title = $0
+            sub(/^[[:space:]]*title:[[:space:]"'"'"']*/, "", title)
+            sub(/["'"'"'[:space:]]*$/, "", title)
+        }
+        /summary:/ {
+            summary = $0
+            sub(/^[[:space:]]*summary:[[:space:]"'"'"']*/, "", summary)
+            sub(/["'"'"'[:space:]]*$/, "", summary)
+        }
+        /status:.*awaiting_lord/ {
+            if (cmd != "") {
+                out = cmd "\t" title
+                if (summary != "") out = out "（" summary "）"
+                print out
+            }
+            cmd = ""; title = ""; summary = ""
+        }
+    ' "$yaml" 2>/dev/null
+}
+
+# 裁可待ちセクションを tmux ステータスバー（最下部）に更新
+# 0件なら status-right をクリアしてセクション非表示
+update_lord_pending_display() {
+    local session="$1"
+    local items
+    items=$(get_lord_pending_items)
+
+    if [ -z "$items" ]; then
+        _tmux set-option -t "$session" status-right "" 2>/dev/null
+        return
+    fi
+
+    local display_str="#[fg=yellow,bold]═══ 裁可待ち ═══"
+    while IFS=$'\t' read -r cmd_id rest; do
+        [ -z "$cmd_id" ] && continue
+        display_str+="#[fg=white,nobold] 📋 ${cmd_id} ${rest}"
+    done <<< "$items"
+
+    _tmux set-option -t "$session" status on 2>/dev/null
+    _tmux set-option -t "$session" status-right "$display_str" 2>/dev/null
+    log "lord_pending: $(echo "$items" | wc -l | tr -d ' ') item(s) displayed"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # メインループ
 # ═══════════════════════════════════════════════════════════════════════════════
 declare -A STYLED_PANES
 PREV_PANE_COUNT=0
 RECOVERY_CHECK_COUNTER=0
 DEADLOCK_CHECK_COUNTER=0
+LORD_PENDING_COUNTER=0
 
 while true; do
     sleep "$POLL_INTERVAL"
@@ -807,6 +865,13 @@ while true; do
     if [ "$RECOVERY_CHECK_COUNTER" -ge 10 ]; then
         check_unresponsive_panes "$local_session"
         RECOVERY_CHECK_COUNTER=0
+    fi
+
+    # 大殿裁可待ち表示更新（10サイクルごと = 約30秒ごと）
+    LORD_PENDING_COUNTER=$((LORD_PENDING_COUNTER + 1))
+    if [ "$LORD_PENDING_COUNTER" -ge 10 ]; then
+        update_lord_pending_display "$local_session" 2>/dev/null || true
+        LORD_PENDING_COUNTER=0
     fi
 
     PREV_PANE_COUNT=$pane_count
