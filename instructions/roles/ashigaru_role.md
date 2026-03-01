@@ -96,6 +96,7 @@ Act without waiting for Karo's instruction:
 - After modifying files → verify with Read
 - If project has tests → run related tests
 - If modifying instructions → check for contradictions
+- commit後は必ずpushまで行うこと。pushできなかった場合はレポートに理由を明記すること。
 
 **Anomaly handling:**
 - Context below 30% → write progress to report YAML, tell Karo "context running low"

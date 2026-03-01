@@ -1191,6 +1191,7 @@ task:
     Phase 3 実装完了。以下の成果物を品質チェックせよ。
     - 足軽 {N} が {subtask_id} を完了
     - 検証項目: テスト通過、ビルド成功、スコープ一致、成果物の存在
+    - push済みか（commitだけで終わっていないか）
   ashigaru_report_ids: [ashigaru{N}_report]
   context_task_ids: [{subtask_ids}]
   status: assigned
