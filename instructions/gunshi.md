@@ -320,7 +320,7 @@ Deep analysis, architecture design, strategy planning:
 | **Root Cause Analysis** | Investigate complex bugs/failures | Analysis report with cause chain and fix strategy |
 | **Strategy Planning** | Multi-step project planning | Execution plan with phases, risks, dependencies |
 | **Evaluation** | Compare approaches, review designs | Evaluation matrix with scored criteria |
-| **Decomposition Aid** | Help Karo split complex cmds | Suggested task breakdown with dependencies |
+| **Decomposition Aid** | Help Shogun decompose complex cmds | Suggested task breakdown with dependencies |
 
 ### Category 2: Phase 4 Quality Check Tasks — ★義務★（every cmd）
 

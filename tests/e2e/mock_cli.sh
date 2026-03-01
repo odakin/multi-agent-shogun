@@ -160,7 +160,7 @@ except:
     if echo "$msg_types" | grep -q "cmd_new"; then
         echo "[mock] cmd_new detected"
         if [ "$MOCK_AGENT_ID" = "karo" ]; then
-            karo_decompose_cmd
+            karo_dispatch_cmd
         fi
     fi
 
@@ -185,10 +185,10 @@ handle_clear() {
     show_prompt "$MOCK_CLI_TYPE"
 }
 
-# ─── Karo-specific: decompose cmd into subtasks ───
+# ─── Karo-specific: dispatch cmd as subtasks to ashigaru (v4.0) ───
 # When karo receives a cmd_new, it reads shogun_to_karo.yaml,
 # creates task YAMLs for ashigaru, and sends inbox notifications.
-karo_decompose_cmd() {
+karo_dispatch_cmd() {
     local cmd_file="$MOCK_PROJECT_ROOT/queue/shogun_to_karo.yaml"
     if [ ! -f "$cmd_file" ]; then
         echo "[mock/karo] No cmd file found"
@@ -202,7 +202,7 @@ karo_decompose_cmd() {
     cmd_id=$(yaml_read "$cmd_file" "id") || cmd_id=$(yaml_read "$cmd_file" "commands.0.id") || cmd_id="cmd_unknown"
     cmd_description=$(yaml_read "$cmd_file" "description") || cmd_description=$(yaml_read "$cmd_file" "commands.0.description") || cmd_description="Unknown task"
 
-    echo "[mock/karo] Decomposing cmd: $cmd_id"
+    echo "[mock/karo] Dispatching cmd: $cmd_id"
     sleep "$MOCK_PROCESSING_DELAY"
 
     # Create subtask for ashigaru1
@@ -214,7 +214,7 @@ task:
   parent_cmd: "$cmd_id"
   type: implementation
   description: |
-    Subtask decomposed from $cmd_id by karo mock.
+    Subtask dispatched from $cmd_id by karo mock (v4.0).
     Original: $cmd_description
   status: assigned
   timestamp: "$(date '+%Y-%m-%dT%H:%M:%S')"
@@ -291,9 +291,9 @@ while IFS= read -r input || true; do
             show_prompt "$MOCK_CLI_TYPE"
             ;;
         cmd_new*)
-            # Karo-specific: decompose cmd
+            # Karo-specific: dispatch cmd (v4.0: Shogun/Gunshi decompose, Karo dispatches)
             if [ "$MOCK_AGENT_ID" = "karo" ]; then
-                karo_decompose_cmd
+                karo_dispatch_cmd
             fi
             show_prompt "$MOCK_CLI_TYPE"
             ;;

@@ -26,7 +26,7 @@ Before assigning tasks, ask yourself these five questions:
 | # | Question | Consider |
 |---|----------|----------|
 | 壱 | **Purpose** | Read cmd's `purpose` and `acceptance_criteria`. These are the contract. Every subtask must trace back to at least one criterion. |
-| 弐 | **Decomposition** | How to split for maximum efficiency? Parallel possible? Dependencies? |
+| 弐 | **Dispatch Plan** | 将軍が phases で分解済み。機械的に配分せよ。Parallel? Dependencies? phase 内の並列化のみ家老が判断。 |
 | 参 | **Headcount** | How many ashigaru TRULY needed? Match count to independent tasks. See [Parallelization](#parallelization). |
 | 四 | **Perspective** | What persona/scenario is effective? What expertise needed? |
 | 伍 | **Risk** | RACE-001 risk? Ashigaru availability? Dependency ordering? |
@@ -99,7 +99,7 @@ auto-compact でワークフロー状態が失われることを防ぐ。**状�
 
 | Event | workflow_step | Example next_action |
 |-------|--------------|---------------------|
-| cmd ACK (pending→in_progress) | `ack` | "Decompose and dispatch subtasks" |
+| cmd ACK (pending→in_progress) | `ack` | "phases に従い機械的に配分" |
 | Subtasks dispatched | `dispatched` | "Wait for ashigaru reports" |
 | Report received (partial) | `collecting` | "N/M reports received, waiting for remaining" |
 | All reports received → QC dispatch | `qc_dispatched` | "Wait for Gunshi QC result" |

@@ -82,10 +82,10 @@ setup() {
 }
 
 # ═══════════════════════════════════════════════════════════════
-# E2E-001-B: Karo decomposes cmd into subtask for ashigaru
+# E2E-001-B: Karo dispatches cmd as subtask to ashigaru (v4.0)
 # ═══════════════════════════════════════════════════════════════
 
-@test "E2E-001-B: karo receives cmd, decomposes into ashigaru subtask" {
+@test "E2E-001-B: karo receives cmd, dispatches subtask to ashigaru" {
     # 1. Place cmd YAML for karo
     cp "$PROJECT_ROOT/tests/e2e/fixtures/cmd_basic.yaml" \
        "$E2E_QUEUE/queue/shogun_to_karo.yaml"
@@ -94,7 +94,7 @@ setup() {
     bash "$E2E_QUEUE/scripts/inbox_write.sh" "karo" \
         "cmd_test_001を発行した。" "cmd_new" "shogun"
 
-    # 3. Send nudge to karo — karo reads inbox, sees cmd_new, decomposes
+    # 3. Send nudge to karo — karo reads inbox, sees cmd_new, dispatches
     local karo_pane
     karo_pane=$(pane_target 0)
     send_to_pane "$karo_pane" "inbox1"
@@ -126,7 +126,7 @@ setup() {
     karo_pane=$(pane_target 0)
     ashigaru1_pane=$(pane_target 1)
 
-    # 2. Trigger karo to decompose (inbox1 → process_inbox detects cmd_new → decompose)
+    # 2. Trigger karo to dispatch (inbox1 → process_inbox detects cmd_new → dispatch)
     bash "$E2E_QUEUE/scripts/inbox_write.sh" "karo" \
         "cmd_test_001を発行した。" "cmd_new" "shogun"
     send_to_pane "$karo_pane" "inbox1"

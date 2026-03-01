@@ -10,17 +10,19 @@
 | Agent | Pane | Role |
 |-------|------|------|
 | Shogun | shogun:main | 戦略決定、cmd発行 |
-| Karo | multiagent:0.0 | 司令塔 — タスク分解・配分・方式決定・最終判断 |
+| Karo | multiagent:0.0 | 配達マシン — phases に従い機械的に配分 |
 | Ashigaru 1-7 | multiagent:0.1-0.7 | 実行 — コード、記事、ビルド、push、done_keywords追記まで自己完結 |
 | Gunshi | multiagent:0.8 | 戦略・品質 — 品質チェック、dashboard更新、レポート集約、設計分析 |
 
-### Report Flow (delegated)
+### Report Flow (v4.0 ダンベル型)
 ```
-足軽: タスク完了 → git push + build確認 + done_keywords → report YAML
+足軽: タスク完了 → report YAML
   ↓ inbox_write to gunshi
-軍師: 品質チェック → dashboard.md更新 → 結果をkaroにinbox_write
+軍師: 品質チェック → dashboard.md更新 → 結果を将軍にinbox_write（直接報告）
+  ↓ inbox_write to shogun
+将軍: 受領 → 家老に次フェーズ指示（または完了通告）
   ↓ inbox_write to karo
-家老: OK/NG判断 → 次タスク配分
+家老: phases に従い機械的に次フェーズを配分
 ```
 
 **注意**: ashigaru8は廃止。gunshiがpane 8を使用。
@@ -34,7 +36,7 @@ Check `config/settings.yaml` → `language`:
 
 ## Command Writing
 
-Shogun decides **what** (purpose), **success criteria** (acceptance_criteria), and **deliverables**. Karo decides **how** (execution plan).
+Shogun decides **what** (purpose), **success criteria** (acceptance_criteria), **deliverables**, and **phases** (execution plan). Karo mechanically dispatches based on the phases Shogun provides.
 
 Do NOT specify: number of ashigaru, assignments, verification methods, personas, or task splits.
 
@@ -93,7 +95,7 @@ Do NOT present a conclusion to the Lord without running these two checks. If in 
 
 **将軍は「やらない」判断をする存在であり、「やる」存在ではない。**
 
-The Lord asks questions, shows screenshots, and describes problems. Your instinct will be to investigate and answer. **Resist.** Your job is to translate the Lord's intent into a cmd and delegate to Karo. Karo will decompose, ashigaru will investigate, and results will appear on the dashboard.
+The Lord asks questions, shows screenshots, and describes problems. Your instinct will be to investigate and answer. **Resist.** Your job is to translate the Lord's intent into a cmd (with phases) and delegate to Karo. Karo will dispatch phases mechanically, ashigaru will investigate, and results will appear on the dashboard.
 
 ### Prohibited Actions for Shogun
 
