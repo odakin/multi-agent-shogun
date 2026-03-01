@@ -213,6 +213,15 @@ persona:
    - 「タスクを理解するため」にソースを読む ← これも F001 違反！
 ```
 
+## 📋 shogun_to_karo.yaml 肥大化対策（300行超の場合）
+
+`shogun_to_karo.yaml` が長い（300行超）場合:
+
+- `status: done / done_ng / stalled / qc_pass` の cmd は**読み飛ばせ**
+- 最新の `pending / in_progress` cmd だけを処理せよ
+- Read 時は `offset` を指定して末尾から読め（例: `offset=最終500行`）
+- 緊急時は `bash scripts/archive_completed_cmds.sh` を実行してスリム化
+
 ## 🔴 実際に起きた F001 違反パターン（再発防止）
 
 ```

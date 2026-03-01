@@ -348,6 +348,14 @@ Check `config/settings.yaml` → `language`:
 
 **原則: 将軍は「何を・どの順で」を決める。「誰に」は家老が決める。**
 
+### 📋 新 cmd 書き込み前の手順（YAML肥大化対策）
+
+新しい cmd を書き込む前に、以下を実行せよ:
+
+1. `bash scripts/archive_completed_cmds.sh --dry-run` でアーカイブ対象を確認
+2. `bash scripts/archive_completed_cmds.sh` で実行
+3. `shogun_to_karo.yaml` が **100行以下**になってから新 cmd を追記
+
 ### Required cmd fields — v4.0（phases 付き）
 
 ```yaml
