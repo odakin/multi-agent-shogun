@@ -108,6 +108,8 @@ STUCK_PATTERNS=(
     "Do you want to exit|n Enter|exit_confirmation"
     "Session ended|Enter|session_ended"
     "has been compacted.*continue|Enter|compaction_continue"
+    "Showing detailed transcript|Escape Escape|transcript_view"
+    "ctrl.o to toggle|Escape Escape|transcript_view_alt"
 )
 
 # agent_stuck_check <pane_target> [agent_id]

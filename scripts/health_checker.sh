@@ -77,6 +77,17 @@ send_nudge() {
         fi
     fi
 
+    # Transcript view detection: escape first, then nudge
+    local pane_tail
+    pane_tail=$(timeout 2 tmux capture-pane -t "$pane" -p 2>/dev/null | tail -15)
+    if echo "$pane_tail" | grep -qiE "Showing detailed transcript|ctrl.o to toggle"; then
+        log "TRANSCRIPT-ESCAPE $agent: exiting transcript view before nudge"
+        timeout 2 tmux send-keys -t "$pane" Escape 2>/dev/null || return 0
+        sleep 0.5
+        timeout 2 tmux send-keys -t "$pane" Escape 2>/dev/null || return 0
+        sleep 1
+    fi
+
     # Send nudge text + Enter (separated for Codex TUI compatibility)
     timeout 5 tmux send-keys -t "$pane" "$message" 2>/dev/null || return 0
     sleep 0.3

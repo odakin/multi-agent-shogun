@@ -1,13 +1,13 @@
 ---
 name: shogun-readme-sync
-description: README.md（英語）とREADME_ja.md（日本語）の同期を確認・実行するスキル。README変更時に両言語版を必ず同時更新するために使用。「README更新」「README同期」「readme sync」で起動。
+description: README.md（日本語・デフォルト）とREADME_en.md（英語）の同期を確認・実行するスキル。README変更時に両言語版を必ず同時更新するために使用。「README更新」「README同期」「readme sync」で起動。
 ---
 
 # /shogun-readme-sync - README日英同期
 
 ## Overview
 
-README.md（英語）とREADME_ja.md（日本語）の差分を検出し、不足セクションの追加・番号ズレの修正を行う。
+README.md（日本語・デフォルト）とREADME_en.md（英語）の差分を検出し、不足セクションの追加・番号ズレの修正を行う。
 
 README変更時のワークフロー:
 1. 差分検出（どちらが新しいか自動判定）
@@ -30,8 +30,8 @@ README変更時のワークフロー:
 
 ```bash
 # 両ファイルを読む
-Read README.md
-Read README_ja.md
+Read README.md        # 日本語（デフォルト）
+Read README_en.md     # English
 ```
 
 **チェック項目:**
@@ -97,7 +97,7 @@ JA → EN で不足:
 
 ## Guidelines
 
-- **ENが正**: 新機能は基本的にENに先に書かれる。JA側を追従させる
+- **JAが正**: README.md（日本語）がデフォルト。新機能はJAに先に書かれる。EN側を追従させる
 - **JA独自表現は維持**: 日本語版の「戦国エコー」等の独自表現はそのまま残す
 - **一方通行にしない**: ENにしかない変更もJAにしかない変更も両方検出する
 - **セクション番号は自動繰り上げ**: 中間にセクションを挿入した場合、後続の番号を全て繰り上げる

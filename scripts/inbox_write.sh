@@ -116,6 +116,15 @@ except Exception as e:
                 return 0  # Agent is busy; Stop hook or inbox_watcher will deliver
             fi
 
+            # Transcript view detection: agent is stuck showing detailed transcript.
+            # Nudge text would be silently lost in this view — must Escape first.
+            if echo "$pane_content" | grep -qiE "Showing detailed transcript|ctrl.o to toggle"; then
+                timeout 2 tmux send-keys -t "$target_pane" Escape 2>/dev/null || true
+                sleep 0.5
+                timeout 2 tmux send-keys -t "$target_pane" Escape 2>/dev/null || true
+                sleep 1  # Wait for prompt to appear after exiting transcript view
+            fi
+
             # Count unread messages for nudge text
             local unread
             unread=$("$SCRIPT_DIR/.venv/bin/python3" -c "
