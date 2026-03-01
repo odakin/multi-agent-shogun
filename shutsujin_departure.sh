@@ -915,6 +915,14 @@ NINJA_EOF
 
     log_success "  └─ $((_ASHIGARU_COUNT + 3))エージェント分のinbox_watcher起動完了（将軍+家老+足軽${_ASHIGARU_COUNT}+軍師）"
 
+    # health_checker: 全エージェント巡回ヘルスチェック（stuck検出 + 未読リトライ + compact復旧）
+    pkill -f "health_checker.sh" 2>/dev/null || true
+    sleep 0.5
+    nohup bash "$SCRIPT_DIR/scripts/health_checker.sh" 30 \
+        >> "$SCRIPT_DIR/logs/health_checker.log" 2>&1 &
+    disown
+    log_success "  └─ health_checker 起動（30秒巡回）"
+
     # STEP 6.7 は廃止 — CLAUDE.md Session Start (step 1: tmux agent_id) で各自が自律的に
     # 自分のinstructions/*.mdを読み込む。検証済み (2026-02-08)。
     log_info "📜 指示書読み込みは各エージェントが自律実行（CLAUDE.md Session Start）"
