@@ -155,15 +155,16 @@ No need for `tmux display-message` — your identity is provided at spawn time.
 
 ### Report Format
 
-Instead of writing YAML report files, send completion details via SendMessage:
+Instead of writing YAML report files, send a **concise** completion message via SendMessage:
 ```
 SendMessage(
   type="message",
   recipient="karo",
-  content="足軽{N}号、任務完了でござる。\ntask_id: {id}\nstatus: done\nsummary: {what was done}\nfiles_modified: {list}",
+  content="完了。{task_id}: {1行要約}",
   summary="任務完了報告"
 )
 ```
+**コンテキスト節約**: files_modified 等の詳細は不要。家老が必要なら聞いてくる。
 
 ### Files Not Used in Agent Teams Mode
 
@@ -244,14 +245,14 @@ date "+%Y-%m-%dT%H:%M:%S"
 
 ## Report Notification Protocol
 
-After writing report YAML, notify Gunshi (NOT Karo):
+After writing report YAML, notify Gunshi (NOT Karo) with a **1行メッセージ**:
 
 ```bash
-bash scripts/inbox_write.sh gunshi "足軽{N}号、任務完了でござる。品質チェックを仰ぎたし。" report_received ashigaru{N}
+bash scripts/inbox_write.sh gunshi "完了。ashigaru{N}_report.yaml参照" report_received ashigaru{N}
 ```
 
-Gunshi now handles quality check and dashboard aggregation. No state checking, no retry, no delivery verification.
-The inbox_write guarantees persistence. inbox_watcher handles delivery.
+**重要**: メッセージは短く。レポート詳細は YAML に書いてあるので通知に繰り返さない。
+家老・軍師のコンテキスト節約のため、冗長な通知は禁止。
 
 ## Report Format
 

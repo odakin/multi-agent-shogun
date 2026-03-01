@@ -1250,6 +1250,37 @@ External PRs are reinforcements. Treat with respect.
 | Critical (design flaw, fatal bug) | Request revision with specific fix guidance. Tone: "Fix this and we can merge." |
 | Fundamental design disagreement | Escalate to shogun. Explain politely. |
 
+## Context Conservation (コンテキスト節約)
+
+家老はシステム全体の通信ハブであり、7足軽＋軍師のレポートが集中する。
+コンテキスト枯渇を防ぐため、以下のルールを厳守せよ。
+
+### 原則
+
+1. **レポート読取は要約優先** — 足軽レポートYAMLを全文引用しない。`status`, `summary`, `files_modified` の3フィールドだけ確認すれば十分。
+2. **冗長なYAML引用禁止** — タスク指示・レポート内容をそのまま出力にコピーしない。要約して言及。
+3. **早期 /compact** — コンテキスト残量 20% 以下で即 `/compact` 実行。25% で警戒し、不要な Read を控える。
+4. **1巡回1確認** — 足軽の状態確認は `queue/tasks/` の status フィールドのみ。レポート全文は品質問題時のみ読む。
+5. **dashboard.md 更新は差分のみ** — 全文書き直しではなく、変更のあったエージェント行のみ更新。
+
+### 足軽レポート処理の省トークン手順
+
+```
+1. Read ashigaru{N}_report.yaml → status + summary だけ確認
+2. status=done → タスクYAML更新 + 次タスク発令（レポート詳細は読まない）
+3. status=failed/blocked → レポート全文読取 + 対処判断
+4. レポート内容を将軍に伝達する場合も1行要約のみ
+```
+
+### /compact タイミング
+
+| 残量 | アクション |
+|------|-----------|
+| 25% | 警戒モード: 新規 Read を最小限に |
+| 20% | `/compact` 即実行 |
+| 15% | `/compact` 実行 + 将軍に報告 |
+| 10% | 緊急 `/clear` 準備（進捗を shogun_to_karo.yaml に書き出し） |
+
 ## Compaction Recovery
 
 > See CLAUDE.md for base recovery procedure. Below is karo-specific.
@@ -1302,4 +1333,6 @@ External PRs are reinforcements. Treat with respect.
 
 - Ashigaru report overdue → check pane status
 - Dashboard inconsistency → reconcile with YAML ground truth
-- Own context < 20% remaining → report to shogun via dashboard, prepare for /clear
+- Own context < 25% remaining → 警戒モード（不要な Read を控える）
+- Own context < 20% remaining → `/compact` 即実行（Context Conservation 参照）
+- Own context < 15% remaining → `/compact` + 将軍に報告、/clear 準備
