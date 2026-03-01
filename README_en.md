@@ -17,6 +17,9 @@ Run 10 AI coding agents in parallel — **Claude Code, OpenAI Codex, GitHub Copi
 
 </div>
 
+> 📌 This is a personal fork of [yohey-w/multi-agent-shogun](https://github.com/yohey-w/multi-agent-shogun).
+> Core design and implementation by **yohey-w**. This fork adds experimental improvements discovered during daily operation (health_checker, post-compact recovery, etc.).
+
 <p align="center">
   <img src="images/screenshots/hero/latest-translucent-20260210-190453.png" alt="Latest translucent command session in the Shogun pane" width="940">
 </p>
@@ -1189,7 +1192,8 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## Credits
 
-Based on [Claude-Code-Communication](https://github.com/Akira-Papa/Claude-Code-Communication) by Akira-Papa.
+- **[yohey-w/multi-agent-shogun](https://github.com/yohey-w/multi-agent-shogun)** — Original design and implementation. This repository is a fork.
+- **[Akira-Papa/Claude-Code-Communication](https://github.com/Akira-Papa/Claude-Code-Communication)** — Foundation for inter-agent communication.
 
 ## License
 

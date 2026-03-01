@@ -17,6 +17,9 @@
 
 </div>
 
+> 📌 このリポジトリは [yohey-w/multi-agent-shogun](https://github.com/yohey-w/multi-agent-shogun) の個人フォークです。
+> コアの設計・実装は **yohey-w** によるものです。このフォークでは運用中に発見した改善（health_checker、post-compact recovery 等）を試験的に追加しています。
+
 <p align="center">
   <img src="images/screenshots/hero/latest-translucent-20260210-190453.png" alt="将軍ペインでの最新半透過セッションキャプチャ" width="940">
 </p>
@@ -1189,7 +1192,8 @@ IssueとPull Requestを歓迎します。
 
 ## 🙏 クレジット
 
-Akira-Papaの[Claude-Code-Communication](https://github.com/Akira-Papa/Claude-Code-Communication)をベースにしています。
+- **[yohey-w/multi-agent-shogun](https://github.com/yohey-w/multi-agent-shogun)** — オリジナルの設計・実装。本リポジトリはそのフォークです。
+- **[Akira-Papa/Claude-Code-Communication](https://github.com/Akira-Papa/Claude-Code-Communication)** — エージェント間通信の原型。
 
 ## 📄 ライセンス
 
