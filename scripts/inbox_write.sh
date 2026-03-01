@@ -89,7 +89,46 @@ except Exception as e:
 " || exit 1
 
     ) 200>"$LOCKFILE"; then
-        # Success
+        # Success — now send best-effort nudge to wake the target agent
+        # This ensures delivery even when inbox_watcher is dead.
+        # inbox_watcher serves as escalation backup (re-nudge if still unread).
+        _send_nudge() {
+            # Find target pane by @agent_id tmux user variable
+            local target_pane=""
+            while IFS= read -r _line; do
+                local _pid="${_line%% *}"
+                local _aid="${_line#* }"
+                if [ "$_aid" = "$TARGET" ]; then
+                    target_pane="$_pid"
+                    break
+                fi
+            done < <(tmux list-panes -a -F '#{pane_id} #{@agent_id}' 2>/dev/null)
+
+            [ -z "$target_pane" ] && return 0
+
+            # Simple idle check: only nudge if agent prompt (❯) is visible
+            local pane_tail
+            pane_tail=$(timeout 2 tmux capture-pane -t "$target_pane" -p 2>/dev/null | tail -5 || true)
+            if ! echo "$pane_tail" | grep -q "❯"; then
+                return 0  # Agent is busy; Stop hook or inbox_watcher will deliver
+            fi
+
+            # Count unread messages for nudge text
+            local unread
+            unread=$("$SCRIPT_DIR/.venv/bin/python3" -c "
+import yaml
+with open('$INBOX') as f:
+    data = yaml.safe_load(f) or {}
+msgs = data.get('messages', []) or []
+print(sum(1 for m in msgs if not m.get('read', False)))
+" 2>/dev/null || echo "1")
+
+            # Send nudge: text + Enter (separated to avoid Codex TUI issues)
+            timeout 5 tmux send-keys -t "$target_pane" "inbox${unread}" 2>/dev/null || true
+            sleep 0.3
+            timeout 5 tmux send-keys -t "$target_pane" Enter 2>/dev/null || true
+        }
+        _send_nudge 2>/dev/null || true  # Never fail the script
         exit 0
     else
         # Lock timeout or error
