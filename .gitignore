@@ -106,6 +106,12 @@
 !scripts/teams_visual_monitor.sh
 !scripts/health_checker.sh
 !scripts/battle_monitor.sh
+!scripts/archive_completed_cmds.sh
+
+# Queue archive (completed cmd history)
+!queue/
+!queue/archive/
+!queue/archive/*.yaml
 
 # Dashboard & Changelog
 !dashboard.md

@@ -1,0 +1,45 @@
+messages:
+- content: s223c完了。reports/ashigaru5_report.yaml確認されたし。
+  from: ashigaru5
+  id: msg_20260301_222311_d6d82f2c
+  read: true
+  timestamp: '2026-03-01T22:23:11'
+  type: report_received
+- content: 's225a完了。reports/ashigaru1_report.yaml確認されたし。archive_completed_cmds.sh作成済み。dry-run:
+    16 cmd archive対象、10 cmd keep。'
+  from: ashigaru1
+  id: msg_20260301_222412_eee28f2a
+  read: true
+  timestamp: '2026-03-01T22:24:12'
+  type: report_received
+- content: s225b完了。reports/ashigaru2_report.yaml確認されたし。
+  from: ashigaru2
+  id: msg_20260301_222417_1c2b134a
+  read: true
+  timestamp: '2026-03-01T22:24:17'
+  type: report_received
+- content: ashigaru1、タスク完了。report確認されたし。
+  from: ashigaru1
+  id: msg_20260301_222425_688fb438
+  read: true
+  timestamp: '2026-03-01T22:24:25'
+  type: report_completed
+- content: cmd_224/218 QC完了。reports/gunshi_report.yaml確認されたし。
+  from: gunshi
+  id: msg_20260301_222532_3601b933
+  read: true
+  timestamp: '2026-03-01T22:25:32'
+  type: report_received
+- content: cmd_226を書いた。slim_yaml.pyバグ修正。緊急・10行以内。cmd_225と同系統。空いてる足軽に即実行させよ。
+  from: shogun
+  id: msg_20260301_222546_973f1aed
+  read: true
+  timestamp: '2026-03-01T22:25:46'
+  type: cmd_new
+- content: 's225c完了。reports/ashigaru3_report.yaml確認されたし。アーカイブ16件実行・push成功(7b6180b)。caveat:
+    scripts/archive_completed_cmds.sh と queue/ は .gitignore whitelist 未登録のため git 管理外。対応要。'
+  from: ashigaru3
+  id: msg_20260301_222720_c7027e00
+  read: true
+  timestamp: '2026-03-01T22:27:20'
+  type: report_received

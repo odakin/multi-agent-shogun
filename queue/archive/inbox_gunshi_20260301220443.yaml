@@ -1,0 +1,7 @@
+messages:
+- content: cmd_220 QC タスク。queue/tasks/gunshi.yaml を読んで作業開始せよ。
+  from: karo
+  id: msg_20260301_220422_e0c239bf
+  read: true
+  timestamp: '2026-03-01T22:04:22'
+  type: task_assigned

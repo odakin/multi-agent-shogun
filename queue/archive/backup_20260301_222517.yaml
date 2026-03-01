@@ -1,0 +1,1231 @@
+- id: cmd_200
+  timestamp: "2026-02-28T14:00:00+09:00"
+  purpose: "ishida-tsutsumi-map の河川表示を3点修正し、1590年頃の利根川・荒川の流路を正確に表現する"
+  acceptance_criteria:
+    - "「旧本流（中川・綾瀬）」のラベルが「旧利根川本流（中川・綾瀬）」等、何の川の本流か明示されている"
+    - "「旧本流（中川・綾瀬）」の上流側が、群馬方面からの旧・利根川と接続する線で描画されている（既存と同じ色）"
+    - "「1590｜旧荒川（元荒川）」の上流側が、秩父方面からの旧・荒川と接続する線で描画されている（既存と同じ色）"
+    - "既存の他の河川表示が壊れていない"
+    - "ローカルで表示確認済み（ブラウザで地図が正常に描画される）"
+  command: |
+    リポジトリ: https://github.com/odakin/ishida-tsutsumi-map
+    ローカルパス: /Users/odakin/tmp/ishida-tsutsumi-map
+
+    3つの修正を行え:
+
+    1. 【minor】ラベル修正:
+       「旧本流（中川・綾瀬）」→ 何の川の旧本流かわかるように修正。
+       1590年当時これは利根川の本流だった。「旧利根川本流（中川・綾瀬）」等の表現に。
+
+    2. 【major】旧利根川の上流接続:
+       「旧本流（中川・綾瀬）」の上流側に、群馬方面からの旧・利根川との接続線を追加。
+       1590年頃、利根川は群馬から南下し、現在の中川・綾瀬川方面へ流れていた。
+       既存の「旧本流（中川・綾瀬）」と同じ色・スタイルで描画すること。
+
+    3. 【major】旧荒川の上流接続:
+       「1590｜旧荒川（元荒川）」の上流側に、秩父方面からの旧・荒川との接続線を追加。
+       1590年頃、荒川は秩父から東へ流れ、現在の元荒川方面へ流れていた。
+       既存の「1590｜旧荒川（元荒川）」と同じ色・スタイルで描画すること。
+
+    事前に既存のコードを読み、地図データの形式・座標系・色設定を把握してから作業すること。
+    歴史的な河川流路の参考: 利根川東遷事業以前の地図を参照。
+  project: ishida-tsutsumi-map
+  priority: high
+  status: done
+  completed_at: "2026-02-28T13:58:00"
+  note: "3点修正完了。ブラウザ表示目視確認は殿に依頼要。"
+
+- id: cmd_201
+  timestamp: "2026-02-28T15:30:00+09:00"
+  purpose: "ishida-tsutsumi-map の河川表示を再修正 — ラベル改善＋河川データを使った上流接続線の描画"
+  acceptance_criteria:
+    - "「旧本流（中川・綾瀬）」のラベルが何の川の本流か明確にわかる表現に修正されている"
+    - "「旧本流（中川・綾瀬）」の上流側が、1590年頃の群馬からの旧・利根川と接続する線で描画されている。河川データ（国土数値情報等のGeoJSON/シェープファイル）を活用し、実際の河道に沿った自然な線形で描画すること。既存と同じ色。"
+    - "「1590｜旧荒川（元荒川）」の上流側が、1590年頃の秩父からの旧・荒川と接続する線で描画されている。河川データを活用し、実際の河道に沿った自然な線形で描画すること。既存と同じ色。"
+    - "既存の他の河川表示が壊れていない"
+    - "ブラウザで地図が正常に描画される"
+  command: |
+    リポジトリ: https://github.com/odakin/ishida-tsutsumi-map
+    ローカルパス: /Users/odakin/tmp/ishida-tsutsumi-map
+
+    cmd_200の成果を確認の上、3点の修正を行え（cmd_200の結果が不十分な場合はやり直し）:
+
+    1. 【minor】ラベル修正:
+       「旧本流（中川・綾瀬）」が何の川の本流かわからないという大殿様の指摘。
+       1590年当時これは利根川の本流だった。適切な表現に修正せよ。
+
+    2. 【major】旧利根川の上流接続:
+       「旧本流（中川・綾瀬）」の上流側が、1590年頃に群馬からの旧・利根川とどう繋がっていたかを示す。
+       **河川データを活用せよ**（国土数値情報の河川データ、OpenStreetMap等）。
+       手書きの適当な座標ではなく、実際の河川流路データに基づいた自然な線形で描画すること。
+       既存の「旧本流（中川・綾瀬）」と同じ色・スタイルで接続。
+
+    3. 【major】旧荒川の上流接続:
+       「1590｜旧荒川（元荒川）」の上流側が、1590年頃に秩父からの旧・荒川とどう繋がっていたかを示す。
+       **河川データを活用せよ**（上記と同様）。
+       実際の河川流路データに基づいた自然な線形で描画すること。
+       既存の「1590｜旧荒川（元荒川）」と同じ色・スタイルで接続。
+
+    ■ 重要:
+    - まず既存コードを読み、cmd_200でどう実装されたか把握すること。
+    - 「うまいこと河川データを使って」が大殿様の要望。適当な直線ではNG。
+    - 1590年の旧流路は現存の河川（利根川上流部、荒川上流部）のデータで近似可能。
+      利根川: 現在の利根川上流（群馬・前橋〜久喜あたり）→ 中川・綾瀬方面
+      荒川: 現在の荒川上流（秩父〜熊谷あたり）→ 元荒川方面
+    - 河川データの取得方法は足軽に調査させること（Web検索可）。
+  project: ishida-tsutsumi-map
+  priority: high
+  status: stalled
+  started_at: "2026-02-28T14:28:29"
+  stalled_at: "2026-02-28T16:00:00"
+  stalled_reason: "セッション停滞。cmd_202として再発令。"
+
+- id: cmd_202
+  timestamp: "2026-02-28T16:00:00+09:00"
+  purpose: "ishida-tsutsumi-map の河川表示を3点修正 — ラベル明確化＋河川データによる上流接続線の描画"
+  acceptance_criteria:
+    - "「旧本流（中川・綾瀬）」のラベルが何の川の旧本流か明確にわかる表現に修正されている（1590年当時は利根川の本流）"
+    - "「旧本流（中川・綾瀬）」の上流側が、1590年頃の群馬からの旧・利根川と接続する線で描画されている。河川データ（国土数値情報/OpenStreetMap等）を活用し、実際の河道に沿った自然な線形で描画。既存の「旧本流（中川・綾瀬）」と同じ色で繋ぐこと。"
+    - "「1590｜旧荒川（元荒川）」の上流側が、1590年頃の秩父からの旧・荒川と接続する線で描画されている。河川データを活用し、実際の河道に沿った自然な線形で描画。既存の「1590｜旧荒川（元荒川）」と同じ色で繋ぐこと。"
+    - "既存の他の河川表示が壊れていない"
+    - "ブラウザで地図が正常に描画される"
+  command: |
+    リポジトリ: https://github.com/odakin/ishida-tsutsumi-map
+    ローカルパス: /Users/odakin/tmp/ishida-tsutsumi-map
+
+    cmd_200/201の成果が残っていれば活用すること。3点の修正を行え:
+
+    1. 【minor】ラベル修正:
+       「旧本流（中川・綾瀬）」が何の川の本流かわからないという大殿様の指摘。
+       1590年当時これは利根川の本流だった。適切な表現に修正せよ。
+
+    2. 【major】旧利根川の上流接続:
+       「旧本流（中川・綾瀬）」の上流側が、1590年頃に群馬からの旧・利根川とどう繋がっていたかを示す。
+       **河川データを活用せよ**（国土数値情報の河川データ、OpenStreetMap Overpass API等）。
+       手書きの適当な座標ではなく、実際の河川流路データに基づいた自然な線形で描画すること。
+       既存の「旧本流（中川・綾瀬）」と同じ色・スタイルで接続。
+       ヒント: 1590年の旧流路は現存の利根川上流部（群馬・前橋〜久喜あたり）のデータで近似可能。
+
+    3. 【major】旧荒川の上流接続:
+       「1590｜旧荒川（元荒川）」の上流側が、1590年頃に秩父からの旧・荒川とどう繋がっていたかを示す。
+       **河川データを活用せよ**（上記と同様）。
+       実際の河川流路データに基づいた自然な線形で描画すること。
+       既存の「1590｜旧荒川（元荒川）」と同じ色・スタイルで接続。
+       ヒント: 1590年の旧流路は現存の荒川上流部（秩父〜熊谷あたり）のデータで近似可能。
+
+    ■ 重要:
+    - まず既存コードを読み、地図データの形式・座標系・色設定を把握してから作業すること。
+    - 「うまいこと河川データを使って」「今あるのと同じ色で繋ぎたい」が大殿様の要望。
+    - 適当な直線ではNG。河川データの取得方法は足軽に調査させること（Web検索可）。
+  project: ishida-tsutsumi-map
+  priority: high
+  status: done
+  started_at: "2026-02-28T14:36:38"
+  completed_at: "2026-02-28T15:00:00"
+  note: "全5サブタスク完了。commit 5679b80。ブラウザ表示目視確認は殿に依頼要。"
+
+- id: cmd_203
+  timestamp: "2026-02-28T15:10:00+09:00"
+  purpose: "ishida-tsutsumi-map の旧利根川上流接続線の座標点を細かくし、滑らかな線形に改善する"
+  acceptance_criteria:
+    - "旧利根川上流接続線（addNakaAyaseUpstreamExt）の座標点が現在の11点から大幅に増加し、旧荒川上流接続線（15点）と同等以上の滑らかさで描画されている"
+    - "OSM Overpass API等の河川データから利根川上流部（群馬・前橋〜久喜あたり）の実際の河道座標を密に取得し、目が細かい自然な線形になっていること"
+    - "旧荒川の上流接続線（cmd_202で合格済み）は変更しないこと"
+    - "既存の他の河川表示が壊れていない"
+    - "ブラウザで地図が正常に描画される"
+  command: |
+    リポジトリ: https://github.com/odakin/ishida-tsutsumi-map
+    ローカルパス: /Users/odakin/tmp/ishida-tsutsumi-map
+
+    大殿様のレビュー結果:
+    - 旧荒川の上流接続線（15点）→ ✅ 合格「良し」
+    - 旧利根川の上流接続線（11点）→ ❌ 不合格「目が荒すぎる」
+
+    修正内容:
+    旧利根川上流接続線（addNakaAyaseUpstreamExt）の座標点をもっと細かくせよ。
+    現在11点だが、目が荒くカクカクしている。
+    OSM Overpass APIから利根川上流部の河道座標をもっと密に取得し直し、
+    滑らかな自然な線形に改善すること。
+
+    ■ 注意:
+    - 旧荒川側は触るな（合格済み）
+    - スクリーンショットを参照: 1枚目（上流方向=北西）と2枚目（下流方向=南東）を見ると、
+      旧利根川のラインが直線的でカクカクしているのがわかる
+    - 旧荒川側の滑らかさを参考に、同等以上の密度で座標を取得すること
+  project: ishida-tsutsumi-map
+  priority: high
+  status: done
+  started_at: "2026-02-28T15:08:00"
+  completed_at: "2026-02-28T15:16:00"
+  note: "足軽1が51点（OSM35点+推定16点）に改善。commit e0befc7。ブラウザ確認は殿に依頼。"
+
+- id: cmd_204
+  timestamp: "2026-02-28T15:15:00+09:00"
+  purpose: "ishida-tsutsumi-map の旧荒川上流接続線をさらに上流（秩父方面）まで延伸する"
+  acceptance_criteria:
+    - "旧荒川上流接続線（addMotoArakawaUpstreamExt）が現在の西端よりさらに上流（秩父方面）まで延伸されている"
+    - "延伸部分はOSM河川データを活用し、実際の荒川の河道に沿った自然な線形で描画されていること"
+    - "既存の旧荒川上流接続線と同じ色・スタイルで連続的に繋がっていること"
+    - "旧利根川側の修正（cmd_203）を壊さないこと"
+    - "既存の他の河川表示が壊れていない"
+    - "ブラウザで地図が正常に描画される"
+  command: |
+    リポジトリ: https://github.com/odakin/ishida-tsutsumi-map
+    ローカルパス: /Users/odakin/tmp/ishida-tsutsumi-map
+
+    大殿様の追加指示:
+    「旧荒川はもっと上流まで伸ばせるのでは」
+
+    現在の旧荒川上流接続線（addMotoArakawaUpstreamExt、15点）は合格だが、
+    さらに上流（秩父方面）まで延伸できるはず。
+    OSM河川データで荒川上流部の座標を追加取得し、
+    現在の西端からさらに秩父方面へラインを延ばすこと。
+
+    ■ 注意:
+    - 既存の15点はそのまま活かし、上流側に座標を追加する形で延伸
+    - 同じ色・スタイルで自然に繋げること
+    - cmd_203（旧利根川の修正）と競合しないよう注意
+    - cmd_203完了後に実施すること（同じファイルを編集するため）
+  project: ishida-tsutsumi-map
+  priority: medium
+  status: done
+  started_at: "2026-02-28T15:27:00"
+  completed_at: "2026-02-28T15:30:07"
+  note: "完了。旧荒川上流接続線 15点→29点延伸（秩父市[35.9818,139.0563]まで）。commit 1c7caf9。"
+
+- id: cmd_205
+  timestamp: "2026-02-28T15:25:00+09:00"
+  status: done
+  completed_at: "2026-02-28T15:52:34"
+  note: "addNakaAyaseUpstreamExt 後半16点→7点置換。接続点[36.02,139.73]→[36.0578,139.6989]（大落古利根川北端）。加須市川口[36.13,139.60]経由。51点→42点。commit 961974e。"
+  purpose: "ishida-tsutsumi-map の「旧利根川（古利根/大落）」と「旧利根川本流（中川・綾瀬）」の1590年流路を整合的に修正する"
+  # statusはdoneで確定
+  acceptance_criteria:
+    - "「1590｜旧利根川（古利根/大落）」と「1590｜旧利根川本流（中川・綾瀬）」が、1590年当時の利根川水系として整合的に繋がっている"
+    - "1590年の利根川の流れ（群馬から南下→関東平野で分流/合流→東京湾方面）が地図上で矛盾なく読み取れる"
+    - "2本のラインの分岐点・合流点・上流端が歴史的に妥当な位置関係になっている"
+    - "河川データ（OSM等）を活用し、推定ルートが実際の地形・河道に沿った自然な線形であること"
+    - "既存の旧荒川側の表示を壊さないこと"
+    - "ブラウザで地図が正常に描画される"
+  command: |
+    リポジトリ: https://github.com/odakin/ishida-tsutsumi-map
+    ローカルパス: /Users/odakin/tmp/ishida-tsutsumi-map
+
+    大殿様の指摘:
+    「1590｜旧利根川（古利根/大落）と1590｜旧利根川本流（中川・綾瀬）が整合的でない。
+    1590年の流れを整合的に推定せよ。」
+
+    ■ 背景:
+    1590年頃、利根川は群馬から南下し、関東平野で複数の流路に分かれていた。
+    - 古利根川・大落古利根川ルート（現在の古利根/大落）
+    - 中川・綾瀬川ルート（当時の本流筋）
+    これらは同じ利根川水系の分流であり、地図上で整合的に1590年の水系を表現する必要がある。
+
+    ■ 作業内容:
+    1. まず既存コードを読み、2本のラインがどう定義されているか把握すること
+    2. 1590年頃の利根川水系の流路を調査（利根川東遷前の流路図、歴史資料等を参照）
+    3. 2本のラインの上流端・分岐点・経路を整合的に修正
+       - 群馬から南下する利根川がどこで分流するか
+       - 古利根/大落ルートと中川/綾瀬ルートの分岐点はどこか
+       - それぞれの上流接続線がこの分岐構造と矛盾しないか
+    4. OSM河川データを活用し、自然な線形で描画すること
+
+    ■ 注意:
+    - 旧荒川側は触るな
+    - 歴史的考証を踏まえた推定であること（適当な線を引くな）
+    - cmd_204完了後に実施すること（同じファイルを編集するため）
+  project: ishida-tsutsumi-map
+  priority: high
+  status: pending
+
+- id: cmd_206
+  timestamp: "2026-03-01T00:00:00+09:00"
+  status: stalled
+  started_at: "2026-03-01T07:06:00"
+  stalled_at: "2026-03-01T09:15:00"
+  stalled_reason: "セッション停滞。大殿様レビューで不具合指摘あり。cmd_207として再発令。"
+  purpose: "ishida-tsutsumi-map の旧利根川本流（中川・綾瀬）の上流接続線の座標点を大幅に増やし、カクカクを解消する"
+  acceptance_criteria:
+    - "旧利根川本流（中川・綾瀬）の上流接続線（addNakaAyaseUpstreamExt）の座標点が現在の42点から大幅に増加し、滑らかな曲線で描画されている"
+    - "OSM Overpass APIから利根川上流部の河道座標を可能な限り密に取得し、カクカクした箇所がない自然な線形になっていること"
+    - "データ量は気にしなくてよい。手元にデータを置くので、点数を惜しむな"
+    - "旧荒川側の表示を壊さないこと"
+    - "旧利根川（古利根/大落）との整合性（cmd_205の成果）を維持すること"
+    - "ブラウザで地図が正常に描画される"
+  command: |
+    リポジトリ: https://github.com/odakin/ishida-tsutsumi-map
+    ローカルパス: /Users/odakin/tmp/ishida-tsutsumi-map
+  project: ishida-tsutsumi-map
+  priority: high
+
+- id: cmd_207
+  timestamp: "2026-03-01T09:15:00+09:00"
+  purpose: "ishida-tsutsumi-map の旧利根川本流（中川・綾瀬）上流接続線を修正 — 利根川東遷後の流路座標へのジャンプを除去し、1590年以前の南下ルートに忠実な座標で再構成する"
+  acceptance_criteria:
+    - "上流接続線（addNakaAyaseUpstreamExt）が、利根川東遷後（現在の利根川＝東へ向かう流路）の座標を一切含まないこと"
+    - "全座標点が1590年以前の利根川南下ルート（群馬→前橋→熊谷方面→加須→大落古利根川北端）に沿っていること"
+    - "OSMデータ取得時に、現在の利根川本流（東遷後の東向き流路）と、1590年以前の南下ルート（現在の烏川・広瀬川・元荒川・古利根川等の残存河道）を明確に区別すること"
+    - "座標点は密にとり、滑らかな線形であること（データ量は気にしない）"
+    - "旧荒川側の表示を壊さないこと"
+    - "ブラウザで地図が正常に描画される"
+  command: |
+    リポジトリ: https://github.com/odakin/ishida-tsutsumi-map
+    ローカルパス: /Users/odakin/tmp/ishida-tsutsumi-map
+
+    大殿様のレビュー結果（スクリーンショットあり）:
+    cmd_206の結果、旧利根川上流接続線に「利根川東遷後の点にジャンプしてしまっている箇所」がある。
+
+    ■ 問題の本質:
+    OSMから利根川の座標を取得する際、「現在の利根川本流」（東遷後＝群馬から東へ向かい銚子へ流れる流路）の
+    ノードを拾ってしまった。1590年以前の利根川は群馬から**南下**して関東平野を流れていた。
+    東遷後の東向きルートの座標が混入すると、地図上でラインが不自然にジャンプする。
+
+    ■ 修正の方針:
+    1590年以前の利根川南下ルートに該当するのは、現在の残存河道:
+    - 烏川（群馬南部）
+    - 広瀬川・早川（前橋〜伊勢崎付近）
+    - 元荒川（熊谷〜越谷方面）
+    - 古利根川・大落古利根川（加須〜春日部方面）
+    これらの河川のOSMデータを使えば、東遷前の南下ルートを正確にトレースできる。
+    「現在の利根川本流」のOSMデータは使うな（東遷後の流路だから）。
+
+    スクリーンショット: /Users/odakin/Desktop/スクリーンショット 2026-03-01 9.12.46.png
+  project: ishida-tsutsumi-map
+  priority: high
+  status: done_ng
+  completed_at: "2026-03-01T11:17:00"
+  review_result: "NG — 2本の長い直線ジャンプが残存。河川セグメント間の橋渡しが直線になっている。"
+  note: |
+    烏川(152pt)+元荒川前半(596pt)+橋渡し(11pt)+接続点(1pt)=760点に再構成。
+    東遷後座標を完全除去。経度ジャンプ0箇所。commits: 1144857, c4af483。
+    北端[36.41,138.80](烏川北端)、南端[36.0578,139.6989](大落古利根川北端・既存接続点)。
+    大殿様レビュー: NG。2本の長い直線が見える。橋渡し11点が不十分。
+
+- id: cmd_208
+  timestamp: "2026-03-01T11:22:00+09:00"
+  purpose: "ishida-tsutsumi-map の旧利根川本流上流接続線から直線ジャンプを除去 — 河川セグメント間を実際の河道データで滑らかに繋ぐ"
+  acceptance_criteria:
+    - "上流接続線に直線ジャンプ（2点間を直線で結んだだけの区間）が一切ないこと"
+    - "烏川→元荒川など、異なる河川セグメント間の接続部分も、実在の河道・水路データ（OSM）で繋がっていること"
+    - "全区間が河道に沿った自然な曲線で描画されていること — 地図上で直線に見える箇所がゼロ"
+    - "繋げる河道データが存在しない区間は、無理に直線で繋がず、接続不可として報告すること"
+    - "旧荒川側の表示を壊さないこと"
+    - "ブラウザで地図が正常に描画される"
+  command: |
+    リポジトリ: https://github.com/odakin/ishida-tsutsumi-map
+    ローカルパス: /Users/odakin/tmp/ishida-tsutsumi-map
+
+    大殿様のレビュー結果（スクリーンショットあり）:
+    cmd_207の結果、まだ2本の長い直線ジャンプが残っている。
+    烏川(152pt)と元荒川前半(596pt)の間の「橋渡し(11pt)」が、
+    河道データではなくただの直線補間になっているのが原因と推定。
+
+    ■ 問題の本質:
+    異なる河川（烏川・元荒川・古利根川等）の座標データをそのまま連結しただけで、
+    河川間の区間（一つの川の終点から次の川の始点）を直線で結んでしまっている。
+    地図上ではこれが長い直線ジャンプとして目立つ。
+
+    ■ 対処:
+    - まず現在のコードで直線ジャンプがどこで発生しているか特定すること（座標の経度/緯度の急激な変化点）
+    - その区間に実在する河道・水路・用水路等のOSMデータがないか調査
+    - データがあれば河道に沿って繋ぐ。なければ接続不可として報告
+
+    スクリーンショット1（前回）: /Users/odakin/Desktop/スクリーンショット 2026-03-01 9.12.46.png
+    スクリーンショット2（今回）: /Users/odakin/Desktop/スクリーンショット 2026-03-01 11.19.29.png
+  project: ishida-tsutsumi-map
+  priority: high
+  status: done_ng
+  started_at: "2026-03-01T11:35:00"
+  completed_at: "2026-03-01T12:22:00"
+  review_result: |
+    NG — 大殿様がスクリーンショット4枚で指摘:
+    1. 群馬からの利根川が旧利根川（古利根/大落）に繋がっていない。接続先が間違い。
+    2. 同上。
+    3. 完全に不要な直線が存在。
+    4. 完全に不要な直線が存在。
+    根本原因: ルーティングの考え方が間違っている。烏川・元小山川・福川・星川等を経由するのが誤り。
+  note: |
+    Phase 1〜2完了。GAP-A・GAP-B共に河川OSMデータで置換。760点→1775点。
+    GAP-A(27.4km直線→最大Bridge2.77km): 元小山川225pt+福川417pt+星川249pt+Bridge3pt=894pt
+    GAP-B(15.4km直線→最大Bridge2.65km): 野通川39pt+備前前堀川2pt+蓮ヶ原川89pt+Bridge2pt=132pt
+
+- id: cmd_209
+  timestamp: "2026-03-01T12:35:00+09:00"
+  purpose: "ishida-tsutsumi-map の旧利根川本流（中川・綾瀬）上流接続線を根本的に作り直す — 群馬からの利根川を既存の「旧利根川（古利根/大落）」ラインに正しく接続する"
+  acceptance_criteria:
+    - "上流接続線（addNakaAyaseUpstreamExt）が、群馬方面から南下して既存の「旧利根川（古利根/大落）」ラインの上流端に自然に接続していること"
+    - "接続先は既存の「旧利根川（古利根/大落）」のラインである。地図上で他のラインに無い場所へ飛ぶ直線が一切ないこと"
+    - "不要な直線（河道データに基づかない直線区間）がゼロであること"
+    - "1590年の利根川の流れ: 群馬から南下 → 旧利根川（古利根/大落）→ 分流して中川・綾瀬方面、という水系構造と整合すること"
+    - "旧荒川側の表示を壊さないこと"
+    - "ブラウザで地図が正常に描画される"
+  command: |
+    リポジトリ: https://github.com/odakin/ishida-tsutsumi-map
+    ローカルパス: /Users/odakin/tmp/ishida-tsutsumi-map
+
+    大殿様のレビュー結果（スクリーンショット4枚あり）:
+    cmd_206〜208の全てでNG。根本的なルーティングの考え方が間違っている。
+
+    ■ 大殿様の指摘（4枚のスクリーンショット）:
+    1. 群馬からの利根川は「旧利根川（古利根/大落）」に繋がないとおかしい。今の接続先は間違い。
+    2. 同上。
+    3. 完全に不要な直線がある。
+    4. 完全に不要な直線がある。
+
+    ■ 根本原因:
+    これまでの実装は、烏川・元小山川・福川・星川等の「現在存在する別の川」を経由して
+    座標を繋ごうとしていた。これが根本的に間違い。
+
+    ■ 正しい考え方:
+    1590年の利根川の流れ:
+      群馬（上流）→ 南下 → 「旧利根川（古利根/大落）」→ 分流 → 中川・綾瀬方面
+
+    つまり、この上流接続線が繋ぐべき先は、地図上に既に存在する
+    「旧利根川（古利根/大落）」のラインの上流端である。
+    そこから先は既存の「旧利根川（古利根/大落）」ラインが描画済み。
+
+    ■ 作業の前提:
+    - まず既存コードを読み、「旧利根川（古利根/大落）」のラインがどこにあるか把握すること
+    - そのラインの上流端の座標を確認すること
+    - 群馬方面からその上流端までを、利根川の旧流路（東遷前の南下ルート）に沿って繋ぐ
+    - 不要な直線は一切入れるな。河道データがない区間は繋がず報告
+
+    スクリーンショット: /Users/odakin/Desktop/4.png, /Users/odakin/Desktop/3.png,
+                       /Users/odakin/Desktop/2.png, /Users/odakin/Desktop/1.png
+  project: ishida-tsutsumi-map
+  priority: high
+  status: done
+  started_at: "2026-03-01T12:50:00"
+  completed_at: "2026-03-01T14:00:00"
+  note: |
+    864pts実装完了。commit=4964825。QC:PASS。
+    大殿様レビュー: 1の接続が怪しい、2の直線は明らかに誤り。→ cmd_210で方針転換。
+
+- id: cmd_210
+  timestamp: "2026-03-01T15:00:00+09:00"
+  purpose: "ishida-tsutsumi-map に1590年当時存在した河川を網羅的に追加し、利根川東遷前の関東平野の水系全体像を地図上に表現する"
+  acceptance_criteria:
+    - "1590年当時に存在し、地図の表示範囲内で互いに繋がっていた主要河川が全て描画されていること（利根川水系＋荒川水系）"
+    - "個別の「接続線」ではなく、水系ネットワークとして自然に読み取れること"
+    - "各河川はOSM等の河川データに基づく自然な線形で描画されていること（直線NG）"
+    - "既存の描画済み河川（旧利根川本流(中川・綾瀬)、旧利根川(古利根/大落)、旧荒川(元荒川)等）との整合性が保たれていること"
+    - "cmd_209で指摘された問題（1の接続が怪しい、2の直線が誤り）が解消されていること"
+    - "各河川に適切なラベルがつけられていること（1590年当時の名称または現在の名称）"
+    - "ブラウザで地図が正常に描画される"
+  command: |
+    リポジトリ: https://github.com/odakin/ishida-tsutsumi-map
+    ローカルパス: /Users/odakin/tmp/ishida-tsutsumi-map
+
+    大殿様の方針転換:
+    cmd_206〜209で個別の接続線を引くアプローチを4回試みたが、接続の不自然さが解消しなかった。
+    大殿様より「もういっそ関連するところに繋がってる、1590年当時に存在してた川は全部入れる」との指示。
+
+    ■ cmd_209レビュー結果:
+    - 1の接続が怪しい
+    - 2の直線は明らかに誤り
+    → 個別修正ではなく、水系全体を描くアプローチに転換。
+
+    ■ scope:
+    地図の表示範囲内で、1590年当時に存在し互いに繋がっていた主要河川を全て追加する。
+    利根川水系: 利根川本流（東遷前の南下ルート）、古利根川、大落古利根川、会の川、中川、綾瀬川、等
+    荒川水系: 荒川（東遷前）、元荒川、入間川、等
+    細流・用水路は不要。「主要河川」レベルで十分。
+
+    ■ 参考資料:
+    - /Users/odakin/Desktop/アーカイブ.zip（川が飛んでいる箇所のスクリーンショット集。まず解凍して問題箇所を把握すること）
+    - cmd_206〜209の成果（活用できる部分は活用せよ。ただし問題のある部分はやり直し）
+
+    ■ 注意:
+    - 既存の描画済み河川は壊すな。既存ラインとの整合性を保つこと。
+    - 「1本の接続線を引く」のではなく「水系全体を見せる」発想で。
+    - Batch Processing Protocol適用を検討すること（河川数が多い場合）。
+  project: ishida-tsutsumi-map
+  priority: high
+  status: done
+  started_at: "2026-03-01T14:20:00"
+  completed_at: "2026-03-01T16:45:00"
+  note: "12独立河川関数追加→越辺川・小畔川削除→ループ修正→凡例・説明文全面書き直し。最終commit 838e8c7。大殿様OK。"
+
+- id: cmd_211
+  timestamp: "2026-03-01T16:50:00+09:00"
+  purpose: "ishida-tsutsumi-map の最終仕上げ — デフォルト表示を石田堤付近に変更、ドキュメント充実、GitHubにpush"
+  acceptance_criteria:
+    - "地図のデフォルト表示位置が「石田堤付近」になっていること（ページ読み込み時に石田堤付近が中心に表示される）"
+    - "README.md等のドキュメントがv20の内容を正確に反映していること（前回GitHubはv4なので、v4→v20の大幅変更点を丁寧に記述）"
+    - "ドキュメントに含めるべき内容: プロジェクト概要、地図の見方、描画している河川一覧、1590年の歴史的背景、技術仕様（データソース等）、変更履歴"
+    - "GitHubにpush済みであること"
+    - "push後にGitHub Pagesで正常に表示されること（もしPages設定済みなら）"
+  command: |
+    リポジトリ: https://github.com/odakin/ishida-tsutsumi-map
+    ローカルパス: /Users/odakin/tmp/ishida-tsutsumi-map
+
+    大殿様の指示:
+    1. デフォルト表示を「石田堤付近」に変更（既に「石田堤付近へ」ボタンがあるはず。その位置をデフォルトに）
+    2. ドキュメントを充実させよ。前回GitHubはv4で、今回v20。大幅な変更なので丁寧に。
+    3. GitHubにpush。
+
+    ■ ドキュメントの注意:
+    - v4→v20の変化は劇的（水系ネットワーク方式への転換、12独立河川関数、1590年河川の網羅的追加等）
+    - 利用者が地図を理解できるよう、歴史的背景も含めて記述
+    - 既存のREADMEがあればそれをベースに大幅更新。なければ新規作成。
+  project: ishida-tsutsumi-map
+  priority: high
+  status: done
+  started_at: "2026-03-01T18:58:00"
+  completed_at: "2026-03-01T19:13:00"
+  note: "デフォルト表示変更(84aefe8)+README.md拡充(5e40097)+GitHub push完了。Pages: https://odakin.github.io/ishida-tsutsumi-map/"
+
+- id: cmd_212
+  timestamp: "2026-03-01T19:20:00+09:00"
+  purpose: "ishida-tsutsumi-map のタイトルに「石田堤」を追加し、GitHubにpushする"
+  acceptance_criteria:
+    - "titleタグに「石田堤」が含まれていること"
+    - "h1タグに「石田堤」が含まれていること"
+    - "その他タイトル表示箇所（あれば）に「石田堤」が含まれていること"
+    - "GitHubにpush済みであること"
+  command: |
+    リポジトリ: https://github.com/odakin/ishida-tsutsumi-map
+    ローカルパス: /Users/odakin/tmp/ishida-tsutsumi-map
+
+    大殿様の指示: マップのタイトルに「石田堤」を入れよ。
+    titleタグ・h1・その他タイトル表示箇所に「石田堤」を含めること。
+    修正後GitHubにpushまで完了させよ。
+  project: ishida-tsutsumi-map
+  priority: high
+  status: done
+  started_at: "2026-03-01T19:20:00"
+  completed_at: "2026-03-01T19:23:00"
+  note: "titleタグ・h1に石田堤追加。commit=651a567。GitHub push完了。"
+
+- id: cmd_213
+  timestamp: "2026-03-01T20:00:00+09:00"
+  purpose: "ishida-tsutsumi-map の README.md にある荒川の歴史的記述の誤りを修正し、GitHubにpushする"
+  acceptance_criteria:
+    - "README.mdに「当時の荒川は入間川を経由して隅田川に合流していました」という誤った記述がないこと"
+    - "1590年当時の荒川の流路が正確に記述されていること — 荒川は元荒川の流路を通り利根川に合流していた。入間川水系とは別水系だった"
+    - "荒川と入間川が合流するようになったのは1629年（寛永6年）の荒川西遷によるものであることが正しく記述されていること"
+    - "荒川放水路が1930年完成の人工河川であるという記述は正確なのでそのまま残すこと"
+    - "README全体の文脈・整合性が保たれていること（他の記述との矛盾がないか確認）"
+    - "GitHubにpush済みであること"
+  command: |
+    リポジトリ: https://github.com/odakin/ishida-tsutsumi-map
+    ローカルパス: /Users/odakin/tmp/ishida-tsutsumi-map
+
+    大殿様の指摘:
+    READMEの「当時の荒川は入間川を経由して隅田川に合流していました」は歴史的に誤り。
+    1590年当時、荒川は元荒川の流路を通り利根川に合流していた。入間川水系は完全に別水系。
+    荒川が入間川に接続されたのは1629年（寛永6年）の荒川西遷による。
+    この誤りを修正し、GitHubにpushせよ。
+  project: ishida-tsutsumi-map
+  priority: high
+  status: done
+  completed_at: "2026-03-01T20:15:00"
+  note: "README荒川記述修正完了。「入間川を経由して隅田川に合流」を削除し、元荒川→利根川合流・荒川西遷1629年の正確な記述に更新。commit=5df0964。GitHub push済み。"
+
+- id: cmd_214
+  timestamp: "2026-03-01T20:20:00+09:00"
+  purpose: "家老(pane 0)と軍師(pane 8)のtmuxペイン背景色が設定値ではなく真っ黒になっている問題を調査・修正する"
+  acceptance_criteria:
+    - "家老(multiagent:0.0)のペイン背景色が bg=#2a1215（暗赤）で表示されていること"
+    - "軍師(multiagent:0.8)のペイン背景色が bg=#2a2a10（暗金）で表示されていること"
+    - "足軽1-7(panes 1-7)のデフォルト白背景に影響がないこと"
+    - "色設定が永続的であること（セッション再起動後も維持される仕組みになっていること）"
+  command: |
+    対象リポジトリ: ~/Claude/multi-agent-shogun（このリポジトリ自体）
+
+    大殿様の報告:
+    家老(pane 0)と軍師(pane 8)の背景色が、指定色ではなく真っ黒になっている。
+    期待値:
+    - karo (pane 0): fg=#d0d0d0,bg=#2a1215 (暗赤)
+    - ashigaru 1-7 (panes 1-7): default (白背景) ← これは正常
+    - gunshi (pane 8): fg=#d0d0d0,bg=#2a2a10 (暗金)
+
+    起動スクリプトやtmux設定で色がどう設定されているかを調査し、修正せよ。
+  project: multi-agent-shogun
+  priority: medium
+  status: done
+  completed_at: "2026-03-01T20:39:00"
+  note: |
+    根本原因: コミット後のモニター未再起動→STYLED_PANESキャッシュが古い状態を保持。
+    20:13のモニター再起動で解消済み。現在karo/gunshiペイン色は期待値と一致。コード修正不要。
+
+- id: cmd_215
+  timestamp: "2026-03-01T20:30:00+09:00"
+  purpose: "大殿様が別プロセスでモニタ関係のファイルを大幅に書き換えた。変更内容を把握し、影響を確認せよ"
+  acceptance_criteria:
+    - "git diffまたはgit logで大殿様が変更したモニタ関連ファイルを全て特定していること"
+    - "変更内容を把握し、既存のエージェント運用（instructions/*.md, CLAUDE.md等）と矛盾がないか確認していること"
+    - "矛盾や要更新箇所があれば一覧化して報告すること"
+    - "モニタ関連の設定・スクリプトが正常に動作する状態であること"
+  command: |
+    対象リポジトリ: ~/Claude/multi-agent-shogun（このリポジトリ自体）
+
+    大殿様が別プロセスでモニタ関係のファイルを大幅に書き換えた。
+    git diff / git log で変更内容を確認し、影響範囲を把握して報告せよ。
+    instructions や CLAUDE.md との整合性も確認すること。
+
+    ■ 実行順序: cmd_215を先に完了させ、その後cmd_214に着手すること。
+  project: multi-agent-shogun
+  priority: high
+  status: done
+  completed_at: "2026-03-01T20:35:00"
+  note: |
+    足軽1調査完了。変更5コミット全てTMUXビジュアルモニタUI/インフラ改善。
+    変更ファイル: scripts/teams_visual_monitor.sh, lib/agent_status.sh, shutsujin_teams.sh。
+    CLAUDE.md/instructions との矛盾なし。要更新箇所ゼロ。
+
+- id: cmd_216
+  timestamp: "2026-03-01T20:32:00+09:00"
+  purpose: "家老（Karo）がセッション中に落ちた原因を特定し、再発防止策を講じる"
+  acceptance_criteria:
+    - "大殿様の検証結果（/Users/odakin/Desktop/tmp_UTF8）を読み、クラッシュ原因を特定していること"
+    - "原因に基づく再発防止策（スクリプト修正、設定変更等）が実装されていること"
+    - "修正後、同じ条件で家老が落ちないことが確認できていること"
+    - "調査結果と対策を報告すること"
+  command: |
+    対象リポジトリ: ~/Claude/multi-agent-shogun（このリポジトリ自体）
+
+    大殿様が別プロセスで家老クラッシュの原因を検証し、結果を保存してくださった。
+    検証結果: /Users/odakin/Desktop/tmp_UTF8
+
+    このファイルを読み、クラッシュ原因を把握した上で再発防止策を講じよ。
+  project: multi-agent-shogun
+  priority: high
+  status: done
+  completed_at: "2026-03-01T20:40:00"
+  note: |
+    inbox_watcher.sh の2バグを修正:
+    (1) Phase3でのFIRST_UNREAD_SEEN=now無限リセット→当該リセット処理を削除
+    (2) tmuxセッション死亡後もwatcherがゾンビ化→has-sessionチェックを追加しexit 0
+
+- id: cmd_217
+  timestamp: "2026-03-01T21:30:00+09:00"
+  purpose: "tmuxモニタウィンドウの2つの表示不具合を修正する — 幅の3等分が均等でない＋家老・軍師のペイン背景色がオリジナル色でない"
+  acceptance_criteria:
+    - "モニタウィンドウの表示列が均等に3等分されていること（各列の幅が概ね等しい）"
+    - "家老(pane 0)のペイン背景色が設定値 bg=#2a1215（暗赤）で表示されていること"
+    - "軍師(pane 8)のペイン背景色が設定値 bg=#2a2a10（暗金）で表示されていること"
+    - "足軽1-7のデフォルト白背景に影響がないこと"
+    - "修正後、モニタを再起動して表示を確認すること"
+  command: |
+    対象リポジトリ: ~/Claude/multi-agent-shogun（このリポジトリ自体）
+
+    大殿様からの指摘2点:
+    1. モニタウィンドウがきれいに幅が3等分になっていない
+    2. 家老と軍師の背景がオリジナル色になっていない
+
+    期待値:
+    - karo (pane 0): fg=#d0d0d0,bg=#2a1215 (暗赤)
+    - gunshi (pane 8): fg=#d0d0d0,bg=#2a2a10 (暗金)
+    - 足軽 (panes 1-7): default (白背景)
+
+    モニタ関連スクリプト: scripts/teams_visual_monitor.sh, lib/agent_status.sh, shutsujin_teams.sh 等を調査し、
+    幅分割ロジックと背景色設定を修正せよ。
+  project: multi-agent-shogun
+  priority: high
+  status: in_progress
+  started_at: "2026-03-01T21:31:00"
+  phases:
+    - phase: 1
+      mode: parallel
+      subtasks:
+        - id: s217a
+          description: |
+            モニタ関連スクリプトを全て調査し、以下を特定:
+            1. 幅3等分のロジック（tmux split-window の -p パーセンテージ or -l サイズ指定）がどこにあるか
+            2. 家老・軍師のペイン背景色設定がどこで行われているか
+            3. 現在の設定値と期待値の差異
+            対象: scripts/teams_visual_monitor.sh, lib/agent_status.sh, shutsujin_teams.sh, 及びモニタ関連の全スクリプト
+          bloom_level: L2
+    - phase: 2
+      mode: sequential
+      subtasks:
+        - id: s217b
+          description: |
+            Phase 1の調査結果に基づき修正を実施:
+            1. 幅3等分が均等になるようsplit-windowのサイズ指定を修正
+            2. 家老(pane 0)に bg=#2a1215、軍師(pane 8)に bg=#2a2a10 が確実に適用されるよう修正
+            3. 修正後、モニタを再起動して表示確認
+          bloom_level: L3
+    - phase: 3
+      mode: qc
+
+- id: cmd_219
+  timestamp: "2026-03-01T21:40:00+09:00"
+  status: in_progress
+  started_at: "2026-03-01T21:44:00"
+  note: "s217e（足軽1）に統合。幅3等分修正＋色明度修正＋STYLED_PANES修正を一括で実施。RACE-001回避。"
+  purpose: "家老・軍師ペインの背景色を視認可能な明度に変更 — 現在の暗赤#2a1215・暗金#2a2a10は黒と区別つかない"
+  acceptance_criteria:
+    - "家老ペインの背景が「赤系」と一目でわかること"
+    - "軍師ペインの背景が「金/黄系」と一目でわかること"
+    - "前景色 fg=#d0d0d0 のテキストが両方の背景で読みやすいこと"
+    - "足軽の白背景デフォルトと明確に区別できること"
+    - "shutsujin_teams.sh と scripts/teams_visual_monitor.sh の2ファイルの色設定値が一致していること"
+  command: |
+    対象リポジトリ: ~/Claude/multi-agent-shogun（このリポジトリ自体）
+
+    大殿様の指摘:
+    現在の背景色 #2a1215（暗赤）と #2a2a10（暗金）は暗すぎて人間の目には黒にしか見えない。
+    暗い部屋のディスプレイでも「赤系」「金/黄系」と一目で識別できる明度が必要。
+    ただし明るすぎると fg=#d0d0d0（明文字）が読めなくなるのでバランスを取ること。
+
+    変更対象（2箇所で同じ値を使っている）:
+    1. shutsujin_teams.sh — line 854-855 付近
+    2. scripts/teams_visual_monitor.sh — get_bg_color_for_agent() 内
+  project: multi-agent-shogun
+  priority: high
+  status: pending
+  phases:
+    - phase: 1
+      mode: sequential
+      subtasks:
+        - id: s219a
+          description: |
+            shutsujin_teams.sh と scripts/teams_visual_monitor.sh の該当箇所を特定し、
+            背景色を以下の方針で変更:
+            - 家老: 赤系で fg=#d0d0d0 が読める程度の明度（例: #5a2020〜#6b2020 あたりを試行）
+            - 軍師: 金/黄系で同様（例: #5a5a10〜#6b6b10 あたりを試行）
+            - 2ファイルの値を必ず一致させること
+            修正後、変更を適用して目視確認すること。
+          bloom_level: L2
+    - phase: 2
+      mode: qc
+
+- id: cmd_218
+  timestamp: "2026-03-01T21:35:00+09:00"
+  status: in_progress
+  started_at: "2026-03-01T21:42:00"
+  purpose: "inbox_watcher.sh 起動時のnudge暴発バグを修正 — 再起動後に家老が 'Press up to edit queued messages' でスタックする問題を解消する"
+  acceptance_criteria:
+    - "shutsujin_teams.sh -c で再起動後、家老が 'Press up to edit queued messages' にならないこと"
+    - "起動グレースピリオド中（デフォルト60秒）は nudge が送信されないこと（ログで確認可能）"
+    - "グレースピリオド経過後は通常通り nudge が送信されること"
+    - "既存の bats テストが全て PASS すること"
+    - "agent_is_busy_check の return 2（不在）の扱い変更は、既存利用箇所への影響を調査してから判断すること"
+  command: |
+    対象リポジトリ: ~/Claude/multi-agent-shogun（このリポジトリ自体）
+
+    【現象】
+    shutsujin_teams.sh で全軍を再起動すると、家老が "Press up to edit queued messages" でスタックし動作不能になる。
+
+    【根本原因】
+    inbox_watcher.sh は起動直後に process_unread_once() を実行し、未読があれば即座に send_wakeup() で tmux send-keys する。
+    しかしこの時点で Claude Code はまだ起動途中（CLAUDE.md 読み込み中）でプロンプト未表示。
+    agent_is_busy_check() は pane_tail が空の場合 return 2（不在）を返し、agent_is_busy() は return 2 を busy 扱いしないため nudge がスキップされず送信される。
+    30秒タイムアウトのメインループが繰り返し nudge を送り、Claude Code の入力キューに "inbox1" が複数溜まる。
+    複数 queued messages があると "Press up to edit queued messages" UI が表示され、エージェントは自力脱出不能。
+
+    【修正方針】2箇所:
+    A. inbox_watcher.sh — 起動グレースピリオド追加:
+       - BOOT_TS=$(date +%s) を記録
+       - agent_is_busy() に「起動から N 秒以内は busy 扱い」のガードを追加
+       - N は環境変数 ASW_BOOT_GRACE（デフォルト60秒）で設定可能
+
+    B. agent_is_busy_check (lib/agent_status.sh) — return 2（不在）の扱い検討:
+       - 不在時に busy 扱いにする案も検討
+       - 既存利用箇所への影響を調査してから判断
+
+    【対象ファイル】
+    - scripts/inbox_watcher.sh（主修正）
+    - lib/agent_status.sh（return 2 の扱い検討）
+    - tests/ 配下にテストがあれば修正後に実行
+  project: multi-agent-shogun
+  priority: high
+  status: pending
+  phases:
+    - phase: 1
+      mode: parallel
+      subtasks:
+        - id: s218a
+          description: |
+            inbox_watcher.sh の起動シーケンスを解析:
+            1. process_unread_once() がいつ呼ばれるか
+            2. send_wakeup() のトリガー条件
+            3. agent_is_busy() / agent_is_busy_check() の呼び出しフローと return 値の扱い
+            4. メインループのタイムアウト（30秒）と nudge 送信の関係
+            対象: scripts/inbox_watcher.sh, lib/agent_status.sh
+          bloom_level: L2
+        - id: s218b
+          description: |
+            agent_is_busy_check() の return 2（不在）が使われている全箇所を調査:
+            1. inbox_watcher.sh 内での利用
+            2. 他のスクリプトでの利用
+            3. return 2 を busy 扱いに変更した場合の影響範囲
+            対象: scripts/, lib/ 配下の全シェルスクリプト
+          bloom_level: L2
+    - phase: 2
+      mode: sequential
+      subtasks:
+        - id: s218c
+          description: |
+            Phase 1 の調査結果（s218a, s218b）に基づき修正を実施:
+            1. inbox_watcher.sh に起動グレースピリオドを実装
+               - BOOT_TS=$(date +%s) を起動直後に記録
+               - agent_is_busy() に「起動から ASW_BOOT_GRACE 秒以内は busy 扱い」ガードを追加
+               - ASW_BOOT_GRACE のデフォルトは60秒
+            2. agent_is_busy_check の return 2 の扱い改善（s218b の調査結果に基づき判断）
+            3. tests/ 配下のテストを実行し全 PASS を確認
+          bloom_level: L3
+    - phase: 3
+      mode: qc
+
+- id: cmd_220
+  timestamp: "2026-03-01T21:50:00+09:00"
+  status: in_progress
+  started_at: "2026-03-01T21:49:00"
+  purpose: "v4.0 ダンベル型アーキテクチャ移行後のシステム全体監査 — instructions/roles/scripts/tests に残存する v3.0 記述を一掃する"
+  acceptance_criteria:
+    - "instructions/ 配下に「家老が分解する」「karo decomposes」旨の v3.0 記述が残っていないこと"
+    - "roles/ 配下の4ファイル（shogun_role.md, karo_role.md, gunshi_role.md, ashigaru_role.md）が v4.0 のダンベル型アーキテクチャと整合していること"
+    - "家老のモデル設定（Sonnet vs Haiku）について shutsujin_teams.sh にコメントで理由が明記されていること"
+    - "bats テスト（tests/*.bats tests/unit/*.bats）が全 PASS すること"
+    - "bash scripts/build_instructions.sh 実行後に instructions/generated/ に差分がないこと"
+  command: |
+    対象リポジトリ: ~/Claude/multi-agent-shogun（このリポジトリ自体）
+
+    v4.0 ダンベル型アーキテクチャへの移行で主要ファイルは改訂済みだが、
+    関連ファイルに v3.0 の記述が多数残存している。網羅的に修正せよ。
+
+    【既知の未修正箇所】
+
+    1. instructions/karo.md line 363:
+       「4. Analyze and plan → decompose tasks」→ v4.0: 「4. Read phases from cmd → dispatch current phase」
+
+    2. instructions/roles/ 配下が全て v3.0 のまま:
+       - roles/shogun_role.md: 家老の役割「司令塔 — タスク分解・配分・方式決定・最終判断」→ v4.0「配達マシン — 機械的配分」。Report Flow も旧式。
+       - roles/karo_role.md: 分解・判断の言及があれば v4.0 に合わせる
+       - roles/gunshi_role.md: 「Karo から任務を受け」→ v4.0 では phases の mode:qc で起動。役割テーブルの Karo 行も旧式。
+       - roles/ashigaru_role.md: 確認のみ
+
+    3. instructions/karo.md 内のその他 v3.0 残骸:
+       - line 222: 「家老は cmd の purpose だけ見て分解方針を決める」→ phases を見るだけ
+       - line 693: 「If splittable, split and parallelize」→ 家老は分割判断しない
+       - line 1123: 「Complex decomposition → Gunshi」→ 分解は将軍の仕事
+       - line 1211: 「Task decomposition & fast dispatch」→ decomposition 不要
+
+    4. instructions/shogun.md 内:
+       - line 96 roles/shogun_role.md 経由: 「Karo will decompose」→ 将軍が分解済み
+
+    5. shutsujin_teams.sh line 913:
+       - 家老モデルが Haiku でなく Sonnet。意図的かもしれないが、コメントで理由明記すること。
+
+    【調査スコープ】
+    A. instructions/ 配下の全 .md（roles/, common/, 各エージェント指示書）
+    B. scripts/ 配下で旧アーキテクチャ前提のロジック
+    C. tests/ 配下の v3.0 前提アサーション
+    D. build_instructions.sh 実行 + generated/ 差分確認
+  project: multi-agent-shogun
+  priority: high
+  status: pending
+  phases:
+    - phase: 1
+      mode: parallel
+      subtasks:
+        - id: s220a
+          description: |
+            instructions/roles/ 配下の4ファイルを v4.0 に更新:
+            - shogun_role.md: 家老の役割を「配達マシン — 機械的配分」に、Report Flow を v4.0（軍師→将軍直接報告）に
+            - karo_role.md: 分解・判断の記述を「phases に従い機械的に配分」に修正
+            - gunshi_role.md: 「Karo から任務を受け」を「phases の mode:qc で起動」に。役割テーブル更新
+            - ashigaru_role.md: v4.0 との矛盾がないか確認、あれば修正
+          bloom_level: L3
+        - id: s220b
+          description: |
+            instructions/karo.md 内の v3.0 残骸を全て修正:
+            - line 363: Agent Teams Workflow の step 4 を「Read phases from cmd → dispatch current phase」に
+            - line 222: 「purpose だけ見て分解方針を決める」→「phases を読み、現在の phase のサブタスクを配分する」
+            - line 693: 「If splittable, split and parallelize」を削除または v4.0 に書き換え
+            - line 1123: 「Complex decomposition → Gunshi」→ 「分解は将軍の仕事。家老は phases を配分するのみ」
+            - line 1211: 「Task decomposition」の decomposition を削除
+            - その他「decompos」「分解」「parallelize判断」を grep し、v3.0 的な記述を全修正
+          bloom_level: L3
+        - id: s220c
+          description: |
+            instructions/shogun.md + instructions/common/ + その他 instructions/ 配下の全 .md で
+            v3.0 記述を grep 調査・修正:
+            - 「karo decompos」「家老が分解」「karo.*split」「karo.*paralleliz」等のパターン
+            - v4.0 の用語（phases, ダンベル型, bloom_level, 軍師→将軍直接報告）が正しく使われているか
+          bloom_level: L2
+        - id: s220d
+          description: |
+            スクリプト・テストの整合性確認:
+            1. shutsujin_teams.sh line 913 付近: 家老モデル設定にコメント追加（Sonnet/Haiku の理由）
+            2. scripts/ 配下で旧アーキテクチャ前提のロジックがないか確認
+            3. tests/ 配下の bats テストで v3.0 前提のアサーションがないか確認・修正
+          bloom_level: L2
+    - phase: 2
+      mode: sequential
+      subtasks:
+        - id: s220e
+          description: |
+            Phase 1 の全修正を統合確認:
+            1. bash scripts/build_instructions.sh を実行
+            2. git diff --exit-code instructions/generated/ で差分確認
+            3. bats tests/*.bats tests/unit/*.bats を実行し全 PASS 確認
+            4. 差分やテスト失敗があれば修正
+          bloom_level: L3
+    - phase: 3
+      mode: qc
+
+- id: cmd_221
+  timestamp: "2026-03-01T21:55:00+09:00"
+  purpose: "家老モデルを Haiku に変更可能か机上調査する（コード変更不要）"
+  acceptance_criteria:
+    - "Claude Code で --model haiku が有効かどうか確認済みであること"
+    - "家老の v4.0 ワークフローにおける全操作を列挙し、各操作で Haiku に必要な能力レベルを評価していること"
+    - "Haiku にした場合の具体的リスクが評価されていること"
+    - "結論（GO / Sonnet維持 / 条件付きGO）+ 根拠 + リスク + 推奨が queue/reports/ にレポートとして書かれていること"
+    - "コード変更が一切行われていないこと"
+  command: |
+    対象リポジトリ: ~/Claude/multi-agent-shogun（このリポジトリ自体）
+
+    v4.0 ダンベル型アーキテクチャでは家老を「機械的ディスパッチャー」に簡素化した。
+    設計文書では Karo: Haiku と記載しているが、実装は Sonnet のまま。
+    Haiku で実用に耐えるか机上調査せよ。コード変更はするな。
+
+    【調査項目】
+    1. Claude Code で --model haiku は有効か（claude --help 等で確認）
+    2. 家老の実際のタスク内容を分析（karo.md の v4.0 ワークフロー: read_phases → dispatch）
+       - YAML 読み書き、inbox_write.sh 実行、phases 解釈、足軽の空き検出 etc.
+       - 各操作で Haiku に必要な能力レベルを評価
+    3. 過去の家老ログから実際の処理パターンを確認（logs/, queue/reports/）
+    4. Haiku のリスク評価:
+       - YAML パース/生成で壊す可能性
+       - phases の mode 判定ミスの可能性
+       - 足軽の空き検出の信頼性
+
+    【出力形式】queue/reports/ にレポート:
+    - 結論: Haiku で GO / Sonnet 維持 / 条件付き GO
+    - 根拠: 各調査項目の結果
+    - リスク: 具体的リスク
+    - 推奨: 次のアクション
+  project: multi-agent-shogun
+  priority: medium
+  status: pending
+  phases:
+    - phase: 1
+      mode: parallel
+      subtasks:
+        - id: s221a
+          description: |
+            Claude Code の Haiku モデル対応状況を確認:
+            1. claude --help でモデル指定オプションを確認
+            2. claude --model haiku が有効か確認（--version 等で）
+            3. 使えるモデル名の一覧があれば確認
+            ※ 実際に家老を Haiku で起動する必要はない。コマンドラインオプションの確認のみ。
+          bloom_level: L1
+        - id: s221b
+          description: |
+            家老の v4.0 ワークフローにおける全操作を列挙し能力要件を評価:
+            1. instructions/karo.md の Agent Teams Workflow を読み、家老が行う全操作を列挙
+            2. 各操作（YAML読み書き、phases解釈、空き足軽検出、inbox_write等）の認知負荷を評価
+            3. Haiku の能力（YAML生成精度、指示理解、ツール使用）で各操作が実行可能か判定
+          bloom_level: L2
+        - id: s221c
+          description: |
+            過去の家老の動作パターンを分析:
+            1. logs/ 配下の家老関連ログを確認
+            2. queue/reports/ から家老の動作パターンを分析
+            3. 家老がどの程度「考える」必要があったか（単純配分 vs 判断を伴う操作）を評価
+          bloom_level: L2
+    - phase: 2
+      mode: sequential
+      subtasks:
+        - id: s221d
+          description: |
+            Phase 1 の調査結果（s221a, s221b, s221c）を統合し、
+            queue/reports/ にレポートを作成:
+            - 結論: GO / Sonnet維持 / 条件付きGO
+            - 根拠: 各調査項目の結果サマリ
+            - リスク: Haiku にした場合の具体的リスク一覧
+            - 推奨: 次のアクション（例: 限定テスト実施、段階的移行 etc.）
+            ※ コード変更は一切行わないこと
+          bloom_level: L4
+    - phase: 3
+      mode: qc
+
+- id: cmd_222
+  timestamp: "2026-03-01T22:00:00+09:00"
+  purpose: "モニタウィンドウ3×3グリッドにおける列内ペイン高さ自動調節の最適方式を机上調査する（コード変更不要）"
+  acceptance_criteria:
+    - "tmux ネイティブ機能（select-layout, resize-pane, フック等）の活用可能性が調査されていること"
+    - "5つの高さ割り当てアルゴリズム（binary/コンテンツ量/3段階/フォーカス/優先度）の pros/cons が比較されていること"
+    - "パフォーマンス影響（capture-pane 9ペイン/秒、select-layout 頻度、ポーリング vs フック）が評価されていること"
+    - "列ファースト構造との互換性が確認されていること"
+    - "推奨方式 + 根拠 + 実装難易度 + リスクが queue/reports/ にレポートとして書かれていること"
+    - "コード変更が一切行われていないこと"
+  command: |
+    対象リポジトリ: ~/Claude/multi-agent-shogun（このリポジトリ自体）
+
+    現在の teams_visual_monitor.sh は binary 分類（BUSY=大/IDLE=MIN_PANE_HEIGHT=4）で高さを割り当てている。
+    より良い方式がないか調査せよ。コード変更はするな。
+
+    【精読必須】
+    - teams_visual_monitor.sh の dynamic_resize_panes() と build_column_first_layout()
+    - 実際のモニタペインの高さ・幅を tmux display-message で確認してよい
+
+    【調査項目】
+    1. tmux ネイティブ機能:
+       - select-layout の既存レイアウト（main-vertical, even-vertical 等）
+       - resize-pane -Z (zoom) の活用手法
+       - tmux フック（after-resize-pane, pane-focus-in 等）によるイベント駆動リサイズ
+       - pane-border-lines, pane-border-indicators 等の新オプション
+
+    2. 高さ割り当てアルゴリズム比較:
+       a) 現方式: binary（BUSY=残り均等割 / IDLE=固定4行）
+       b) コンテンツ量ベース: capture-pane の行数に比例した割当
+       c) 3段階分類: BUSY(大) / RECENT(中: 直近N秒以内に完了) / IDLE(小)
+       d) フォーカスベース: active pane に追加高さ
+       e) 優先度ベース: 家老・軍師に最低高さを多めに設定
+
+    3. パフォーマンス影響:
+       - select-layout の頻繁呼び出しが描画に与える影響
+       - capture-pane を9ペイン分毎秒取得するコスト
+       - 3秒ポーリング vs inotifywait/フック駆動のトレードオフ
+
+    4. 既存制約・互換性:
+       - build_column_first_layout の CRC-16 チェックサム
+       - aggressive-resize on との相互作用
+       - 列ファースト構造を維持したまま各方式を実装できるか
+
+    【出力形式】queue/reports/ にレポート:
+    - 推奨方式: どのアルゴリズムが最適か
+    - 根拠: 各方式の比較結果
+    - 実装難易度: 推奨方式の変更規模
+    - リスク: レイアウト崩れ、パフォーマンス劣化等
+  project: multi-agent-shogun
+  priority: medium
+  status: pending
+  phases:
+    - phase: 1
+      mode: parallel
+      subtasks:
+        - id: s222a
+          description: |
+            teams_visual_monitor.sh の dynamic_resize_panes() と build_column_first_layout() を精読:
+            1. 現在の binary 分類ロジックの詳細（BUSY/IDLE 判定基準、高さ計算式）
+            2. MIN_PANE_HEIGHT=4 の定義箇所と影響
+            3. CRC-16 チェックサムの用途と必要性
+            4. 列ファースト構造の実装詳細（どう列を構成し、列内でどうペインを配置しているか）
+            5. 実際の tmux display-message でペインの高さ・幅を確認
+          bloom_level: L3
+        - id: s222b
+          description: |
+            tmux ネイティブ機能の調査:
+            1. select-layout の既存レイアウト（main-vertical, even-vertical, tiled 等）で列内リサイズに使えるもの
+            2. resize-pane -Z (zoom) の活用手法
+            3. tmux フック一覧（after-resize-pane, pane-focus-in, pane-exited 等）でイベント駆動リサイズの可能性
+            4. pane-border-lines, pane-border-indicators 等の新オプション
+            5. aggressive-resize on との相互作用
+            tmux man page や tmux のバージョン確認（tmux -V）も行うこと。
+          bloom_level: L2
+        - id: s222c
+          description: |
+            5つの高さ割り当てアルゴリズムの pros/cons 比較表を作成:
+            a) binary（現方式）: BUSY=残り均等割 / IDLE=固定4行
+            b) コンテンツ量ベース: capture-pane 出力行数に比例
+            c) 3段階分類: BUSY(大) / RECENT(中) / IDLE(小)
+            d) フォーカスベース: active pane に追加高さ
+            e) 優先度ベース: 家老・軍師に最低高さ多め
+            各方式について: 実装難易度、パフォーマンス、ユーザ体験、edge case を評価。
+            capture-pane を9ペイン分取得するコスト、select-layout の頻繁呼び出しコストも検証。
+          bloom_level: L3
+    - phase: 2
+      mode: sequential
+      subtasks:
+        - id: s222d
+          description: |
+            Phase 1 の調査結果（s222a, s222b, s222c）を統合し、
+            queue/reports/ にレポートを作成:
+            - 推奨方式: どのアルゴリズムが最適か（1つに絞る or 組み合わせ）
+            - 根拠: 各方式の比較結果サマリ
+            - 実装難易度: 推奨方式の変更規模（概算行数）
+            - リスク: レイアウト崩れ、パフォーマンス劣化等
+            - 列ファースト構造との互換性
+            ※ コード変更は一切行わないこと
+          bloom_level: L4
+    - phase: 3
+      mode: qc
+
+- id: cmd_223
+  timestamp: "2026-03-01T22:10:00+09:00"
+  purpose: "ishida-tsutsumi-map のモバイル表示を修正 — パネルが画面を覆い地図が見えない問題を解消し、折り畳み可能にする"
+  acceptance_criteria:
+    - "モバイル（画面幅768px以下）でパネルがデフォルト折り畳み状態（タイトルだけ表示）であること"
+    - "タップで展開/折り畳みをトグルできること"
+    - "展開時もmax-height: 50vh + overflow-y: autoで画面半分以内に収まること"
+    - "デスクトップでは従来通り常時展開であること"
+    - "地図操作（ドラッグ、ピンチズーム）がパネルに阻害されないこと"
+    - "既存のJavaScript（Leaflet初期化、GeoJSON読み込み、ボタンイベント等）が壊れていないこと"
+    - "外部ライブラリ追加なし（CSS + vanilla JSのみ）"
+    - "commit + push済みで、GitHub Pages URLで動作確認可能であること"
+  command: |
+    リポジトリ: https://github.com/odakin/ishida-tsutsumi-map
+    ※ まだローカルにクローンされていない。~/Claude/ 配下に clone すること。
+
+    【問題】
+    スマートフォンで閲覧すると、.panel（情報パネル＋凡例＋ボタン＋スライダー）が画面の大半を覆い、
+    背後の Leaflet 地図がほぼ見えない。
+
+    現状CSS:
+    - .panel: position: absolute; top: 10px; left: 10px; max-width: 380px;
+    - @media クエリなし。モバイル対応一切なし
+    - パネル内: h1, 説明リスト(ul/li), ボタン行(btnrow), スライダー, 凡例(legend)
+    - 折り畳み/非表示機能なし
+
+    【実装方針の参考】
+    - @media (max-width: 768px) でパネルスタイル上書き
+    - h1をタップハンドルにする（▼/▲アイコン付き）
+    - 折り畳み時: .panel の子要素を display:none、h1だけ表示
+    - 展開時: max-height: 50vh; overflow-y: auto;
+
+    【テスト】
+    Chrome DevTools モバイルエミュレーション（iPhone SE, iPhone 14 Pro）で確認:
+    - パネル折り畳み/展開トグル動作
+    - 折り畳みで地図全画面表示
+    - 展開時も地図操作可能
+    - デスクトップ幅で従来通り
+  project: ishida-tsutsumi-map
+  priority: high
+  status: pending
+  phases:
+    - phase: 1
+      mode: parallel
+      subtasks:
+        - id: s223a
+          description: |
+            リポジトリを ~/Claude/ 配下に clone し、既存コードを解析:
+            1. git clone https://github.com/odakin/ishida-tsutsumi-map ~/Claude/ishida-tsutsumi-map
+            2. HTML/CSS/JS の構造を把握（.panel の構造、既存スタイル、JS イベントハンドラ）
+            3. Leaflet の初期化方法、GeoJSON 読み込み、ボタン/スライダーのイベント処理を確認
+            4. 修正対象ファイルと修正箇所を特定し、レポートにまとめる
+          bloom_level: L2
+    - phase: 2
+      mode: sequential
+      subtasks:
+        - id: s223b
+          description: |
+            Phase 1（s223a）の解析結果に基づき、モバイル対応を実装:
+            1. @media (max-width: 768px) でパネルスタイル上書き
+               - デフォルト折り畳み: .panel の子要素を非表示、h1だけ表示
+               - max-height: 50vh; overflow-y: auto;（展開時）
+            2. h1 にタップハンドル追加（▼/▲アイコン、cursor: pointer）
+            3. vanilla JS でトグル機能追加（h1 クリックで展開/折り畳み切替）
+            4. 地図操作の阻害防止（パネルの pointer-events 等）
+            5. 既存JS（Leaflet、ボタンイベント等）との干渉がないこと確認
+            6. 外部ライブラリ追加不可。CSS + vanilla JS のみ。
+          bloom_level: L3
+        - id: s223c
+          description: |
+            テスト + commit + push:
+            1. ローカルで表示確認（可能であれば）
+            2. git add → commit → push
+            3. GitHub Pages URL で動作確認可能な状態にする
+            4. 修正内容のサマリをレポートに記載
+          bloom_level: L2
+    - phase: 3
+      mode: qc
+
+- id: cmd_224
+  timestamp: "2026-03-01T22:15:00+09:00"
+  purpose: "cmd_220（v4.0全体監査）の成果を git push する"
+  acceptance_criteria:
+    - "cmd_220 の修正内容が git push 済みであること"
+    - "push 前に git status で未コミットの変更がないことを確認すること"
+    - "push 先は origin main"
+  command: |
+    対象リポジトリ: ~/Claude/multi-agent-shogun（このリポジトリ自体）
+    cmd_220 の成果（v3.0残骸一掃）を git push せよ。
+    未コミットの変更があればまず commit してから push。
+  project: multi-agent-shogun
+  priority: high
+  status: pending
+  phases:
+    - phase: 1
+      mode: sequential
+      subtasks:
+        - id: s224a
+          description: |
+            cmd_220 の修正を git push:
+            1. git status で状態確認
+            2. 未コミットの変更があれば commit
+            3. git push origin main
+          bloom_level: L1
+    - phase: 2
+      mode: qc
+
+- id: cmd_225
+  timestamp: "2026-03-01T22:20:00+09:00"
+  purpose: "家老のキューYAML肥大化によるディスパッチ停止バグを修正 — アーカイブ機構を作成し、shogun_to_karo.yaml を常にスリムに保つ"
+  acceptance_criteria:
+    - "完了済み cmd を shogun_to_karo.yaml から queue/archive/ に移動するスクリプト（scripts/archive_completed_cmds.sh）が作成されていること"
+    - "アーカイブ後の shogun_to_karo.yaml が100行以下で、アクティブな cmd だけが残っていること"
+    - "karo.md に「YAMLが長い場合は最新の未完了 cmd だけを処理せよ」が明示されていること"
+    - "shogun.md に「新 cmd 書き込み前にアーカイブスクリプトを実行する手順」が追加されていること"
+    - "アーカイブスクリプトが実際に動作し、現在の shogun_to_karo.yaml をアーカイブ済みであること"
+    - "commit + push 済みであること"
+  command: |
+    対象リポジトリ: ~/Claude/multi-agent-shogun（このリポジトリ自体）
+
+    【問題】
+    shogun_to_karo.yaml が1100行超に膨張し、家老がRead→全cmd解析で23分以上 extended thinking にハマる。
+    足軽が全員遊休でもディスパッチ不能。v4.0「機械的ディスパッチャー」として致命的。
+
+    【根本原因】
+    完了済みcmd（cmd_200〜cmd_220等）の全データが残存し、家老が毎回全体を読んでしまう。
+
+    【対象ファイル】
+    - 新規: scripts/archive_completed_cmds.sh
+    - 修正: instructions/karo.md（肥大化時の処理ルール追加）
+    - 修正: instructions/shogun.md（アーカイブ実行手順追加）
+    - 対象: queue/shogun_to_karo.yaml（アーカイブ実行）
+    - 新規: queue/archive/（アーカイブ先ディレクトリ）
+  project: multi-agent-shogun
+  priority: critical
+  status: pending
+  phases:
+    - phase: 1
+      mode: parallel
+      subtasks:
+        - id: s225a
+          description: |
+            アーカイブスクリプト scripts/archive_completed_cmds.sh を作成:
+            1. shogun_to_karo.yaml を読み込む
+            2. 各 cmd の status を判定:
+               - done, done_ng, stalled, qc_pass → アーカイブ対象
+               - pending, in_progress → アクティブ（残す）
+            3. アーカイブ対象の cmd を queue/archive/cmds_YYYYMMDD.yaml に移動
+            4. shogun_to_karo.yaml からアーカイブ済み cmd を除去し、アクティブ cmd だけ残す
+            5. queue/archive/ ディレクトリがなければ作成
+            6. flock でファイルロックすること（家老との競合防止）
+            7. アーカイブ前にバックアップを取ること（queue/archive/backup_YYYYMMDD_HHMMSS.yaml）
+
+            実装言語: bash + awk/sed（python不要）
+            YAMLパーサは不要 — cmd ブロックは "- id: cmd_" で始まるので、このパターンでブロック分割可能。
+          bloom_level: L3
+        - id: s225b
+          description: |
+            instructions の改善:
+            1. karo.md に追加:
+               - 「shogun_to_karo.yaml が長い場合、status が done/done_ng/stalled/qc_pass の cmd は読み飛ばせ」
+               - 「最新の pending/in_progress cmd だけを処理せよ」
+               - Read 時に offset を使って末尾から読む手法も記載
+            2. shogun.md に追加:
+               - 「新 cmd を書く前に bash scripts/archive_completed_cmds.sh を実行」
+               - 将軍の ALLOWED LIST に archive_completed_cmds.sh を追加
+          bloom_level: L2
+    - phase: 2
+      mode: sequential
+      subtasks:
+        - id: s225c
+          description: |
+            アーカイブスクリプトの動作テスト + 実行:
+            1. scripts/archive_completed_cmds.sh を実際に実行
+            2. アーカイブ後の shogun_to_karo.yaml が100行以下であることを確認
+            3. アクティブな cmd（pending/in_progress）だけが残っていることを確認
+            4. queue/archive/ にアーカイブファイルが作成されていることを確認
+            5. commit + push
+          bloom_level: L2
+    - phase: 3
+      mode: qc
