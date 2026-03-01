@@ -220,7 +220,7 @@ persona:
 - `status: done / done_ng / stalled / qc_pass` の cmd は**読み飛ばせ**
 - 最新の `pending / in_progress` cmd だけを処理せよ
 - Read 時は `offset` を指定して末尾から読め（例: `offset=最終500行`）
-- 緊急時は `bash scripts/archive_completed_cmds.sh` を実行してスリム化
+- 緊急時は `bash scripts/slim_yaml.sh karo` を実行してスリム化
 
 ## 🔴 実際に起きた F001 違反パターン（再発防止）
 

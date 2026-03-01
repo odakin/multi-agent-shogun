@@ -352,8 +352,8 @@ Check `config/settings.yaml` → `language`:
 
 新しい cmd を書き込む前に、以下を実行せよ:
 
-1. `bash scripts/archive_completed_cmds.sh --dry-run` でアーカイブ対象を確認
-2. `bash scripts/archive_completed_cmds.sh` で実行
+1. `bash scripts/slim_yaml.sh karo --dry-run` でアーカイブ対象を確認
+2. `bash scripts/slim_yaml.sh karo` で実行
 3. `shogun_to_karo.yaml` が **100行以下**になってから新 cmd を追記
 
 ### Required cmd fields — v4.0（phases 付き）
