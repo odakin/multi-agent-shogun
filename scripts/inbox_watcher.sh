@@ -1048,7 +1048,9 @@ for s in data.get('specials', []):
                 elif [ "$AGENT_ID" = "shogun" ] || [ "$AGENT_ID" = "karo" ] || [ "$AGENT_ID" = "gunshi" ]; then
                     # Command-layer agents (karo/gunshi/shogun): suppress /clear even in Phase 3
                     echo "[$(date)] [SKIP] ESCALATION Phase 3: $AGENT_ID suppressed (command-layer agent, ${age}s). Using Escape+nudge." >&2
-                    FIRST_UNREAD_SEEN=$now  # Reset timer
+                    # NOTE: Do NOT reset FIRST_UNREAD_SEEN here.
+                    # Resetting causes Phase1→3 infinite loop with no exit.
+                    # Let the timer accumulate — Phase 3 keeps firing (Escape+nudge) until messages are read.
                     send_wakeup_with_escape "$normal_count"
                 else
                     echo "[$(date)] ESCALATION Phase 3: Agent $AGENT_ID unresponsive for ${age}s. Sending /clear." >&2
@@ -1145,6 +1147,13 @@ while true; do
     # rc=2: timeout (30s safety net for WSL2 inotify gaps / macOS fswatch timeout)
     # All cases: check for unread, then loop back (re-watches new inode)
     sleep 0.3
+
+    # tmux session liveness check — exit if session disappeared (prevents zombie watcher)
+    _iw_session="${PANE_TARGET%%:*}"
+    if [ -n "$_iw_session" ] && ! tmux has-session -t "$_iw_session" 2>/dev/null; then
+        echo "[$(date)] [EXIT] tmux session '$_iw_session' no longer exists. inbox_watcher for $AGENT_ID exiting." >&2
+        exit 0
+    fi
 
     if [ "$rc" -eq 2 ]; then
         # Timeout tick: check for stuck agents before processing unread
