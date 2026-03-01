@@ -1113,11 +1113,30 @@ NINJA_EOF
     log_info "🖥️  ビューワーウィンドウを起動中..."
     _viewer_opened=false
 
+    # 画面サイズを取得し、短い方の80%を算出
+    _SCREEN_COLS=$(tput cols 2>/dev/null || echo 200)
+    _SCREEN_ROWS=$(tput lines 2>/dev/null || echo 60)
+    if [ "$_SCREEN_COLS" -lt "$_SCREEN_ROWS" ]; then
+        _VIEWER_SIZE=$(( _SCREEN_COLS * 80 / 100 ))
+        _VIEWER_COLS=$_VIEWER_SIZE
+        _VIEWER_ROWS=$_VIEWER_SIZE
+    else
+        _VIEWER_SIZE=$(( _SCREEN_ROWS * 80 / 100 ))
+        _VIEWER_COLS=$(( _VIEWER_SIZE * _SCREEN_COLS / _SCREEN_ROWS ))
+        _VIEWER_ROWS=$_VIEWER_SIZE
+    fi
+    # 最低サイズ保証
+    [ "$_VIEWER_COLS" -lt 120 ] && _VIEWER_COLS=120
+    [ "$_VIEWER_ROWS" -lt 40 ] && _VIEWER_ROWS=40
+
+    # ビューワーウィンドウ起動時にリサイズするコマンド
+    _VIEWER_CMD="printf '\\\\033[8;${_VIEWER_ROWS};${_VIEWER_COLS}t'; sleep 0.3; tmux attach-session -t multiagent-teams"
+
     # iTerm2 が利用可能なら優先使用
     if [ -d "/Applications/iTerm.app" ] || pgrep -x "iTerm2" >/dev/null 2>&1; then
         osascript -e "
             tell application \"iTerm\"
-                create window with default profile command \"tmux attach-session -t multiagent-teams\"
+                create window with default profile command \"$_VIEWER_CMD\"
                 activate
             end tell
         " 2>/dev/null && _viewer_opened=true
@@ -1127,7 +1146,7 @@ NINJA_EOF
     if [ "$_viewer_opened" = false ]; then
         osascript -e "
             tell application \"Terminal\"
-                do script \"tmux attach-session -t multiagent-teams\"
+                do script \"$_VIEWER_CMD\"
                 activate
             end tell
         " 2>/dev/null && _viewer_opened=true
