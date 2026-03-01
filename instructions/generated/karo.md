@@ -92,6 +92,78 @@ Karo is the **only** agent that updates dashboard.md. Neither shogun nor ashigar
 | Notification sent | ntfy + streaks | Send completion notification |
 | Action needed | 🚨 要対応 | Items requiring lord's judgment |
 
+## Checkpoint (auto-compact 復旧用)
+
+auto-compact でワークフロー状態が失われることを防ぐ。**状態遷移のたびに** `queue/state/karo_checkpoint.yaml` を更新せよ。
+
+### When to Write Checkpoint
+
+| Event | workflow_step | Example next_action |
+|-------|--------------|---------------------|
+| cmd ACK (pending→in_progress) | `ack` | "Decompose and dispatch subtasks" |
+| Subtasks dispatched | `dispatched` | "Wait for ashigaru reports" |
+| Report received (partial) | `collecting` | "N/M reports received, waiting for remaining" |
+| All reports received → QC dispatch | `qc_dispatched` | "Wait for Gunshi QC result" |
+| QC result received (pass) | `qc_passed` | "Mark cmd done, report to Shogun" |
+| QC result received (fail) | `qc_failed` | "Create corrective subtasks from findings" |
+| Corrective subtasks dispatched | `fix_dispatched` | "Wait for fix completion, then re-QC" |
+| cmd complete | `idle` | "" |
+
+### Checkpoint Format
+
+```yaml
+checkpoint:
+  updated: "2026-03-01T10:52:00"  # date command
+  active_cmd: cmd_207
+  workflow_step: qc_dispatched
+  next_action: |
+    gunshi qc_207g の結果待ち。
+    PASS → cmd_207 done → 将軍報告 → ntfy
+    NG → findings から修正subtask作成 → 再派遣
+  waiting_for:
+    agent: gunshi
+    task_id: qc_207g
+  context: |
+    Phase2完了。ashigaru2が755点置換。Gunshi QC派遣済み。
+```
+
+### Post-Compact Recovery Protocol (CRITICAL)
+
+On **every wakeup** (including after auto-compact), execute this before anything else:
+
+1. **Read checkpoint**: `queue/state/karo_checkpoint.yaml`
+2. **Read cmd queue**: `queue/shogun_to_karo.yaml` — find `status: in_progress` cmds
+3. **Cross-reference**: Compare checkpoint with file reality:
+   - Checkpoint says "waiting for ashigaru2" → Read `queue/tasks/ashigaru2.yaml` + `queue/reports/ashigaru2_report.yaml`
+   - If report exists but checkpoint says "waiting" → checkpoint is stale, **advance workflow**
+   - If checkpoint says "idle" but cmd is in_progress → checkpoint is stale, **scan all subtasks**
+4. **Act on derived state**: Execute `next_action` from checkpoint (or derived from scan)
+5. **Update checkpoint**: Write new state after acting
+
+**Key principle**: Do NOT wait for a nudge. Proactively check file state and advance the workflow. This eliminates dependency on inbox_watcher and nudge delivery.
+
+### Recovery Decision Tree
+
+```
+Read checkpoint
+  │
+  ├─ workflow_step = idle
+  │   └─ Check shogun_to_karo.yaml for pending cmds → ACK and process
+  │
+  ├─ workflow_step = dispatched / collecting
+  │   └─ Scan all subtask reports → process any unprocessed
+  │       ├─ All done → dispatch Gunshi QC
+  │       └─ Some pending → update checkpoint, wait
+  │
+  ├─ workflow_step = qc_dispatched / fix_dispatched
+  │   └─ Read Gunshi/Ashigaru report → if exists, process result
+  │       ├─ QC pass → mark cmd done → report to Shogun
+  │       ├─ QC fail → create corrective subtasks
+  │       └─ No report yet → update checkpoint, wait
+  │
+  └─ No checkpoint file → Full scan: read ALL yamls, derive state
+```
+
 ## Cmd Status (Ack Fast)
 
 When you begin working on a new cmd in `queue/shogun_to_karo.yaml`, immediately update:
@@ -332,7 +404,8 @@ One rule: **measure, don't assume.**
 
 - Ashigaru report overdue → check pane status
 - Dashboard inconsistency → reconcile with YAML ground truth
-- Own context < 20% remaining → report to shogun via dashboard, prepare for context reset
+- Own context < 20% remaining → **write checkpoint immediately**, report to shogun via dashboard, prepare for context reset
+- Post-compact recovery → read checkpoint FIRST, then execute recovery protocol
 
 # Communication Protocol
 
@@ -583,22 +656,38 @@ Step 9: Ashigaru completes → inbox_write karo → watcher nudges karo
 
 **Karo wakes via**: inbox nudge from ashigaru report, shogun new cmd, or system event. Nothing else.
 
-## "Wake = Full Scan" Pattern
+## "Wake = Full Scan" Pattern (Checkpoint-Enhanced)
 
 Claude Code cannot "wait". Prompt-wait = stopped.
+**After auto-compact, all in-context state is lost.** Recovery MUST use persistent files.
 
-1. Dispatch ashigaru
-2. Say "stopping here" and end processing
-3. Ashigaru wakes you via inbox
-4. Scan ALL report files (not just the reporting one)
-5. Assess situation, then act
+### On Every Wakeup (including post-compact):
+
+1. **Read checkpoint** `queue/state/karo_checkpoint.yaml` → know where you left off
+2. **Read cmd queue** `queue/shogun_to_karo.yaml` → find `in_progress` / `pending` cmds
+3. **Scan ALL report files** `queue/reports/ashigaru*_report.yaml` + `queue/reports/gunshi_report.yaml`
+4. **Cross-reference**: Has state progressed beyond checkpoint? (e.g., report exists but checkpoint says "waiting")
+   - YES → advance workflow (process report, dispatch QC, mark done...)
+   - NO → checkpoint is current, execute `next_action`
+5. **Act**, then **update checkpoint** with new state
+6. If no work to do → set checkpoint to `idle`
+
+**Key rule**: Do NOT wait for nudges to discover completed work. **Proactively scan files.** Nudges are a performance optimization, not a correctness requirement.
+
+### Why Checkpoint + Scan (ARIES Pattern)
+
+```
+Checkpoint alone: fast but can be stale (agent crashed between action and checkpoint write)
+Scan alone: always correct but expensive (16+ file reads, ambiguous states)
+Checkpoint + Scan: checkpoint for fast-path, scan for validation → best of both
+```
 
 ## Report Scanning (Communication Loss Safety)
 
 On every wakeup (regardless of reason), scan ALL `queue/reports/ashigaru*_report.yaml`.
-Cross-reference with dashboard.md — process any reports not yet reflected.
+Cross-reference with checkpoint and dashboard.md — process any reports not yet reflected.
 
-**Why**: Ashigaru inbox messages may be delayed. Report files are already written and scannable as a safety net.
+**Why**: inbox_write nudges may fail (watcher dead, busy detection false positive). Report files are the **ground truth** — always scannable regardless of nudge delivery.
 
 ## Foreground Block Prevention (24-min Freeze Lesson)
 
