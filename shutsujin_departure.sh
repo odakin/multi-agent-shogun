@@ -523,6 +523,12 @@ tmux select-pane -t shogun:main -P 'bg=#002b36'  # 将軍の Solarized Dark
 tmux set-option -p -t shogun:main @agent_id "shogun"
 
 log_success "  └─ 将軍の本陣、構築完了"
+
+# ── 将軍セッションに戦況モニターペインを追加（右半分） ──
+tmux split-window -h -t shogun:main -l 50%
+tmux send-keys -t shogun:main.1 "cd \"$(pwd)\" && bash scripts/battle_monitor.sh" Enter
+tmux select-pane -t shogun:main.0   # 将軍入力ペインにフォーカス戻す
+log_info "  └─ 戦況モニター、右ペインに配備"
 echo ""
 
 # pane-base-index を取得（1 の環境ではペインは 1,2,... になる）

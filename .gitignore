@@ -105,6 +105,7 @@
 !scripts/update_dashboard.sh
 !scripts/teams_visual_monitor.sh
 !scripts/health_checker.sh
+!scripts/battle_monitor.sh
 
 # Dashboard & Changelog
 !dashboard.md

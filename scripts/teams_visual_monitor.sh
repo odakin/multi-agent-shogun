@@ -56,6 +56,11 @@ _tmux() {
     fi
 }
 
+# Source shared library for busy/idle detection (used by dynamic_resize_panes)
+if [ -f "$SCRIPT_DIR/lib/agent_status.sh" ]; then
+    source "$SCRIPT_DIR/lib/agent_status.sh"
+fi
+
 log "=== ビジュアルモニター起動 ==="
 log "SESSION_NAME=$SESSION_NAME"
 log "SCRIPT_DIR=$SCRIPT_DIR"
@@ -472,6 +477,98 @@ check_unresponsive_panes() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# 動的リサイズ — 稼働中ペインを大きく、待機中を小さく
+# ═══════════════════════════════════════════════════════════════════════════════
+# 3×3グリッドは「3列 × 各列3行」の構造。
+# 各列内で稼働中ペインに高さを多く割り当て、待機中を最小化する。
+# 前回と同じ状態なら resize コマンドをスキップ（無駄な tmux 呼び出し回避）。
+# ═══════════════════════════════════════════════════════════════════════════════
+MIN_PANE_HEIGHT=4
+PREV_RESIZE_STATE=""
+
+dynamic_resize_panes() {
+    local session="$1"
+
+    # agents ウィンドウの高さを取得
+    local win_height
+    win_height=$(_tmux display-message -t "${session}" -p '#{window_height}' 2>/dev/null)
+    [ -z "$win_height" ] || [ "$win_height" -lt 10 ] && return
+
+    # agent_is_busy_check が使えなければスキップ
+    type agent_is_busy_check &>/dev/null || return
+
+    # 全ペインの busy/idle 状態を収集（高速: 1回の list-panes + 各 capture-pane）
+    local pane_list_with_ids
+    pane_list_with_ids=$(_tmux list-panes -s -t "$session" -F '#{pane_id} #{@agent_id} #{pane_height}' 2>/dev/null)
+    [ -z "$pane_list_with_ids" ] && return
+
+    # ペイン数確認（9ペイン＝3×3のときだけリサイズ）
+    local total_panes
+    total_panes=$(echo "$pane_list_with_ids" | wc -l | tr -d ' ')
+    [ "$total_panes" -ne 9 ] && return
+
+    # 各ペインの busy 状態を判定
+    local pane_ids=() pane_busy=()
+    local current_state=""
+    while IFS=' ' read -r pid aid _ph; do
+        pane_ids+=("$pid")
+        if [ -n "$aid" ] && [ "$aid" != "..." ] && agent_is_busy_check "$pid" 2>/dev/null; then
+            pane_busy+=(1)
+            current_state+="B"
+        else
+            pane_busy+=(0)
+            current_state+="I"
+        fi
+    done <<< "$pane_list_with_ids"
+
+    # 前回と同じ状態ならスキップ
+    if [ "$current_state" = "$PREV_RESIZE_STATE" ]; then
+        return
+    fi
+    PREV_RESIZE_STATE="$current_state"
+
+    # 列ごとにリサイズ（列0: pane 0,1,2  列1: pane 3,4,5  列2: pane 6,7,8）
+    # ペインの並びは list-panes の順序に依存（tiled レイアウトで列優先）
+    for col in 0 1 2; do
+        local busy_in_col=0 idle_in_col=0
+        local col_panes=()
+        local col_busy=()
+        for row in 0 1 2; do
+            local idx=$((col * 3 + row))
+            col_panes+=("${pane_ids[$idx]}")
+            col_busy+=("${pane_busy[$idx]}")
+            if [ "${pane_busy[$idx]}" -eq 1 ]; then
+                busy_in_col=$((busy_in_col + 1))
+            else
+                idle_in_col=$((idle_in_col + 1))
+            fi
+        done
+
+        if [ "$busy_in_col" -eq 0 ]; then
+            # 全員待機 → 均等
+            local eq_h=$((win_height / 3))
+            for p in "${col_panes[@]}"; do
+                _tmux resize-pane -t "$p" -y "$eq_h" 2>/dev/null
+            done
+        else
+            local idle_total=$((idle_in_col * MIN_PANE_HEIGHT))
+            local busy_h=$(( (win_height - idle_total) / busy_in_col ))
+            [ "$busy_h" -lt "$MIN_PANE_HEIGHT" ] && busy_h=$MIN_PANE_HEIGHT
+
+            for i in 0 1 2; do
+                if [ "${col_busy[$i]}" -eq 1 ]; then
+                    _tmux resize-pane -t "${col_panes[$i]}" -y "$busy_h" 2>/dev/null
+                else
+                    _tmux resize-pane -t "${col_panes[$i]}" -y "$MIN_PANE_HEIGHT" 2>/dev/null
+                fi
+            done
+        fi
+    done
+
+    log "dynamic_resize: state=$current_state"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # メインループ
 # ═══════════════════════════════════════════════════════════════════════════════
 declare -A STYLED_PANES
@@ -556,6 +653,11 @@ while true; do
                 log "tiled layout applied to window $win ($win_panes panes)"
             fi
         done
+    fi
+
+    # 動的リサイズ（毎サイクル、状態変化時のみ実際にリサイズ）
+    if [ "$pane_count" -eq 9 ]; then
+        dynamic_resize_panes "$local_session" 2>/dev/null || true
     fi
 
     # Permission デッドロック検出（5サイクルごと = 約15秒ごと）

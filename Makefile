@@ -1,4 +1,4 @@
-.PHONY: test build lint check help install-deps clean dashboard dashboard-watch health-check
+.PHONY: test build lint check help install-deps clean dashboard dashboard-watch health-check monitor
 
 # Default target
 help:
@@ -14,6 +14,7 @@ help:
 	@echo "  make dashboard     - Generate/update dashboard.md"
 	@echo "  make dashboard-watch - Auto-update dashboard on file changes"
 	@echo "  make health-check  - Start agent health checker (replaces inbox_watchers)"
+	@echo "  make monitor       - Launch battle monitor (real-time agent dashboard)"
 	@echo "  make clean         - Clean test artifacts"
 	@echo ""
 
@@ -137,6 +138,10 @@ dashboard-watch:
 # Health checker: single-process agent monitor (replaces 10 inbox_watchers)
 health-check:
 	@bash scripts/health_checker.sh
+
+# Battle monitor: real-time agent dashboard (right pane of shogun session)
+monitor:
+	@bash scripts/battle_monitor.sh
 
 # Quick development workflow
 dev: lint test
