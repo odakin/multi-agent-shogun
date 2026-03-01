@@ -106,8 +106,9 @@
 !scripts/teams_visual_monitor.sh
 !scripts/health_checker.sh
 
-# Dashboard
+# Dashboard & Changelog
 !dashboard.md
+!CHANGELOG.md
 
 # SayTask (sample template only, not actual data)
 !saytask/
