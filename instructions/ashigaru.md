@@ -69,11 +69,14 @@ workflow:
     action: seo_keyword_record
     note: "If SEO project, append completed keywords to done_keywords.txt"
   - step: 9
-    action: inbox_write
-    target: gunshi
+    action: dual_notify
+    targets: [karo, gunshi]
     method: "bash scripts/inbox_write.sh"
     mandatory: true
-    note: "Changed from karo to gunshi. Gunshi now handles quality check + dashboard."
+    note: |
+      v3.1 並列アーキテクチャ: 2通を同時送信。
+      ① karo: 「ash{N}空き、次タスク割当可」(1行 — 次タスク即発令用)
+      ② gunshi: 「完了。ashigaru{N}_report.yaml参照」(YAML参照 — QC用)
   - step: 9.5
     action: check_inbox
     target: "queue/inbox/ashigaru{N}.yaml"
@@ -104,9 +107,10 @@ panes:
 inbox:
   write_script: "scripts/inbox_write.sh"  # See CLAUDE.md for mailbox protocol
   to_gunshi_allowed: true
-  to_gunshi_on_completion: true  # Changed from karo to gunshi (quality check delegation)
-  to_karo_allowed: false
+  to_gunshi_on_completion: true  # YAML参照を軍師に送信（QC用）
+  to_karo_allowed: true  # v3.1: 1行空き通知を家老に送信（次タスク即発令用）
   to_shogun_allowed: false
+  dual_notify: true  # v3.1: 完了時に家老+軍師に同時通知
   to_user_allowed: false
   mandatory_after_completion: true
 
@@ -144,7 +148,9 @@ Replace the legacy workflow (read YAML → inbox_write report) with:
 2. TaskUpdate(taskId="...", status="in_progress") — mark started
 3. Execute the task
 4. TaskUpdate(taskId="...", status="completed") — mark done
-5. SendMessage(type="message", recipient="karo", content="任務完了でござる。{summary}", summary="任務完了報告")
+5. Dual-notify (2通同時送信):
+   a. SendMessage(type="message", recipient="karo", content="ash{N}空き、次タスク割当可", summary="空き通知")
+   b. SendMessage(type="message", recipient="gunshi", content="完了。{task_id}: {1行要約}", summary="QC依頼")
 6. Check TaskList() for next available task
 ```
 
@@ -153,18 +159,19 @@ Replace the legacy workflow (read YAML → inbox_write report) with:
 Your name is set by the `name` parameter when Karo spawned you (e.g., "ashigaru1").
 No need for `tmux display-message` — your identity is provided at spawn time.
 
-### Report Format
+### Report Format (Agent Teams dual-notify)
 
-Instead of writing YAML report files, send a **concise** completion message via SendMessage:
+Dual-notify で **2通** 送信:
 ```
-SendMessage(
-  type="message",
-  recipient="karo",
-  content="完了。{task_id}: {1行要約}",
-  summary="任務完了報告"
-)
+# ① 家老: fast path（次タスク即発令）
+SendMessage(type="message", recipient="karo",
+  content="ash{N}空き、次タスク割当可", summary="空き通知")
+
+# ② 軍師: async QC
+SendMessage(type="message", recipient="gunshi",
+  content="完了。{task_id}: {1行要約}", summary="QC依頼")
 ```
-**コンテキスト節約**: files_modified 等の詳細は不要。家老が必要なら聞いてくる。
+**コンテキスト節約**: 家老への通知にレポート内容は書かない。軍師が必要に応じてYAMLを読む。
 
 ### Files Not Used in Agent Teams Mode
 
@@ -243,16 +250,23 @@ Always use `date` command. Never guess.
 date "+%Y-%m-%dT%H:%M:%S"
 ```
 
-## Report Notification Protocol
+## Report Notification Protocol (v3.1 dual-notify)
 
-After writing report YAML, notify Gunshi (NOT Karo) with a **1行メッセージ**:
+レポートYAML記入後、**家老と軍師に同時に2通送信**:
 
 ```bash
+# ① 家老への空き通知（fast path — 次タスク即発令トリガー）
+bash scripts/inbox_write.sh karo "ash{N}空き、次タスク割当可" task_done ashigaru{N}
+
+# ② 軍師へのYAML参照（async QC用）
 bash scripts/inbox_write.sh gunshi "完了。ashigaru{N}_report.yaml参照" report_received ashigaru{N}
 ```
 
-**重要**: メッセージは短く。レポート詳細は YAML に書いてあるので通知に繰り返さない。
-家老・軍師のコンテキスト節約のため、冗長な通知は禁止。
+**重要**:
+- 家老への通知は **1行のみ**。レポート内容は書かない（家老はレポートを読まない）。
+- 軍師への通知も **1行のみ**。レポート詳細はYAMLに書いてある。
+- 2通とも **同じ Bash tool call** で `&&` 連結で送信してよい。
+- 冗長な通知は家老・軍師のコンテキストを浪費するため禁止。
 
 ## Report Format
 
@@ -340,7 +354,7 @@ Act without waiting for Karo's instruction:
 1. Self-review deliverables (re-read your output)
 2. **Purpose validation**: Read `parent_cmd` in `queue/shogun_to_karo.yaml` and verify your deliverable actually achieves the cmd's stated purpose. If there's a gap between the cmd purpose and your output, note it in the report under `purpose_gap:`.
 3. Write report YAML
-4. Notify Karo via inbox_write
+4. **Dual-notify**: 家老（空き通知）と軍師（YAML参照）に同時送信
 5. (No delivery verification needed — inbox_write guarantees persistence)
 
 **Quality assurance:**

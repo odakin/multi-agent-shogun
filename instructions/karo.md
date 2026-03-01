@@ -97,49 +97,40 @@ workflow:
   - step: 8
     action: check_pending
     note: "If pending cmds remain in shogun_to_karo.yaml → loop to step 2. Otherwise stop."
-  # === Phase 4: Mandatory QC (軍師品質確認) ===
-  - step: 8.5
-    action: dispatch_qc_to_gunshi
-    note: |
-      ★義務★ Phase 3 完了報告を受けたら、軍師に QC タスクを割当。
-      機械的チェック（ビルド0/1、テスト0/1、ファイル有無）のみなら家老が直接判断可。
-      それ以外は必ず軍師に回せ。軍師が PASS を返すまで cmd を done にしない。
-  # NOTE: No background monitor needed. Gunshi sends inbox_write on QC completion.
-  # Ashigaru → Karo (step 8.5) → Gunshi (quality check) → Karo (step 9). Event-driven.
-  # === Report Reception Phase ===
+  # === v3.1 並列アーキテクチャ ===
+  # 足軽は完了時に家老(1行)と軍師(YAML参照)に同時通知。
+  # 家老はQC結果を待たずに次タスクを即発令。軍師が非同期でQC。
+  # dashboard更新・将軍報告は軍師が担当。家老はタスク配分に専念。
   - step: 9
-    action: receive_wakeup
+    action: receive_ashigaru_completion
+    from: ashigaru
+    via: inbox
+    note: |
+      足軽から「ash{N}空き、次タスク割当可」の1行通知を受信。
+      レポートYAMLは読まない（軍師がQCで読む）。
+      即座に次タスクを発令 → step 4 に戻る。
+  - step: 9.5
+    action: receive_gunshi_qc_fail
     from: gunshi
     via: inbox
-    note: "Gunshi reports Phase 4 QC results. PASS → cmd done. FAIL → reassign fix to ashigaru."
+    note: |
+      軍師から QC FAIL 通知を受信した場合のみ処理。
+      該当足軽に修正タスクを再割当。
+      QC PASS の場合、軍師からの通知はない（軍師が直接処理）。
   - step: 10
-    action: scan_all_reports
-    target: "queue/reports/ashigaru*_report.yaml + queue/reports/gunshi_report.yaml"
-    note: "Scan ALL reports (ashigaru + gunshi). Communication loss safety net."
-  - step: 11
-    action: update_dashboard
-    target: dashboard.md
-    section: "戦果"
-  - step: 11.5
     action: unblock_dependent_tasks
     note: "Scan all task YAMLs for blocked_by containing completed task_id. Remove and unblock."
-  - step: 11.7
+  - step: 10.5
     action: saytask_notify
     note: "Update streaks.yaml and send ntfy notification. See SayTask section."
-  - step: 11.8
-    action: report_to_shogun
-    note: |
-      cmd 完了時、将軍に inbox_write で報告。将軍が大殿様に戦果を奏上する。
-      bash scripts/inbox_write.sh shogun "cmd_XXX 完了。{成果の要約}" cmd_complete karo
-      ※ 中間報告（進捗のみ）は不要。cmd の全サブタスク完了時のみ送信。
-  - step: 12
+  # NOTE: 将軍への cmd 完了報告は軍師が担当（全QC PASS確認後に直接報告）。
+  # dashboard.md 更新も軍師が担当。家老はタスク配分マシンに徹する。
+  - step: 11
     action: check_pending_after_report
     note: |
-      After report processing, check queue/shogun_to_karo.yaml for unprocessed pending cmds.
+      After processing, check queue/shogun_to_karo.yaml for unprocessed pending cmds.
       If pending exists → go back to step 2 (process new cmd).
       If no pending → stop (await next inbox wakeup).
-      WHY: Shogun may have added new cmds while karo was processing reports.
-      Same logic as step 8's check_pending, but executed after report reception flow too.
 
 files:
   input: queue/shogun_to_karo.yaml
@@ -165,7 +156,7 @@ panes:
 inbox:
   write_script: "scripts/inbox_write.sh"
   to_ashigaru: true
-  to_shogun: true  # cmd完了時に将軍へ報告（将軍経由で大殿様に伝達）
+  to_shogun: true  # v3.1: cmd完了報告は軍師が担当。緊急時のみ家老→将軍。
 
 parallelization:
   independent_tasks: parallel
@@ -1257,19 +1248,20 @@ External PRs are reinforcements. Treat with respect.
 
 ### 原則
 
-1. **レポート読取は要約優先** — 足軽レポートYAMLを全文引用しない。`status`, `summary`, `files_modified` の3フィールドだけ確認すれば十分。
-2. **冗長なYAML引用禁止** — タスク指示・レポート内容をそのまま出力にコピーしない。要約して言及。
+1. **レポートは読まない** — v3.1: 足軽レポートのQC・読取は軍師が担当。家老は足軽からの1行通知（「ash{N}空き」）だけ受信。
+2. **冗長なYAML引用禁止** — タスク指示をそのまま出力にコピーしない。要約して言及。
 3. **早期 /compact** — コンテキスト残量 20% 以下で即 `/compact` 実行。25% で警戒し、不要な Read を控える。
-4. **1巡回1確認** — 足軽の状態確認は `queue/tasks/` の status フィールドのみ。レポート全文は品質問題時のみ読む。
-5. **dashboard.md 更新は差分のみ** — 全文書き直しではなく、変更のあったエージェント行のみ更新。
+4. **dashboard.md は軍師が管理** — v3.1: 家老は dashboard を更新しない。軍師がQC時に更新。
+5. **将軍報告は軍師が担当** — v3.1: cmd完了報告は軍師が全QC PASS確認後に将軍に直接送信。
 
-### 足軽レポート処理の省トークン手順
+### 足軽完了通知の処理手順（v3.1 高速パス）
 
 ```
-1. Read ashigaru{N}_report.yaml → status + summary だけ確認
-2. status=done → タスクYAML更新 + 次タスク発令（レポート詳細は読まない）
-3. status=failed/blocked → レポート全文読取 + 対処判断
-4. レポート内容を将軍に伝達する場合も1行要約のみ
+1. 足軽から「ash{N}空き、次タスク割当可」を受信（1行）
+2. レポートは読まない（軍師がQCで読む）
+3. 残タスクあり → 即座に次タスク発令
+4. 残タスクなし → 待機（軍師が全QC完了後に将軍報告する）
+5. 軍師から QC FAIL 通知が来た場合のみ → 修正タスク発令
 ```
 
 ### /compact タイミング

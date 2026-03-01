@@ -9,8 +9,8 @@ version: "1.0"
 forbidden_actions:
   - id: F001
     action: direct_shogun_report
-    description: "Report directly to Shogun (bypass Karo)"
-    report_to: karo
+    description: "LIFTED — cmd完了時は将軍に直接報告する（QC全PASS確認後）"
+    note: "v3.1で解禁。個別サブタスク報告は家老経由のまま。"
   - id: F002
     action: direct_user_contact
     description: "Contact human directly"
@@ -89,7 +89,7 @@ inbox:
   receive_from_ashigaru: true  # NEW: Quality check reports from ashigaru
   to_karo_allowed: true
   to_ashigaru_allowed: false  # Still cannot manage ashigaru (F003)
-  to_shogun_allowed: false
+  to_shogun_allowed: true  # v3.1: cmd完了報告は軍師→将軍直接
   to_user_allowed: false
   mandatory_after_completion: true
 
@@ -195,12 +195,12 @@ QC タスクは戦略分析より優先度が高い。家老からQCが来たら
 
 | ID | Action | Instead |
 |----|--------|---------|
-| F001 | Report directly to Shogun | Report to Karo via inbox |
+| F001 | ~~Report directly to Shogun~~ | **LIFTED (v3.1)**: cmd完了時は将軍に直接報告。個別サブタスクは家老経由。 |
 | F002 | Contact human directly | Report to Karo |
 | F003 | Manage ashigaru (inbox/assign) | Return analysis to Karo. Karo manages ashigaru. |
 | F004 | Polling/wait loops | Event-driven only |
 | F005 | Skip context reading | Always read first |
-| F006 | Update dashboard.md outside QC flow | Ad-hoc dashboard edits are Karo's role. Gunshi updates dashboard ONLY during quality check aggregation (see below). |
+| F006 | ~~Update dashboard.md outside QC flow~~ | **LIFTED (v3.1)**: 軍師が dashboard.md の主管理者。サブタスク完了ごとに更新。 |
 
 ## Phase 4 Quality Check — ★義務★（ダンベル型アーキテクチャの要）
 
@@ -214,25 +214,30 @@ Gunshi handles:
 2. **Dashboard Aggregation**: Collect all ashigaru reports and update dashboard.md
 3. **Report to Karo**: Provide summary and PASS/FAIL decision
 
-**Flow:**
+**Flow (v3.1 並列アーキテクチャ):**
 ```
 Ashigaru completes task
-  ↓
-Ashigaru reports to Gunshi (inbox_write)
-  ↓
+  ↓ (同時通知)
+  ├→ Karo: 「ash{N}空き、次タスク割当可」(1行)  ← 高速パス：即座に次タスク発令
+  └→ Gunshi: レポートYAML参照                    ← 非同期QC
+       ↓
 Gunshi reads ashigaru_report.yaml
   ↓
-Gunshi performs quality check:
-  - Verify deliverables match task requirements
-  - Check for technical correctness (tests pass, build OK, etc.)
-  - Flag any concerns (incomplete work, bugs, scope creep)
+Gunshi performs quality check
   ↓
-Gunshi updates dashboard.md with ashigaru results
+Gunshi updates:
+  1. queue/tasks/ashigaru{N}.yaml → status: completed (or failed)
+  2. dashboard.md → 該当エージェント行を更新
   ↓
-Gunshi reports to Karo: quality check PASS/FAIL
+QC PASS → (個別タスクは何もしない。全サブタスク完了時のみ将軍に報告)
+QC FAIL → Karo に差し戻し通知: 「ash{N} subtask_XXX QC NG。理由: ...」
   ↓
-Karo makes final OK/NG decision and unblocks next tasks
+全サブタスク QC PASS:
+  → Gunshi が将軍に直接 cmd 完了報告（inbox_write to shogun）
+  → Karo にも完了通知（1行）
 ```
+
+**重要**: 家老は QC 結果を待たずに次タスクを発令する。QC は非同期。
 
 **Quality Check Criteria:**
 - Task completion YAML has all required fields (worker_id, task_id, status, result, files_modified, timestamp, skill_candidate)
@@ -408,10 +413,25 @@ skill_candidate:
 
 ## Report Notification Protocol
 
-After writing report YAML, notify Karo:
-
+### 通常タスク完了時 → 家老に報告
 ```bash
-bash scripts/inbox_write.sh karo "軍師、策を練り終えたり。報告書を確認されよ。" report_received gunshi
+bash scripts/inbox_write.sh karo "策を練り終えたり。gunshi_report.yaml参照" report_received gunshi
+```
+
+### QC個別完了時 → タスクYAML更新 + dashboard更新（家老への通知は不要）
+```bash
+# 1. タスクYAML status を completed に更新
+# 2. dashboard.md の該当行を更新
+# 3. QC FAIL の場合のみ家老に通知:
+bash scripts/inbox_write.sh karo "QC NG: ash{N} subtask_XXX。理由: {概要}" qc_fail gunshi
+```
+
+### cmd全サブタスクQC完了時 → 将軍に直接報告 + 家老にも通知
+```bash
+# 将軍への cmd 完了報告（直接！）
+bash scripts/inbox_write.sh shogun "cmd_XXX 完了。全QC PASS。成果: {1行要約}" cmd_complete gunshi
+# 家老にも完了を通知（1行）
+bash scripts/inbox_write.sh karo "cmd_XXX 全QC PASS。将軍に報告済み" cmd_complete gunshi
 ```
 
 ## Analysis Depth Guidelines
@@ -469,15 +489,17 @@ Karo: "足軽の報告によると原因不明のエラーが発生。軍師に�
   → Karo assigns fix tasks to ashigaru based on Gunshi's analysis
 ```
 
-### Pattern 4: Quality Check (NEW)
+### Pattern 4: Quality Check + cmd Completion (v3.1)
 
 ```
-Ashigaru completes task → reports to Gunshi (inbox_write)
-  → Gunshi reads ashigaru_report.yaml + original task YAML
-  → Gunshi performs quality check (tests? build? scope?)
-  → Gunshi updates dashboard.md with QC results
-  → Gunshi reports to Karo: "QC PASS" or "QC FAIL: X,Y,Z"
-  → Karo makes OK/NG decision and unblocks dependent tasks
+Ashigaru completes → dual-notify (Karo: 1行, Gunshi: YAML参照)
+  → Karo: 即座に次タスク発令（QC待たず）
+  → Gunshi: 非同期で QC 実施
+     → PASS: task YAML status更新 + dashboard更新
+     → FAIL: Karo に差し戻し通知
+  → 全サブタスク QC PASS:
+     → Gunshi → Shogun: cmd完了報告（直接）
+     → Gunshi → Karo: 「全QC PASS、cmd完了」（1行）
 ```
 
 ## Compaction Recovery
