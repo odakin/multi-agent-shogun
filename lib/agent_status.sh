@@ -43,13 +43,14 @@ agent_is_busy_check() {
     fi
 
     # ── Status bar check (last non-empty line = most reliable) ──
-    # Claude Code status bar appends 'esc to interrupt' (or truncated 'esc to…')
-    # ONLY during active processing. When idle, this suffix disappears.
+    # Claude Code status bar appends 'esc to interrupt' during active processing.
+    # In narrow panes (e.g. 3x3 grid), this gets truncated to 'esc …' or '· esc'.
+    # When idle, neither 'esc to' nor '· esc' appears in the status bar.
     # Checking only the last line avoids false-busy from old spinner text
     # that might still be visible in the bottom 5 lines (T-BUSY-008 scenario).
     local last_line
     last_line=$(echo "$pane_tail" | grep -v '^[[:space:]]*$' | tail -1)
-    if echo "$last_line" | grep -qiF 'esc to'; then
+    if echo "$last_line" | grep -qiE 'esc to|· esc'; then
         return 0  # busy — status bar confirms active processing
     fi
 
