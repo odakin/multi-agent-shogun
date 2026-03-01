@@ -954,6 +954,14 @@ NINJA_EOF
     disown
 
     log_success "  └─ $((_ASHIGARU_COUNT + 3))エージェント分のinbox_watcher起動完了（将軍+家老+足軽${_ASHIGARU_COUNT}+軍師）"
+
+    # health_checker: 全エージェント巡回ヘルスチェック（stuck検出 + 未読リトライ + compact復旧）
+    pkill -f "health_checker.sh" 2>/dev/null || true
+    sleep 0.5
+    nohup bash "$SCRIPT_DIR/scripts/health_checker.sh" 30 \
+        >> "$SCRIPT_DIR/logs/health_checker.log" 2>&1 &
+    disown
+    log_success "  └─ health_checker 起動（30秒巡回）"
     echo ""
 
     # ═══════════════════════════════════════════════════════════════════════════
