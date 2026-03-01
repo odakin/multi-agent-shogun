@@ -740,9 +740,11 @@ check_unresponsive_panes() {
 # 一括適用。各列の行高さが完全に独立しているため、列0のリサイズが列1・2に
 # 波及しない。
 # ═══════════════════════════════════════════════════════════════════════════════
-MIN_PANE_HEIGHT=4
+MIN_PANE_HEIGHT=6
 PREV_RESIZE_STATE=""
 RESIZE_DEBUG_COUNTER=0
+RECENT_WINDOW_SEC=30
+declare -A PANE_LAST_IDLE_TS
 
 dynamic_resize_panes() {
     local session="$1"
@@ -779,16 +781,30 @@ dynamic_resize_panes() {
 
     local pane_ids=() pane_nums=() pane_busy=()
     local current_state=""
+    local i=0
     while IFS=' ' read -r pid aid; do
         pane_ids+=("$pid")
         pane_nums+=("${pid#%}")    # %5 → 5
         if [ -n "$aid" ] && [ "$aid" != "..." ] && agent_is_busy_check "$pid" 2>/dev/null; then
             pane_busy+=(1)
             current_state+="B"
+            # BUSY遷移: 遷移前のアイドルタイムスタンプをリセット
+            unset "PANE_LAST_IDLE_TS[$pid]"
         else
-            pane_busy+=(0)
-            current_state+="I"
+            local now
+            now=$(date +%s)
+            local prev_char="${PREV_RESIZE_STATE:$i:1}"
+            [[ "$prev_char" == "B" ]] && PANE_LAST_IDLE_TS["$pid"]=$now
+            local idle_ts=${PANE_LAST_IDLE_TS["$pid"]:-0}
+            if [[ $idle_ts -gt 0 && $(( now - idle_ts )) -le $RECENT_WINDOW_SEC ]]; then
+                pane_busy+=(2)
+                current_state+="R"
+            else
+                pane_busy+=(0)
+                current_state+="I"
+            fi
         fi
+        i=$((i + 1))
     done <<< "$pane_list"
 
     # ペイン数確認
@@ -811,26 +827,40 @@ dynamic_resize_panes() {
     local heights=()
 
     for col in 0 1 2; do
-        local busy_cnt=0 idle_cnt=0
+        local busy_cnt=0 recent_cnt=0 idle_cnt=0
         for row in 0 1 2; do
             local idx=$((col * 3 + row))
-            [ "${pane_busy[$idx]}" -eq 1 ] && busy_cnt=$((busy_cnt + 1)) || idle_cnt=$((idle_cnt + 1))
+            if [ "${pane_busy[$idx]}" -eq 1 ]; then
+                busy_cnt=$((busy_cnt + 1))
+            elif [ "${pane_busy[$idx]}" -eq 2 ]; then
+                recent_cnt=$((recent_cnt + 1))
+            else
+                idle_cnt=$((idle_cnt + 1))
+            fi
         done
 
         local col_h=()
-        if [ "$busy_cnt" -eq 0 ]; then
-            # 全員待機 → 均等
+        if [ "$busy_cnt" -eq 0 ] && [ "$recent_cnt" -eq 0 ]; then
+            # 全員IDLE → 均等
+            local eq=$((usable_h / 3))
+            col_h=("$eq" "$eq" "$eq")
+        elif [ "$busy_cnt" -eq 0 ]; then
+            # 全員RECENT → 均等分割
             local eq=$((usable_h / 3))
             col_h=("$eq" "$eq" "$eq")
         else
-            # BUSY に余剰高さを割当、IDLE は最小
+            # BUSY有り → 3段階: BUSY最大、RECENT中間、IDLE最小
             local idle_total=$((idle_cnt * MIN_PANE_HEIGHT))
-            local busy_h=$(( (usable_h - idle_total) / busy_cnt ))
+            local busy_h=$(( (usable_h - idle_total) / (busy_cnt + recent_cnt) ))
             [ "$busy_h" -lt "$MIN_PANE_HEIGHT" ] && busy_h=$MIN_PANE_HEIGHT
+            local recent_h=$(( (MIN_PANE_HEIGHT + busy_h) / 2 ))
+            [ "$recent_h" -lt "$MIN_PANE_HEIGHT" ] && recent_h=$MIN_PANE_HEIGHT
             for row in 0 1 2; do
                 local idx=$((col * 3 + row))
                 if [ "${pane_busy[$idx]}" -eq 1 ]; then
                     col_h+=("$busy_h")
+                elif [ "${pane_busy[$idx]}" -eq 2 ]; then
+                    col_h+=("$recent_h")
                 else
                     col_h+=("$MIN_PANE_HEIGHT")
                 fi
