@@ -350,12 +350,11 @@ style_pane() {
         _tmux set-option -p -t "$pane_id" @model_name "$model" 2>/dev/null
     fi
 
-    # @current_task が未設定の場合のみ初期化
-    local current_task
-    current_task=$(_tmux show-options -p -t "$pane_id" -v @current_task 2>/dev/null)
-    if [ -z "$current_task" ]; then
-        _tmux set-option -p -t "$pane_id" @current_task "" 2>/dev/null
-    fi
+    # @current_task: task YAML から task_id を読み取り設定（ペイン出力文字列マッチ廃止）
+    # inbox nudge テキスト("inbox1"等)の誤検出を防止するため YAML を正規参照とする
+    local task_id_val
+    task_id_val=$(get_task_id_from_yaml "$agent_name")
+    _tmux set-option -p -t "$pane_id" @current_task "$task_id_val" 2>/dev/null
 
     # 背景色の適用（空なら白デフォルトにリセット）
     local bg_color
@@ -447,6 +446,43 @@ apply_3x3_grid() {
 # ═══════════════════════════════════════════════════════════════════════════════
 PERMISSION_PHASE1=60    # 60秒以上で Escape
 PERMISSION_PHASE2=120   # 120秒以上で Escape + /clear
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# task YAML から現在のtask_id を取得
+# ペイン出力文字列マッチは使わない — inbox nudge("inbox1"等)の誤検出を防止
+# ═══════════════════════════════════════════════════════════════════════════════
+get_task_id_from_yaml() {
+    local agent_name="$1"
+    local script_dir="${2:-$SCRIPT_DIR}"
+    local task_yaml="$script_dir/queue/tasks/${agent_name}.yaml"
+    [ -f "$task_yaml" ] || { echo ""; return; }
+    "$script_dir/.venv/bin/python3" -c "
+import yaml
+try:
+    with open('$task_yaml') as f:
+        data = yaml.safe_load(f) or {}
+    task = data.get('task', {}) or {}
+    status = task.get('status', '')
+    if status in ('assigned', 'in_progress', 'pending'):
+        tid = task.get('task_id', '') or ''
+        print(tid[:15])
+except:
+    pass
+" 2>/dev/null || echo ""
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 全スタイル済みペインの @current_task を task YAML から定期更新
+# ═══════════════════════════════════════════════════════════════════════════════
+update_current_tasks() {
+    local pane_id agent_name task_id_val
+    for pane_id in "${!STYLED_PANES[@]}"; do
+        agent_name="${STYLED_PANES[$pane_id]}"
+        [ -z "$agent_name" ] || [ "$agent_name" = "..." ] && continue
+        task_id_val=$(get_task_id_from_yaml "$agent_name")
+        _tmux set-option -p -t "$pane_id" @current_task "$task_id_val" 2>/dev/null
+    done
+}
 
 declare -A PANE_PERMISSION_FIRST_SEEN
 declare -A PANE_PERMISSION_ESCAPE_COUNT
@@ -759,7 +795,11 @@ declare -A STYLED_PANES
 PREV_PANE_COUNT=0
 RECOVERY_CHECK_COUNTER=0
 DEADLOCK_CHECK_COUNTER=0
+TASK_UPDATE_COUNTER=0
 LORD_PENDING_COUNTER=0
+
+# テストモード: __TEAMS_MONITOR_TESTING__=1 の場合は関数定義のみロードしてループを起動しない
+[ "${__TEAMS_MONITOR_TESTING__:-}" = "1" ] && return 0 2>/dev/null || true
 
 while true; do
     sleep "$POLL_INTERVAL"
@@ -865,6 +905,13 @@ while true; do
     if [ "$RECOVERY_CHECK_COUNTER" -ge 10 ]; then
         check_unresponsive_panes "$local_session"
         RECOVERY_CHECK_COUNTER=0
+    fi
+
+    # @current_task を task YAML から定期更新（5サイクルごと = 約15秒ごと）
+    TASK_UPDATE_COUNTER=$((TASK_UPDATE_COUNTER + 1))
+    if [ "$TASK_UPDATE_COUNTER" -ge 5 ]; then
+        update_current_tasks
+        TASK_UPDATE_COUNTER=0
     fi
 
     # 大殿裁可待ち表示更新（10サイクルごと = 約30秒ごと）
