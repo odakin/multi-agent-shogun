@@ -61,6 +61,75 @@ if [ -f "$SCRIPT_DIR/lib/agent_status.sh" ]; then
     source "$SCRIPT_DIR/lib/agent_status.sh"
 fi
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# tmux カスタムレイアウト — 列ファースト構造で列ごと独立リサイズ
+# ═══════════════════════════════════════════════════════════════════════════════
+# tiled レイアウトは行境界が列をまたいで共有されるため、1列の resize-pane -y
+# が他列に波及する。カスタムレイアウト文字列を {col[rows]} 構造で構築し
+# select-layout で一括適用すれば各列の行高さが完全独立になる。
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# tmux レイアウトチェックサム（tmux ソース互換 CRC-16）
+tmux_layout_checksum() {
+    local layout="$1"
+    local csum=0 i c
+    for (( i=0; i<${#layout}; i++ )); do
+        printf -v c '%d' "'${layout:$i:1}"
+        csum=$(( ((csum >> 1) + ((csum & 1) << 15) + c) & 0xFFFF ))
+    done
+    printf '%04x' "$csum"
+}
+
+# 列ファーストの 3x3 レイアウト文字列を構築
+# 引数: win_width win_height  pane_num[0..8]  height[0..8]
+# pane_num は tmux pane_id の数値部分（%N → N）
+build_column_first_layout() {
+    local W="$1" H="$2"
+    shift 2
+    local -a pid=() ht=()
+    local i
+    for i in {0..8}; do pid+=("$1"); shift; done
+    for i in {0..8}; do ht+=("$1"); shift; done
+
+    # 列幅（3等分、ボーダー2本分を引いた残りを分割）
+    local uw=$((W - 2))
+    local cw0=$((uw / 3))
+    local cw1=$(( (uw - cw0) / 2 ))
+    local cw2=$((uw - cw0 - cw1))
+    local x1=$((cw0 + 1))
+    local x2=$((x1 + cw1 + 1))
+
+    local layout="${W}x${H},0,0{"
+    local y1 y2
+
+    # 列0 (pane 0,1,2)
+    y1=$((ht[0] + 1)); y2=$((y1 + ht[1] + 1))
+    layout+="${cw0}x${H},0,0"
+    layout+="[${cw0}x${ht[0]},0,0,${pid[0]}"
+    layout+=",${cw0}x${ht[1]},0,${y1},${pid[1]}"
+    layout+=",${cw0}x${ht[2]},0,${y2},${pid[2]}]"
+
+    # 列1 (pane 3,4,5)
+    y1=$((ht[3] + 1)); y2=$((y1 + ht[4] + 1))
+    layout+=",${cw1}x${H},${x1},0"
+    layout+="[${cw1}x${ht[3]},${x1},0,${pid[3]}"
+    layout+=",${cw1}x${ht[4]},${x1},${y1},${pid[4]}"
+    layout+=",${cw1}x${ht[5]},${x1},${y2},${pid[5]}]"
+
+    # 列2 (pane 6,7,8)
+    y1=$((ht[6] + 1)); y2=$((y1 + ht[7] + 1))
+    layout+=",${cw2}x${H},${x2},0"
+    layout+="[${cw2}x${ht[6]},${x2},0,${pid[6]}"
+    layout+=",${cw2}x${ht[7]},${x2},${y1},${pid[7]}"
+    layout+=",${cw2}x${ht[8]},${x2},${y2},${pid[8]}]"
+
+    layout+="}"
+
+    local cksum
+    cksum=$(tmux_layout_checksum "$layout")
+    echo "${cksum},${layout}"
+}
+
 log "=== ビジュアルモニター起動 ==="
 log "SESSION_NAME=$SESSION_NAME"
 log "SCRIPT_DIR=$SCRIPT_DIR"
@@ -318,9 +387,9 @@ apply_border_format() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 3x3 グリッドレイアウト適用
-# Agent Teams はペインを自動作成するが、レイアウトは tiled のみ。
-# 9ペイン時に 3x3 グリッドに再構成する。
+# 3x3 グリッドレイアウト適用（列ファースト構造）
+# 列ファースト {col[rows]} 構造で適用し、列ごとの高さ独立を保証する。
+# フォールバック: 寸法取得失敗時は tiled を使用。
 # ═══════════════════════════════════════════════════════════════════════════════
 apply_3x3_grid() {
     local win="$1"
@@ -328,9 +397,37 @@ apply_3x3_grid() {
     win_panes=$(_tmux list-panes -t "$win" 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$win_panes" -eq 9 ]; then
-        # tiled レイアウトをまず適用（均等分割のベース）
+        # まず tiled で均等配置（列ファースト構築の前提として必要）
         _tmux select-layout -t "$win" tiled 2>/dev/null
-        log "3x3 grid layout applied to window $win (9 panes)"
+
+        # 列ファーストの均等レイアウトを構築・適用
+        local dims
+        dims=$(_tmux display-message -t "$win" -p '#{window_width} #{window_height}' 2>/dev/null)
+        local ww=${dims%% *}
+        local wh=${dims##* }
+
+        if [ -n "$ww" ] && [ "$ww" -gt 10 ] && [ -n "$wh" ] && [ "$wh" -gt 10 ]; then
+            local pids=()
+            while read -r pid; do
+                pids+=("${pid#%}")
+            done <<< "$(_tmux list-panes -t "$win" -F '#{pane_id}' 2>/dev/null)"
+
+            if [ "${#pids[@]}" -eq 9 ]; then
+                local uh=$((wh - 2))
+                local eq=$((uh / 3))
+                local h2=$((uh - eq * 2))
+                local hs=("$eq" "$eq" "$h2" "$eq" "$eq" "$h2" "$eq" "$eq" "$h2")
+
+                local layout_str
+                layout_str=$(build_column_first_layout "$ww" "$wh" "${pids[@]}" "${hs[@]}")
+                _tmux select-layout -t "$win" "$layout_str" 2>/dev/null
+                log "3x3 column-first layout applied to $win (9 panes)"
+                PREV_RESIZE_STATE=""   # リサイズ状態をリセット（新レイアウト適用済み）
+                return 0
+            fi
+        fi
+
+        log "3x3 grid layout applied to $win (fallback tiled)"
         return 0
     fi
     return 1
@@ -480,11 +577,11 @@ check_unresponsive_panes() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 動的リサイズ — 稼働中ペインを大きく、待機中を小さく
+# 動的リサイズ — 稼働中ペインを大きく、待機中を小さく（列独立）
 # ═══════════════════════════════════════════════════════════════════════════════
-# 3×3グリッドは「3列 × 各列3行」の構造。
-# 各列内で稼働中ペインに高さを多く割り当て、待機中を最小化する。
-# 前回と同じ状態なら resize コマンドをスキップ（無駄な tmux 呼び出し回避）。
+# 列ファースト {col[rows]} 構造のカスタムレイアウトを構築し select-layout で
+# 一括適用。各列の行高さが完全に独立しているため、列0のリサイズが列1・2に
+# 波及しない。
 # ═══════════════════════════════════════════════════════════════════════════════
 MIN_PANE_HEIGHT=4
 PREV_RESIZE_STATE=""
@@ -493,29 +590,41 @@ RESIZE_DEBUG_COUNTER=0
 dynamic_resize_panes() {
     local session="$1"
 
-    # agents ウィンドウの高さを取得
-    local win_height
-    win_height=$(_tmux display-message -t "${session}" -p '#{window_height}' 2>/dev/null)
-    [ -z "$win_height" ] || [ "$win_height" -lt 10 ] && return
-
     # agent_is_busy_check が使えなければスキップ
     type agent_is_busy_check &>/dev/null || return
 
-    # 全ペインの busy/idle 状態を収集（高速: 1回の list-panes + 各 capture-pane）
-    local pane_list_with_ids
-    pane_list_with_ids=$(_tmux list-panes -s -t "$session" -F '#{pane_id} #{@agent_id} #{pane_height}' 2>/dev/null)
-    [ -z "$pane_list_with_ids" ] && return
+    # 9ペインウィンドウを検索
+    local win_id=""
+    local wid
+    while read -r wid; do
+        [ -z "$wid" ] && continue
+        local cnt
+        cnt=$(_tmux list-panes -t "$wid" 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$cnt" -eq 9 ]; then
+            win_id="$wid"
+            break
+        fi
+    done <<< "$(_tmux list-windows -t "$session" -F '#{window_id}' 2>/dev/null)"
+    [ -z "$win_id" ] && return
 
-    # ペイン数確認（9ペイン＝3×3のときだけリサイズ）
-    local total_panes
-    total_panes=$(echo "$pane_list_with_ids" | wc -l | tr -d ' ')
-    [ "$total_panes" -ne 9 ] && return
+    # ウィンドウサイズ取得
+    local dims
+    dims=$(_tmux display-message -t "$win_id" -p '#{window_width} #{window_height}' 2>/dev/null)
+    local win_width=${dims%% *}
+    local win_height=${dims##* }
+    [ -z "$win_width" ] || [ "$win_width" -lt 10 ] && return
+    [ -z "$win_height" ] || [ "$win_height" -lt 10 ] && return
 
-    # 各ペインの busy 状態を判定
-    local pane_ids=() pane_busy=()
+    # 全ペインの busy/idle 状態を収集
+    local pane_list
+    pane_list=$(_tmux list-panes -t "$win_id" -F '#{pane_id} #{@agent_id}' 2>/dev/null)
+    [ -z "$pane_list" ] && return
+
+    local pane_ids=() pane_nums=() pane_busy=()
     local current_state=""
-    while IFS=' ' read -r pid aid _ph; do
+    while IFS=' ' read -r pid aid; do
         pane_ids+=("$pid")
+        pane_nums+=("${pid#%}")    # %5 → 5
         if [ -n "$aid" ] && [ "$aid" != "..." ] && agent_is_busy_check "$pid" 2>/dev/null; then
             pane_busy+=(1)
             current_state+="B"
@@ -523,7 +632,10 @@ dynamic_resize_panes() {
             pane_busy+=(0)
             current_state+="I"
         fi
-    done <<< "$pane_list_with_ids"
+    done <<< "$pane_list"
+
+    # ペイン数確認
+    [ "${#pane_ids[@]}" -ne 9 ] && return
 
     # 定期デバッグログ（30サイクル≒90秒ごと）
     RESIZE_DEBUG_COUNTER=$((RESIZE_DEBUG_COUNTER + 1))
@@ -537,45 +649,50 @@ dynamic_resize_panes() {
     fi
     PREV_RESIZE_STATE="$current_state"
 
-    # 列ごとにリサイズ（列0: pane 0,1,2  列1: pane 3,4,5  列2: pane 6,7,8）
-    # ペインの並びは list-panes の順序に依存（tiled レイアウトで列優先）
+    # 各列の高さを独立に計算（行ボーダー2本分を引く）
+    local usable_h=$((win_height - 2))
+    local heights=()
+
     for col in 0 1 2; do
-        local busy_in_col=0 idle_in_col=0
-        local col_panes=()
-        local col_busy=()
+        local busy_cnt=0 idle_cnt=0
         for row in 0 1 2; do
             local idx=$((col * 3 + row))
-            col_panes+=("${pane_ids[$idx]}")
-            col_busy+=("${pane_busy[$idx]}")
-            if [ "${pane_busy[$idx]}" -eq 1 ]; then
-                busy_in_col=$((busy_in_col + 1))
-            else
-                idle_in_col=$((idle_in_col + 1))
-            fi
+            [ "${pane_busy[$idx]}" -eq 1 ] && busy_cnt=$((busy_cnt + 1)) || idle_cnt=$((idle_cnt + 1))
         done
 
-        if [ "$busy_in_col" -eq 0 ]; then
+        local col_h=()
+        if [ "$busy_cnt" -eq 0 ]; then
             # 全員待機 → 均等
-            local eq_h=$((win_height / 3))
-            for p in "${col_panes[@]}"; do
-                _tmux resize-pane -t "$p" -y "$eq_h" 2>/dev/null
-            done
+            local eq=$((usable_h / 3))
+            col_h=("$eq" "$eq" "$eq")
         else
-            local idle_total=$((idle_in_col * MIN_PANE_HEIGHT))
-            local busy_h=$(( (win_height - idle_total) / busy_in_col ))
+            # BUSY に余剰高さを割当、IDLE は最小
+            local idle_total=$((idle_cnt * MIN_PANE_HEIGHT))
+            local busy_h=$(( (usable_h - idle_total) / busy_cnt ))
             [ "$busy_h" -lt "$MIN_PANE_HEIGHT" ] && busy_h=$MIN_PANE_HEIGHT
-
-            for i in 0 1 2; do
-                if [ "${col_busy[$i]}" -eq 1 ]; then
-                    _tmux resize-pane -t "${col_panes[$i]}" -y "$busy_h" 2>/dev/null
+            for row in 0 1 2; do
+                local idx=$((col * 3 + row))
+                if [ "${pane_busy[$idx]}" -eq 1 ]; then
+                    col_h+=("$busy_h")
                 else
-                    _tmux resize-pane -t "${col_panes[$i]}" -y "$MIN_PANE_HEIGHT" 2>/dev/null
+                    col_h+=("$MIN_PANE_HEIGHT")
                 fi
             done
         fi
+
+        # 端数を最後のペインで吸収
+        local sum=$((col_h[0] + col_h[1] + col_h[2]))
+        col_h[2]=$((col_h[2] + usable_h - sum))
+        heights+=("${col_h[@]}")
     done
 
-    log "dynamic_resize: state=$current_state"
+    # カスタムレイアウト構築・適用（列ファースト構造 = 列ごと独立）
+    local layout_str
+    layout_str=$(build_column_first_layout "$win_width" "$win_height" \
+        "${pane_nums[@]}" "${heights[@]}")
+    _tmux select-layout -t "$win_id" "$layout_str" 2>/dev/null
+
+    log "dynamic_resize: state=$current_state (column-independent)"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
