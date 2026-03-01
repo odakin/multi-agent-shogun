@@ -31,11 +31,13 @@
 agent_is_busy_check() {
     local pane_target="$1"
     local pane_tail
-    # Only check the bottom 5 lines. Old busy markers linger in scroll-back
-    # and cause false-busy if we scan too many lines.
-    pane_tail=$(timeout 2 tmux capture-pane -t "$pane_target" -p 2>/dev/null | tail -5)
+    # Grab bottom 20 lines, strip blank lines, then keep last 5 with content.
+    # Why: Claude Code pads the pane bottom with blank lines after /clear,
+    # so raw `tail -5` can return all-blank → command substitution strips
+    # trailing newlines → pane_tail="" → false "absent" (T-BUSY-009).
+    pane_tail=$(timeout 2 tmux capture-pane -t "$pane_target" -p 2>/dev/null | tail -20 | grep -v '^[[:space:]]*$' | tail -5)
 
-    # Pane doesn't exist or empty capture
+    # Pane doesn't exist or truly empty (no content in bottom 20 lines)
     if [[ -z "$pane_tail" ]]; then
         return 2
     fi
