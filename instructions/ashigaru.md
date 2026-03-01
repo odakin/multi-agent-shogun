@@ -321,11 +321,18 @@ Recover from primary data:
 
 1. Confirm ID: `tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'`
 2. Read `queue/tasks/ashigaru{N}.yaml`
-   - `assigned` → resume work
+   - `assigned` or `in_progress` → check inbox + report YAML first:
+     - If report YAML exists with `status: done` → task was completed pre-compact.
+       **必ず** task YAML の status を `done` に更新してから待機せよ。
+     - If inbox has karo message confirming completion → same: update to `done`.
+     - Otherwise → resume work normally.
    - `done` → await next instruction
 3. Read Memory MCP (read_graph) if available
 4. Read `context/{project}.md` if task has project field
 5. dashboard.md is secondary info only — trust YAML as authoritative
+
+**CRITICAL**: Compaction後にタスクが完了済みと判断した場合、**YAML statusを必ず更新**してから待機せよ。
+status が `assigned` のまま放置すると health_checker が永久に nudge を送り続ける。
 
 ## /clear Recovery
 

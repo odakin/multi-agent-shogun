@@ -28,7 +28,12 @@ log() { echo "[$(date '+%H:%M:%S')] $LOG_PREFIX $*" >&2; }
 
 # ─── Nudge cooldown (prevent repeated nudges to same agent) ───
 declare -A LAST_NUDGE_TIME=()
-NUDGE_COOLDOWN=300  # seconds — don't re-nudge same agent within 5 minutes
+NUDGE_COOLDOWN=90  # seconds — don't re-nudge same agent within 90s
+
+# ─── Stale task detection (nudged but YAML unchanged) ───
+declare -A NUDGE_COUNT=()         # per-agent nudge count for same stale task
+declare -A NUDGE_TASK_ID=()       # task_id at first nudge
+STALE_TASK_NUDGE_LIMIT=3          # after N nudges with no status change → auto-fix
 
 is_nudge_cooled_down() {
     local agent="$1"
@@ -78,6 +83,48 @@ with open('$task_file') as f:
 task = data.get('task', {}) or {}
 print(task.get('status', 'none') or 'none')
 " 2>/dev/null || echo "none"
+}
+
+# ─── Task ID check ───
+get_task_id() {
+    local agent="$1"
+    local task_file="$SCRIPT_DIR/queue/tasks/${agent}.yaml"
+    [ -f "$task_file" ] || { echo ""; return; }
+    "$SCRIPT_DIR/.venv/bin/python3" -c "
+import yaml
+with open('$task_file') as f:
+    data = yaml.safe_load(f) or {}
+task = data.get('task', {}) or {}
+print(task.get('task_id', '') or '')
+" 2>/dev/null || echo ""
+}
+
+# ─── Auto-fix stale task YAML ───
+# If agent was nudged N times for same assigned task but status never changed,
+# the agent likely completed it but forgot to update YAML.
+# Safety net: update status to done + log.
+auto_fix_stale_task() {
+    local agent="$1"
+    local task_file="$SCRIPT_DIR/queue/tasks/${agent}.yaml"
+    [ -f "$task_file" ] || return 1
+
+    "$SCRIPT_DIR/.venv/bin/python3" -c "
+import yaml, datetime
+with open('$task_file') as f:
+    data = yaml.safe_load(f) or {}
+task = data.get('task', {}) or {}
+if task.get('status') in ('assigned', 'in_progress'):
+    task['status'] = 'done'
+    task['auto_closed_by'] = 'health_checker'
+    task['auto_closed_at'] = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+    task['auto_closed_reason'] = 'Agent idle after ${STALE_TASK_NUDGE_LIMIT} recovery nudges — status likely stale'
+    data['task'] = task
+    with open('$task_file', 'w') as f:
+        yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
+    print('fixed')
+else:
+    print('skip')
+" 2>/dev/null || echo "error"
 }
 
 # ─── Send nudge ───
@@ -183,8 +230,38 @@ print('yes' if any(c.get('status') == 'in_progress' for c in cmds if isinstance(
     local task_status
     task_status=$(get_task_status "$agent")
     if [ "$task_status" = "assigned" ] || [ "$task_status" = "in_progress" ]; then
-        # Agent is idle + has assigned/in_progress task = likely post-compact
-        send_nudge "$agent" "$pane" "compact-recovery: queue/tasks/${agent}.yaml を読んでタスクを再開せよ"
+        # Track stale nudge count per task
+        local current_task_id
+        current_task_id=$(get_task_id "$agent")
+        local prev_task="${NUDGE_TASK_ID[$agent]:-}"
+
+        if [ "$current_task_id" != "$prev_task" ]; then
+            # New task or first time — reset counter
+            NUDGE_COUNT[$agent]=0
+            NUDGE_TASK_ID[$agent]="$current_task_id"
+        fi
+
+        local count="${NUDGE_COUNT[$agent]:-0}"
+        count=$((count + 1))
+        NUDGE_COUNT[$agent]=$count
+
+        if (( count > STALE_TASK_NUDGE_LIMIT )); then
+            # Agent was nudged N+ times but YAML never updated → auto-fix
+            local result
+            result=$(auto_fix_stale_task "$agent")
+            if [ "$result" = "fixed" ]; then
+                log "STALE-AUTO-FIX $agent: task $current_task_id status → done (after $count nudges)"
+                NUDGE_COUNT[$agent]=0
+                NUDGE_TASK_ID[$agent]=""
+            fi
+        else
+            # Normal compact-recovery nudge
+            send_nudge "$agent" "$pane" "compact-recovery: queue/tasks/${agent}.yaml を読んでタスクを再開せよ。完了済みなら status を done に更新せよ。"
+        fi
+    else
+        # Task is done/none — reset stale counter
+        NUDGE_COUNT[$agent]=0
+        NUDGE_TASK_ID[$agent]=""
     fi
 }
 
