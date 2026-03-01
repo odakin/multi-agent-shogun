@@ -26,6 +26,22 @@ source "$SCRIPT_DIR/lib/agent_status.sh" 2>/dev/null || true
 
 log() { echo "[$(date '+%H:%M:%S')] $LOG_PREFIX $*" >&2; }
 
+# ─── Nudge cooldown (prevent repeated nudges to same agent) ───
+declare -A LAST_NUDGE_TIME=()
+NUDGE_COOLDOWN=300  # seconds — don't re-nudge same agent within 5 minutes
+
+is_nudge_cooled_down() {
+    local agent="$1"
+    local now
+    now=$(date +%s)
+    local last="${LAST_NUDGE_TIME[$agent]:-0}"
+    if (( now - last < NUDGE_COOLDOWN )); then
+        return 1  # still cooling down
+    fi
+    LAST_NUDGE_TIME[$agent]=$now
+    return 0  # OK to nudge
+}
+
 # ─── Agent discovery ───
 # tmux @agent_id から全エージェントのpane_id を動的に取得
 get_agent_panes() {
@@ -70,9 +86,15 @@ send_nudge() {
     local pane="$2"
     local message="$3"
 
+    # Cooldown check — don't re-nudge same agent within 5 minutes
+    if ! is_nudge_cooled_down "$agent"; then
+        return 0  # recently nudged, skip
+    fi
+
     # Check if busy — don't nudge during active processing
     if type agent_is_busy_check &>/dev/null; then
         if agent_is_busy_check "$pane"; then
+            LAST_NUDGE_TIME[$agent]=0  # reset cooldown — wasn't actually nudged
             return 0  # busy, skip
         fi
     fi
