@@ -137,48 +137,61 @@ skill_candidate:
 
 ## Agent Teams Mode (when CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1)
 
-When running in Agent Teams mode, the following overrides apply:
+When running in Agent Teams mode, the following overrides apply.
+**v3.2 ハイブリッド: YAML永続化 + SendMessage高速配信。**
 
-### Workflow Override
+### Workflow Override (Hybrid)
 
-Replace the legacy workflow (read YAML → inbox_write report) with:
+レガシーワークフロー（YAML + inbox_write）を拡張:
 
 ```
-1. Check TaskList() for tasks assigned to you (owner = your name)
-2. TaskUpdate(taskId="...", status="in_progress") — mark started
-3. Execute the task
-4. TaskUpdate(taskId="...", status="completed") — mark done
-5. Dual-notify (2通同時送信):
-   a. SendMessage(type="message", recipient="karo", content="ash{N}空き、次タスク割当可", summary="空き通知")
-   b. SendMessage(type="message", recipient="gunshi", content="完了。{task_id}: {1行要約}", summary="QC依頼")
-6. Check TaskList() for next available task
+1. Receive wakeup（SendMessage or Stop hook inbox check）
+2. Read queue/tasks/ashigaru{N}.yaml（レガシーと同じ）
+3. Update status → in_progress（レガシーと同じ）
+4. Execute the task
+5. Write report YAML（queue/reports/ashigaru{N}_report.yaml）
+6. Update task YAML status → done
+7. Hybrid dual-notify（YAML先、SendMessage後）:
+   7a: YAML永続化（必須・先に実行）
+     bash scripts/inbox_write.sh karo "ash{N}空き、次タスク割当可" task_done ashigaru{N} && \
+     bash scripts/inbox_write.sh gunshi "完了。ashigaru{N}_report.yaml参照" report_received ashigaru{N}
+   7b: SendMessage高速配信（Agent Teams時・省略可）
+     SendMessage(type="message", recipient="karo", content="ash{N}空き、次タスク割当可", summary="空き通知")
+     SendMessage(type="message", recipient="gunshi", content="完了。{task_id}: {1行要約}", summary="QC依頼")
+8. Check inbox (queue/inbox/ashigaru{N}.yaml) BEFORE going idle
 ```
+
+**コンテキスト節約**: 家老への通知にレポート内容は書かない。軍師が必要に応じてYAMLを読む。
 
 ### Self-Identification
 
-Your name is set by the `name` parameter when Karo spawned you (e.g., "ashigaru1").
-No need for `tmux display-message` — your identity is provided at spawn time.
+spawn時に name パラメータで設定（例: "ashigaru1"）。
+compaction recovery 時は `tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'` で確認。
 
-### Report Format (Agent Teams dual-notify)
+### Receiving Side (Hybrid)
 
-Dual-notify で **2通** 送信:
-```
-# ① 家老: fast path（次タスク即発令）
-SendMessage(type="message", recipient="karo",
-  content="ash{N}空き、次タスク割当可", summary="空き通知")
+メッセージ受信時（SendMessage or Stop hook どちらでも）:
+1. queue/inbox/{自分}.yaml を読む
+2. read: false のエントリを全て処理
+3. read: true に更新（Edit tool）
+4. ワークフロー続行
 
-# ② 軍師: async QC
-SendMessage(type="message", recipient="gunshi",
-  content="完了。{task_id}: {1行要約}", summary="QC依頼")
-```
-**コンテキスト節約**: 家老への通知にレポート内容は書かない。軍師が必要に応じてYAMLを読む。
+**SendMessage の内容は通知のみ。詳細は YAML から読む。**
 
-### Files Not Used in Agent Teams Mode
+### Files STILL Used in Hybrid Mode
 
-- `queue/tasks/ashigaru*.yaml` — replaced by TaskList()
-- `queue/reports/ashigaru*_report.yaml` — replaced by SendMessage
-- `queue/inbox/` — replaced by SendMessage
-- `scripts/inbox_write.sh` — not needed
+- `queue/tasks/ashigaru{N}.yaml` — source of truth（TaskList 不使用）
+- `queue/reports/ashigaru{N}_report.yaml` — 永続レポート記録
+- `queue/inbox/ashigaru{N}.yaml` — 永続化 + Stop hook 連携
+- `scripts/inbox_write.sh` — YAML書込（SendMessage の前に実行）
+
+### Fallback (SendMessage unavailable)
+
+SendMessage が使えない/失敗した場合:
+- inbox_write.sh が既に YAML 書込 + tmux nudge 済み
+- Stop hook が turn 境界で検出 → 配信
+- health_checker が backup nudge
+= **現行レガシーと完全に同じ動作。何も壊れない。**
 
 ### Visible Communication (Agent Teams mode) — MANDATORY
 

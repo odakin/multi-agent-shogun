@@ -371,11 +371,10 @@ Phase 4: 品質確認（軍師 — ★義務★）
 
 ## Agent Teams Mode (when CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1)
 
-When running in Agent Teams mode, the following overrides apply:
+When running in Agent Teams mode, the following overrides apply.
+**v3.2 ハイブリッド: YAML永続化 + SendMessage高速配信。**
 
-### Workflow Override
-
-Replace the legacy workflow (inbox_write → YAML tasks) with:
+### Workflow Override (Hybrid)
 
 ```
 0. Self-register (Bash — 最初のアクション):
@@ -384,21 +383,36 @@ Replace the legacy workflow (inbox_write → YAML tasks) with:
    tmux set-option -p @current_task ""
    echo "「家老」はっ！命令受領いたした！"   # DISPLAY_MODE=shout 時のみ
 
-1. Check TaskList() for assigned tasks from Shogun
-2. Read config/settings.yaml → ashigaru_count (足軽数を動的取得)
-3. Decompose tasks → TaskCreate() for each subtask
-4. Spawn ashigaru/gunshi (CLAUDE.md の Teammate Spawn Prompts 形式を**必ず使用**):
+1. Receive wakeup（SendMessage from Shogun OR Stop hook inbox check）
+2. Read queue/shogun_to_karo.yaml（レガシーと同じ）
+3. Read config/settings.yaml → ashigaru_count（足軽数を動的取得）
+4. Analyze and plan → decompose tasks
+5. Write task YAML (queue/tasks/ashigaru{N}.yaml)
+6. Spawn ashigaru/gunshi (CLAUDE.md の Teammate Spawn Prompts 形式を**必ず使用**):
    - ⛔ **mode="bypassPermissions" 絶対必須** ⛔ — 省略 = 全軍デッドロック（100%再現）
    - Task() の引数に `mode="bypassPermissions"` が入っていることを**目視確認**してから実行
    - bloom_level L4-L6 → model="opus"
    - bloom_level L1-L3 → model="sonnet" (KESSEN_MODE=true なら model="opus")
    - prompt 冒頭に tmux set-option + export DISPLAY_MODE を含める
-5. TaskUpdate(taskId="...", owner="ashigaru{N}") — assign subtask
-6. SendMessage → echo "「家老→足軽{N}」任務を割り当てた！"
-7. Wait for completion reports
-8. TaskUpdate(taskId="...", status="completed") — mark parent task done
-9. SendMessage to shogun → echo "「家老→将軍」戦果を報告いたす！"
+7. Hybrid dispatch（YAML先、SendMessage後）:
+   7a: bash scripts/inbox_write.sh ashigaru{N} "タスクYAML読んで作業開始せよ。" task_assigned karo
+   7b: SendMessage(type="message", recipient="ashigaru{N}", content="タスクYAML読め", summary="タスク割当")
+   足軽ごとに繰り返す。
+8. Wait for completion reports（SendMessage or inbox wakeup）
+9. Hybrid shogun report:
+   9a: bash scripts/inbox_write.sh shogun "cmd_XXX完了。{成果要約}" cmd_complete karo
+   9b: SendMessage(type="message", recipient="shogun", content="cmd_XXX完了。{成果要約}", summary="cmd完了報告")
 ```
+
+### Receiving Side (Hybrid)
+
+メッセージ受信時（SendMessage or Stop hook どちらでも）:
+1. queue/inbox/karo.yaml を読む
+2. read: false のエントリを全て処理
+3. read: true に更新
+4. ワークフロー続行
+
+**SendMessage の内容は通知のみ。詳細は YAML から読む。**
 
 ### Dynamic Agent Count (settings.yaml)
 
@@ -424,27 +438,35 @@ grep 'ashigaru_count:' config/settings.yaml | awk '{print $2}'
 
 - **F003 LIFTED**: Task agents ARE the primary mechanism for spawning ashigaru/gunshi.
 - F001 (self_execute_task) still applies.
-- F002 (direct_user_report) — can now SendMessage to shogun (replaces dashboard-only rule).
+- F002 (direct_user_report) — can now SendMessage to shogun AND inbox_write to shogun (both channels).
 
-### Task Dependencies in Agent Teams
+### Task Dependencies
 
-Use TaskUpdate(addBlockedBy=["taskId"]) instead of YAML `blocked_by` field.
-TaskList() shows blocked status automatically.
+Task dependencies は YAML `blocked_by` フィールドを使用（レガシーと同じ）。
+TaskCreate/TaskUpdate/TaskList は使用しない（compact時に消失するため、YAML が source of truth）。
 
-### Communication
+### Communication (Hybrid)
 
-| Legacy | Agent Teams |
-|--------|------------|
-| `bash scripts/inbox_write.sh ashigaru1 "..." task_assigned karo` | `SendMessage(type="message", recipient="ashigaru1", content="...", summary="タスク割当")` |
-| `bash scripts/inbox_write.sh gunshi "..." task_assigned karo` | `SendMessage(type="message", recipient="gunshi", content="...", summary="分析依頼")` |
-| Write `queue/tasks/ashigaru1.yaml` | `TaskCreate(subject="...", description="...")` + `TaskUpdate(taskId="...", owner="ashigaru1")` |
+| Legacy Only | Hybrid (Agent Teams) |
+|-------------|---------------------|
+| `inbox_write.sh ashigaru{N} "..."` | inbox_write.sh **先** → SendMessage **後** |
+| `inbox_write.sh gunshi "..."` | inbox_write.sh **先** → SendMessage **後** |
+| Write `queue/tasks/ashigaru{N}.yaml` | Write queue/tasks/ （同じ） |
 
-### Files Not Used in Agent Teams Mode
+### Files STILL Used in Hybrid Mode
 
-- `queue/tasks/ashigaru*.yaml` — replaced by TaskCreate/TaskUpdate
-- `queue/reports/ashigaru*_report.yaml` — replaced by SendMessage
-- `queue/inbox/` — replaced by SendMessage
-- `scripts/inbox_write.sh` — not needed
+- `queue/tasks/*.yaml` — source of truth（TaskCreate/TaskUpdate 不使用）
+- `queue/reports/*.yaml` — 永続レポート記録
+- `queue/inbox/*.yaml` — 永続化 + Stop hook 連携
+- `scripts/inbox_write.sh` — YAML書込（SendMessage の前に実行）
+- `dashboard.md` — 人間可読サマリ
+
+### Fallback (SendMessage unavailable)
+
+SendMessage が使えない/失敗した場合:
+- inbox_write.sh が既に YAML 書込 + tmux nudge 済み
+- Stop hook が turn 境界で検出 → 配信
+= **現行レガシーと完全に同じ動作。何も壊れない。**
 
 ### Visible Communication (Agent Teams mode) — MANDATORY
 

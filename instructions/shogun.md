@@ -157,8 +157,9 @@ D) ntfy受信 → ntfy_inbox.yaml を Read → A or B or C に分岐
 
 **CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 の場合、以下が全ワークフローに優先する。**
 **ユーザー入力を受けたら、まず TeamCreate → Karo spawn → 委任。自分で実行するな。**
+**v3.2 ハイブリッド: YAML永続化 + SendMessage高速配信。**
 
-## Workflow (Agent Teams)
+## Workflow (Agent Teams Hybrid)
 
 ```
 0. Self-register (Bash — 最初のアクション、tmux内なら実行):
@@ -175,11 +176,12 @@ D) ntfy受信 → ntfy_inbox.yaml を Read → A or B or C に分岐
    - model は常に "opus"（家老は司令塔のため高性能モデル必須）
    - prompt 冒頭に tmux set-option + export DISPLAY_MODE を含める
 3. Grand Lord gives command（ユーザー入力を受け取る）
-4. TaskCreate(subject="...", description="...") — タスク作成
-5. TaskUpdate(taskId="...", owner="karo") — 家老に割当
-6. SendMessage → echo "「将軍→家老」新たな命を下す！"
-7. Wait for karo's SendMessage report
-8. Report to Grand Lord → echo "「将軍」大殿様に戦果を奏上いたす！"
+4. Write queue/shogun_to_karo.yaml with cmd（レガシーと同じ）
+5. Hybrid notify（YAML先、SendMessage後）:
+   5a: bash scripts/inbox_write.sh karo "cmd_XXXを書いた。実行せよ。" cmd_new shogun
+   5b: SendMessage(type="message", recipient="karo", content="新命令。shogun_to_karo.yaml確認せよ", summary="新命令")
+6. Wait for karo's report（SendMessage or inbox wakeup）
+7. Report to Grand Lord → echo "「将軍」大殿様に戦果を奏上いたす！"
 ```
 
 **禁止事項（Agent Teams mode でも有効）**:
@@ -200,15 +202,16 @@ D) ntfy受信 → ntfy_inbox.yaml を Read → A or B or C に分岐
 - F001 (self_execute_task) still applies — **Explore, Plan 等の Task sub-agent も自分で使うな。Karo に委任。**
 - F002 (direct_ashigaru_command) still applies — always go through Karo.
 
-### Files Not Used in Agent Teams Mode
+### Files STILL Used in Hybrid Mode
 
-- `queue/shogun_to_karo.yaml` — replaced by TaskCreate/TaskUpdate
-- `queue/inbox/` — replaced by SendMessage
-- `scripts/inbox_write.sh` — not needed
+- `queue/shogun_to_karo.yaml` — cmd queue（source of truth）
+- `queue/inbox/shogun.yaml` — 永続化 + Stop hook 連携
+- `scripts/inbox_write.sh` — YAML書込（SendMessage の前に実行）
 
 ### Report Flow
 
-Karo reports via SendMessage(type="message", recipient="shogun") instead of dashboard.md only.
+Karo reports via inbox_write (persistent) AND SendMessage (fast wakeup).
+dashboard.md is still updated by Karo/Gunshi for human visibility.
 
 ### Visible Communication echo (DISPLAY_MODE=shout 時)
 

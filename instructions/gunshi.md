@@ -107,34 +107,57 @@ persona:
 
 ## Agent Teams Mode (when CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1)
 
-When running in Agent Teams mode, the following overrides apply:
+When running in Agent Teams mode, the following overrides apply.
+**v3.2 ハイブリッド: YAML永続化 + SendMessage高速配信。**
 
-### Workflow Override
-
-Replace the legacy workflow (read YAML → inbox_write report) with:
+### Workflow Override (Hybrid)
 
 ```
-1. Check TaskList() for tasks assigned to you (owner = your name)
-2. TaskUpdate(taskId="...", status="in_progress") — mark started
+1. Receive wakeup（SendMessage or Stop hook inbox check）
+2. Read queue/tasks/gunshi.yaml（レガシーと同じ）
 3. Perform analysis/quality check
-4. TaskUpdate(taskId="...", status="completed") — mark done
-5. SendMessage(type="message", recipient="karo", content="策を練り終えたり。{summary}", summary="分析完了報告")
-6. Check TaskList() for next available task
+4. Write report to queue/reports/gunshi_report.yaml
+5. Update task YAML status → done
+6. Hybrid notify（YAML先、SendMessage後）:
+   # QC通常完了時:
+   6a: bash scripts/inbox_write.sh karo "策を練り終えたり。gunshi_report.yaml参照" report_received gunshi
+   6b: SendMessage(type="message", recipient="karo", content="策を練り終えたり。{summary}", summary="分析完了報告")
+
+   # cmd全サブタスクQC完了時（将軍直接報告）:
+   6a: bash scripts/inbox_write.sh shogun "cmd_XXX 完了。全QC PASS。{要約}" cmd_complete gunshi && \
+       bash scripts/inbox_write.sh karo "cmd_XXX 全QC PASS。将軍に報告済み" cmd_complete gunshi
+   6b: SendMessage(type="message", recipient="shogun", content="cmd_XXX完了。全QC PASS。{要約}", summary="cmd完了報告")
+       SendMessage(type="message", recipient="karo", content="cmd_XXX QC PASS。将軍報告済み", summary="QC完了通知")
+7. Check inbox BEFORE going idle
 ```
 
-### Communication
+### Receiving Side (Hybrid)
 
-| Legacy | Agent Teams |
-|--------|------------|
-| Read `queue/tasks/gunshi.yaml` | `TaskList()` で自分に割当てられたタスクを確認 |
-| Write `queue/reports/gunshi_report.yaml` | `SendMessage` で結果を家老に報告 |
-| `bash scripts/inbox_write.sh karo "..." report_received gunshi` | `SendMessage(type="message", recipient="karo", ...)` |
+メッセージ受信時（SendMessage or Stop hook どちらでも）:
+1. queue/inbox/gunshi.yaml を読む
+2. read: false のエントリを全て処理
+3. read: true に更新
+4. ワークフロー続行
 
-### Files Not Used in Agent Teams Mode
+### Communication (Hybrid)
 
-- `queue/tasks/gunshi.yaml` — replaced by TaskList()
-- `queue/reports/gunshi_report.yaml` — replaced by SendMessage
-- `queue/inbox/gunshi.yaml` — replaced by SendMessage
+| Legacy Only | Hybrid (Agent Teams) |
+|-------------|---------------------|
+| Read `queue/tasks/gunshi.yaml` | Read queue/tasks/gunshi.yaml（同じ） |
+| Write `queue/reports/gunshi_report.yaml` | Write report YAML（同じ）+ SendMessage通知 |
+| `inbox_write.sh karo "..."` | inbox_write.sh **先** → SendMessage **後** |
+
+### Files STILL Used in Hybrid Mode
+
+- `queue/tasks/gunshi.yaml` — source of truth（TaskList 不使用）
+- `queue/reports/gunshi_report.yaml` — 永続記録
+- `queue/inbox/gunshi.yaml` — 永続化 + Stop hook 連携
+- `scripts/inbox_write.sh` — YAML書込（SendMessage の前に実行）
+
+### Fallback (SendMessage unavailable)
+
+SendMessage が使えない場合 → inbox_write.sh + tmux nudge + Stop hook で配信。
+= **現行レガシーと同じ。何も壊れない。**
 
 ### Visible Communication (Agent Teams mode) — MANDATORY
 
