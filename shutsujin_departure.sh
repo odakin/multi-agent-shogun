@@ -519,7 +519,7 @@ tmux set-option -g aggressive-resize on
 # 将軍ペインはウィンドウ名 "main" で指定（base-index 1 環境でも動く）
 SHOGUN_PROMPT=$(generate_prompt "将軍" "magenta" "$SHELL_SETTING")
 tmux send-keys -t shogun:main "cd \"$(pwd)\" && export PS1='${SHOGUN_PROMPT}' && clear" Enter
-tmux select-pane -t shogun:main -P 'bg=#002b36'  # 将軍の Solarized Dark
+tmux select-pane -t shogun:main -P 'fg=#93a1a1,bg=#002b36'  # 将軍の Solarized Dark
 tmux set-option -p -t shogun:main @agent_id "shogun"
 
 log_success "  └─ 将軍の本陣、構築完了"
@@ -629,10 +629,10 @@ for i in "${!AGENT_IDS[@]}"; do
     tmux send-keys -t "multiagent:agents.${p}" "cd \"$(pwd)\" && export PS1='${PROMPT_STR}' && clear" Enter
 done
 
-# 家老・軍師ペインの背景色（足軽との視覚的区別）
-# 注: グループセッションで背景色が引き継がれない問題があるため、コメントアウト（2026-02-14）
-# tmux select-pane -t "multiagent:agents.${PANE_BASE}" -P 'bg=#501515'          # 家老: 赤
-# tmux select-pane -t "multiagent:agents.$((PANE_BASE+8))" -P 'bg=#454510'      # 軍師: 金
+# 家老・軍師ペインの背景色+前景色（足軽との視覚的区別）
+# fg を明示指定しないとデフォルト文字色が暗背景で読めなくなる
+tmux select-pane -t "multiagent:agents.${PANE_BASE}" -P 'fg=#d0d0d0,bg=#2a1215'          # 家老: 暗赤背景+明文字
+tmux select-pane -t "multiagent:agents.$((PANE_BASE+8))" -P 'fg=#d0d0d0,bg=#2a2a10'      # 軍師: 暗金背景+明文字
 
 # pane-border-format でモデル名を常時表示
 tmux set-option -t multiagent -w pane-border-status top
