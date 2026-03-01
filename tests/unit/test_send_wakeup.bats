@@ -47,6 +47,10 @@
 #   T-BUSY-009: agent_is_busy — 'background terminal running' detected as busy
 #   T-BUSY-010: agent_is_busy — 'Compacting conversation' detected as busy
 #   T-BUSY-011: agent_is_busy — 'esc to interrupt' alone detected as busy
+#   T-BUSY-012: send_wakeup — pane absent (return 2) → nudge proceeds
+#   T-BUSY-013: agent_is_busy — returns busy during grace period [TDD]
+#   T-BUSY-014: agent_is_busy — returns idle after grace period expires [TDD]
+#   T-RETURN2-002: agent_is_busy — explicitly returns 1 (not 2) when pane absent
 #   T-SHOOK-001: Claude Code throttle uses 60s cooldown (stop-hook-supplementary)
 #   T-SHOOK-002: Claude Code count change bypasses throttle (stop-hook-supplementary)
 #   T-SHOOK-003: Non-Claude CLIs still bypass throttle on count change
@@ -965,6 +969,73 @@ YAML
         agent_is_busy
     '
     [ "$status" -eq 0 ]
+}
+
+# --- T-BUSY-012: pane absent (return 2) → send_wakeup proceeds to send nudge ---
+
+@test "T-BUSY-012: send_wakeup proceeds to send nudge when pane is absent (return 2)" {
+    run bash -c '
+        MOCK_CAPTURE_PANE=""    # empty → agent_is_busy_check returns 2 → not busy
+        source "'"$TEST_HARNESS"'"
+        LAST_CLEAR_TS=0
+        send_wakeup 3
+    '
+    [ "$status" -eq 0 ]
+
+    # pane不在でも busy チェックはパスするので nudge が送られる
+    grep -q "send-keys.*inbox3" "$MOCK_LOG"
+    grep -q "send-keys.*Enter" "$MOCK_LOG"
+
+    # "SKIP.*busy" メッセージは出ない（pane不在 ≠ busy）
+    ! echo "$output" | grep -qi "SKIP.*busy"
+}
+
+# --- T-BUSY-013: grace period 中は idle pane でも busy を返す [TDD] ---
+# 実装変数: BOOT_TS (起動タイムスタンプ), ASW_BOOT_GRACE (秒数, default 15)
+# agent_is_busy() が BOOT_TS/ASW_BOOT_GRACE を参照して grace 中は 0 を返すことを期待。
+# 現在の実装では agent_is_busy() はこれらを参照しないため FAIL（TDD）。
+
+@test "T-BUSY-013: agent_is_busy returns 0 (busy) during grace period" {
+    run bash -c '
+        MOCK_CAPTURE_PANE="? for shortcuts                100% context left"
+        source "'"$TEST_HARNESS"'"
+        now=$(date +%s)
+        LAST_CLEAR_TS=0
+        BOOT_TS=$((now - 5))   # grace 開始 5秒前（ASW_BOOT_GRACE=15 なら範囲内）
+        ASW_BOOT_GRACE=15
+        agent_is_busy
+    '
+    [ "$status" -eq 0 ]   # 0 = busy (grace period 中)
+}
+
+# --- T-BUSY-014: grace period 経過後は pane 状態に従う [TDD] ---
+
+@test "T-BUSY-014: agent_is_busy returns 1 (idle) after grace period expires" {
+    run bash -c '
+        MOCK_CAPTURE_PANE="? for shortcuts                100% context left"
+        source "'"$TEST_HARNESS"'"
+        now=$(date +%s)
+        LAST_CLEAR_TS=0
+        BOOT_TS=$((now - 60))   # grace 開始 60秒前（ASW_BOOT_GRACE=15 なら期限切れ）
+        ASW_BOOT_GRACE=15
+        agent_is_busy
+    '
+    [ "$status" -eq 1 ]   # 1 = idle (grace period 終了、pane は idle)
+}
+
+# --- T-RETURN2-002: agent_is_busy は pane不在(return 2)を明示的に 1 として返す ---
+# 現在の実装では return 2 が透過するため FAIL。
+# 修正後は agent_is_busy() が return 2 を受け取ったとき明示的に 1 を返す。
+
+@test "T-RETURN2-002: agent_is_busy explicitly returns 1 (not 2) when pane is absent" {
+    run bash -c '
+        MOCK_CAPTURE_PANE=""    # empty → agent_is_busy_check returns 2
+        source "'"$TEST_HARNESS"'"
+        LAST_CLEAR_TS=0
+        agent_is_busy
+    '
+    # 修正後は 1 (idle) を明示的に返す。2 を返してはいけない。
+    [ "$status" -eq 1 ]
 }
 
 # --- T-SHOOK-001: Claude Code throttle uses 60s cooldown (post PR#75: stop-hook supplementary) ---

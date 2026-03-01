@@ -94,7 +94,7 @@ build_column_first_layout() {
     # 列幅（3等分、ボーダー2本分を引いた残りを分割）
     local uw=$((W - 2))
     local cw0=$((uw / 3))
-    local cw1=$(( (uw - cw0) / 2 ))
+    local cw1=$((uw / 3))
     local cw2=$((uw - cw0 - cw1))
     local x1=$((cw0 + 1))
     local x2=$((x1 + cw1 + 1))
@@ -263,10 +263,10 @@ get_bg_color_for_agent() {
             echo ""                          # 白背景（デフォルト）
             ;;
         karo)
-            echo "fg=#d0d0d0,bg=#2a1215"    # 暗赤（家老）+ 明文字
+            echo "fg=#d0d0d0,bg=#6b2020"    # 赤（家老）+ 明文字
             ;;
         gunshi)
-            echo "fg=#d0d0d0,bg=#2a2a10"    # 暗金（軍師）+ 明文字
+            echo "fg=#d0d0d0,bg=#6b6b10"    # 金/黄（軍師）+ 明文字
             ;;
         ashigaru*)
             echo ""                          # 白背景（デフォルト）
@@ -741,6 +741,13 @@ while true; do
             if [ -n "$current_id" ] && [ "$current_id" != "..." ] && [ "$current_id" != "${STYLED_PANES[$pane_id]}" ]; then
                 style_pane "$pane_id" "$current_id"
                 STYLED_PANES[$pane_id]="$current_id"
+            else
+                # bg_color が空でないエージェント（karo/gunshi）は毎サイクル色を再適用
+                styled_agent="${STYLED_PANES[$pane_id]}"
+                bg_check=$(get_bg_color_for_agent "$styled_agent")
+                if [ -n "$bg_check" ]; then
+                    style_pane "$pane_id" "$styled_agent"
+                fi
             fi
             continue
         fi

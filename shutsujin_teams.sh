@@ -851,8 +851,8 @@ NINJA_EOF
 
     # 家老・軍師のみ暗背景（fg明示でライトモードでも読める）
     # 将軍・足軽は白背景デフォルト — 色設定不要
-    tmux select-pane -t "multiagent-teams:agents.${PANE_BASE}" -P 'fg=#d0d0d0,bg=#2a1215'  # 家老: 暗赤
-    tmux select-pane -t "multiagent-teams:agents.$((PANE_BASE + _ASHIGARU_COUNT + 1))" -P 'fg=#d0d0d0,bg=#2a2a10'  # 軍師: 暗金
+    tmux select-pane -t "multiagent-teams:agents.${PANE_BASE}" -P 'fg=#d0d0d0,bg=#6b2020'  # 家老: 赤
+    tmux select-pane -t "multiagent-teams:agents.$((PANE_BASE + _ASHIGARU_COUNT + 1))" -P 'fg=#d0d0d0,bg=#6b6b10'  # 軍師: 金/黄
 
     # 家老ペインを選択状態にしておく（ビューワーで見やすいように）
     tmux select-pane -t "multiagent-teams:agents.${PANE_BASE}"
@@ -908,6 +908,8 @@ NINJA_EOF
     sleep 1
 
     # 家老（pane 0）
+    # v4.0 ダンベル型アーキテクチャ: 将軍(Opus)←→家老(Sonnet: 中継・ディスパッチ)←→足軽(Opus)
+    # 家老はタスク振り分け・進捗管理に特化するため Sonnet を使用
     p=$((PANE_BASE + 0))
     _karo_cli_type="claude"
     _karo_cmd="claude --model sonnet --dangerously-skip-permissions"

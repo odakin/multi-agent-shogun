@@ -148,6 +148,12 @@ ASW_NO_IDLE_FULL_READ=${ASW_NO_IDLE_FULL_READ:-1}
 ASW_DISABLE_ESCALATION=${ASW_DISABLE_ESCALATION:-0}
 ASW_PROCESS_TIMEOUT=${ASW_PROCESS_TIMEOUT:-1}
 
+# ─── Boot grace period ───
+# Suppress startup nudge for ASW_BOOT_GRACE seconds after watcher launch.
+# Prevents nudge-before-agent-ready race (agent still loading CLAUDE.md on startup).
+BOOT_TS=$(date +%s)
+ASW_BOOT_GRACE=${ASW_BOOT_GRACE:-15}
+
 # ─── Metrics hooks (FR-006 / NFR-003) ───
 # unread_latency_sec / read_count / estimated_tokens are intentionally explicit
 READ_COUNT=${READ_COUNT:-0}
@@ -709,6 +715,18 @@ agent_is_busy() {
 
     if type agent_is_busy_check &>/dev/null; then
         agent_is_busy_check "$PANE_TARGET"
+        local rc=$?
+        # T-RETURN2-002: pane不在(rc=2) → idle として明示。grace チェックより先に処理。
+        if [ $rc -eq 2 ]; then
+            return 1  # pane不在 = idle として明示
+        fi
+        # T-BUSY-013: BOOT_TS grace period — pane が存在する場合のみ適用
+        local now_grace
+        now_grace=$(date +%s)
+        if [ "$((now_grace - ${BOOT_TS:-0}))" -lt "${ASW_BOOT_GRACE:-15}" ] && [ "${BOOT_TS:-0}" -gt 0 ]; then
+            return 0  # grace period 中 = busy 扱い
+        fi
+        return $rc
     else
         # Fallback: if shared library not loaded, assume idle
         return 1
@@ -875,6 +893,18 @@ send_wakeup_with_escape() {
 # ─── Process cycle ───
 process_unread() {
     local trigger="${1:-event}"
+
+    # ─── Boot grace period guard ───
+    # On startup, suppress nudge for ASW_BOOT_GRACE seconds to avoid sending
+    # a wake-up before the agent has finished loading CLAUDE.md and instructions.
+    if [ "$trigger" = "startup" ] && [ "${BOOT_TS:-0}" -gt 0 ]; then
+        local now_grace
+        now_grace=$(date +%s)
+        if [ "$((now_grace - BOOT_TS))" -lt "${ASW_BOOT_GRACE:-15}" ]; then
+            echo "[$(date)] [BOOT-GRACE] Skipping startup nudge for $AGENT_ID (${ASW_BOOT_GRACE:-15}s grace period)" >&2
+            return 0
+        fi
+    fi
 
     # summary-first: unread_count fast-path (Phase 2/3 optimization)
     # unread_count fast-path lets us skip expensive full reads when idle.
