@@ -36,6 +36,8 @@ STALE_TASK_THRESHOLD=600     # 10分でタスク滞留 ⏰ 表示
 
 # claude-swarm tmux サーバー検出用
 TMUX_SOCKET=""               # -L オプションの値（空なら デフォルトサーバー）
+declare -A TASK_DESC_CACHE   # agent名 → description冒頭テキスト
+declare -A TASK_ID_CACHE     # agent名 → 前回のtask_id
 
 mkdir -p "$LOG_DIR"
 
@@ -482,11 +484,11 @@ update_current_tasks() {
         agent_name="${STYLED_PANES[$pane_id]}"
         [ -z "$agent_name" ] || [ "$agent_name" = "..." ] && continue
 
-        # task YAML から task_id を取得（⏰滞留チェック付き）
+        # task YAML から task_id + description を取得（⏰滞留チェック付き）
         local task_yaml="$SCRIPT_DIR/queue/tasks/${agent_name}.yaml"
-        local display_val=""
+        local py_out=""
         if [ -f "$task_yaml" ]; then
-            display_val=$("$SCRIPT_DIR/.venv/bin/python3" -c "
+            py_out=$("$SCRIPT_DIR/.venv/bin/python3" -c "
 import yaml, datetime
 try:
     with open('$task_yaml') as f:
@@ -505,11 +507,37 @@ try:
                     prefix = chr(0x23f0)
             except Exception:
                 pass
-        print(prefix + tid)
+        desc_raw = (task.get('description', '') or '').split('\\n')[0].strip()
+        desc = desc_raw[:20] + ('…' if len(desc_raw) > 20 else '')
+        print(prefix + tid + '\\t' + tid + '\\t' + desc)
 except Exception:
     pass
 " 2>/dev/null || echo "")
         fi
+
+        # Python出力をパース: {display_val}\t{raw_tid}\t{desc}
+        local display_val raw_tid desc_from_py
+        if [[ "$py_out" == *$'\t'* ]]; then
+            display_val="${py_out%%$'\t'*}"
+            local rest="${py_out#*$'\t'}"
+            raw_tid="${rest%%$'\t'*}"
+            desc_from_py="${rest#*$'\t'}"
+        else
+            display_val="$py_out"
+            raw_tid="$py_out"
+            desc_from_py=""
+        fi
+
+        # task_id変化時のみキャッシュ更新
+        if [ "${TASK_ID_CACHE[$agent_name]:-}" != "$raw_tid" ]; then
+            TASK_ID_CACHE[$agent_name]="$raw_tid"
+            TASK_DESC_CACHE[$agent_name]="$desc_from_py"
+        fi
+
+        # description表示（display_valが空=idle時は非表示）
+        local task_desc="${TASK_DESC_CACHE[$agent_name]:-}"
+        local desc_suffix=""
+        [ -n "$display_val" ] && [ -n "$task_desc" ] && desc_suffix=" $task_desc"
 
         # idle + inbox未読チェック（📬）— 将軍・家老は対象外
         local mailbox=""
@@ -528,7 +556,7 @@ except Exception:
             fi
         fi
 
-        _tmux set-option -p -t "$pane_id" @current_task "${display_val}${mailbox}" 2>/dev/null
+        _tmux set-option -p -t "$pane_id" @current_task "${display_val}${desc_suffix}${mailbox}" 2>/dev/null
     done
 }
 
