@@ -732,6 +732,10 @@ NINJA_EOF
     tmux select-pane -t "shogun-teams:main.${PANE_BASE}"
     log_info "  └─ 戦況モニター、右ペインに配備"
 
+    # ウィンドウリサイズ時にペイン幅を自動で1:1に再調整
+    tmux set-hook -t shogun-teams after-resize-window \
+        "select-layout -t shogun-teams:main even-horizontal"
+
     log_success "  └─ 将軍の本陣、構築完了（右半分: battle_monitor）"
     echo ""
 

@@ -618,7 +618,7 @@ except Exception:
 # idle + inbox未読 自動 re-nudge
 # idle（プロンプト待ち）かつ inbox に未読がある足軽/軍師に inboxN を送信。
 # 60秒間隔制限で連打防止。表示更新は update_current_tasks() が担当。
-# 対象: 足軽1-7 + 軍師（家老は将軍が直接監視するため除外）
+# 対象: 足軽1-7 + 軍師 + 家老（全エージェント、将軍のみ除外）
 # ═══════════════════════════════════════════════════════════════════════════════
 check_idle_inbox_unread() {
     local session="$1"
@@ -631,8 +631,8 @@ check_idle_inbox_unread() {
     while IFS=' ' read -r pane_id agent_id; do
         [ -z "$pane_id" ] && continue
         [ -z "$agent_id" ] || [ "$agent_id" = "..." ] && continue
-        # 将軍・家老はスキップ
-        [[ "$agent_id" == "shogun" || "$agent_id" == "team-lead" || "$agent_id" == "karo" ]] && continue
+        # 将軍のみスキップ（家老・軍師も自動re-nudge対象）
+        [[ "$agent_id" == "shogun" || "$agent_id" == "team-lead" || "$agent_id" == "monitor" ]] && continue
 
         # inbox未読件数を確認
         local inbox_file="$SCRIPT_DIR/queue/inbox/${agent_id}.yaml"
@@ -646,9 +646,11 @@ check_idle_inbox_unread() {
             agent_is_busy_check "$pane_id" 2>/dev/null && continue
         fi
 
-        # re-nudge (60秒間隔制限)
+        # re-nudge 間隔制限（家老・軍師は処理に時間がかかるため長め）
+        local nudge_interval=60
+        [[ "$agent_id" == "karo" || "$agent_id" == "gunshi" ]] && nudge_interval=120
         local last_nudge="${LAST_RENUDGE_TS[$agent_id]:-0}"
-        if [ "$((now - last_nudge))" -ge 60 ]; then
+        if [ "$((now - last_nudge))" -ge "$nudge_interval" ]; then
             log "IDLE-INBOX: $agent_id ($pane_id) — idle+unread(${unread}件) 検出、re-nudge送信"
             _tmux send-keys -t "$pane_id" "inbox${unread}" 2>/dev/null
             sleep 0.3
@@ -743,10 +745,8 @@ check_unresponsive_panes() {
         [ -z "$pane_id" ] && continue
         [ -z "$agent_id" ] || [ "$agent_id" = "..." ] && continue
 
-        # 将軍は /clear しない（人間との会話履歴を保持）
-        [ "$agent_id" = "shogun" ] || [ "$agent_id" = "team-lead" ] && continue
-        # 家老・軍師も /clear しない（Agent Teams のコマンド層）
-        [ "$agent_id" = "karo" ] || [ "$agent_id" = "gunshi" ] && continue
+        # 将軍・モニターは /clear しない（人間との会話履歴を保持）
+        [[ "$agent_id" == "shogun" || "$agent_id" == "team-lead" || "$agent_id" == "monitor" ]] && continue
 
         # ペインのカーソル位置（活動の指標）
         local cursor_y
@@ -772,6 +772,13 @@ check_unresponsive_panes() {
                         PANE_LAST_CLEAR[$pane_id]=$now
                         # リセット
                         unset "PANE_LAST_ACTIVITY[${pane_id}_ts]"
+                        # 家老・軍師の /clear は将軍にエスカレーション通知
+                        if [[ "$agent_id" == "karo" || "$agent_id" == "gunshi" ]]; then
+                            log "ESCALATION: $agent_id recovery /clear sent — notifying shogun"
+                            bash "$SCRIPT_DIR/scripts/inbox_write.sh" shogun \
+                                "【モニタ自動復旧】${agent_id} が${age}秒間無応答のため /clear を送信した。自動復旧を試行中。" \
+                                escalation monitor 2>/dev/null &
+                        fi
                     fi
                 fi
             else
