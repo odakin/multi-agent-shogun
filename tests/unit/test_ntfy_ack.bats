@@ -92,7 +92,8 @@ INBOX_MOCK
 teardown() {
     # Restore permissions if changed (T-ACK-007)
     chmod 755 "$MOCK_PROJECT/queue" 2>/dev/null || true
-    rm -rf "$TEST_TMPDIR"
+    chmod 644 "$MOCK_PROJECT/queue/ntfy_inbox.yaml" 2>/dev/null || true
+    rm -rf "${TEST_TMPDIR:?}"
 }
 
 # --- ヘルパー ---
@@ -186,10 +187,17 @@ JSON
 # ═══════════════════════════════════════════════════════════════
 
 @test "T-ACK-007: append_ntfy_inbox failure skips both ACK and inbox_write" {
+    # Skip if running as root — chmod-based permission tests are meaningless
+    [ "$(id -u)" -eq 0 ] && skip "root bypasses file permissions"
+
     cat > "$MOCK_CURL_OUTPUT" << 'JSON'
 {"event":"message","id":"msg007","time":1234567890,"message":"should not ack","tags":[]}
 JSON
-    # Make queue directory read-only to force mkstemp/flock failure
+    # Force append_ntfy_inbox to fail:
+    #   1. chmod 444 on the file itself → blocks writes to existing file
+    #   2. chmod 555 on the directory  → blocks lock file & tempfile creation
+    # Both are needed: dir-only chmod doesn't block writes to existing files.
+    chmod 444 "$MOCK_PROJECT/queue/ntfy_inbox.yaml"
     chmod 555 "$MOCK_PROJECT/queue"
     run_listener
     # Both ACK and inbox_write should be skipped (L159 continue)
@@ -197,6 +205,7 @@ JSON
     [ ! -s "$INBOX_LOG" ]
     # Restore for teardown
     chmod 755 "$MOCK_PROJECT/queue"
+    chmod 644 "$MOCK_PROJECT/queue/ntfy_inbox.yaml"
 }
 
 # ═══════════════════════════════════════════════════════════════
