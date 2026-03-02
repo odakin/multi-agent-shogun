@@ -1049,7 +1049,9 @@ except Exception:
                 return 0
             fi
         else
-            # agent_is_busy_check が使えない場合は最初の候補を返す（フォールバック）
+            # C2 fix: agent_is_busy_check unavailable — warn and return first candidate.
+            # This may assign to a busy agent; caller should handle gracefully.
+            echo "[WARN] agent_is_busy_check unavailable — returning $candidate without busy check" >&2
             echo "$candidate"
             return 0
         fi
@@ -1073,10 +1075,22 @@ except Exception:
     pass
 " 2>/dev/null)
 
+    # BUG-4 fix: Use word-boundary-safe array match instead of glob pattern.
+    # Glob match fails when $candidates has trailing newlines or special chars.
+    local -a candidates_arr=($candidates)
+    _in_candidates() {
+        local needle="$1"
+        local c
+        for c in "${candidates_arr[@]}"; do
+            [[ "$c" == "$needle" ]] && return 0
+        done
+        return 1
+    }
+
     local fallback
     for fallback in $all_agents; do
         # 既に candidates でチェック済みはスキップ
-        if [[ " $candidates " == *" $fallback "* ]]; then
+        if _in_candidates "$fallback"; then
             continue
         fi
 

@@ -1037,7 +1037,8 @@ for s in data.get('specials', []):
         if [ "$STARTUP_PROMPT_SENT" -eq 1 ]; then
             STARTUP_PROMPT_SENT=0
             echo "[$(date)] [SKIP] Startup prompt just sent to $AGENT_ID — skipping nudge this cycle" >&2
-            FIRST_UNREAD_SEEN=$now
+            # BUG-3 fix: Do NOT reset FIRST_UNREAD_SEEN here.
+            # Resetting delays Phase 2 escalation if startup prompt fails to wake the agent.
             return 0
         fi
 
