@@ -119,13 +119,14 @@ start_inbox_watcher() {
     local pane_target="${E2E_SESSION}:agents.${pane_idx}"
     local log_file="/tmp/e2e_inbox_watcher_${agent_id}_$$.log"
 
-    # Override escalation timers for fast testing
+    # Override escalation timers and boot grace for fast testing
     # Run the copied inbox_watcher.sh from E2E_QUEUE/scripts/
     # so SCRIPT_DIR auto-resolves to E2E_QUEUE (from dirname of script)
     ESCALATE_PHASE1="${E2E_ESCALATE_PHASE1:-10}" \
     ESCALATE_PHASE2="${E2E_ESCALATE_PHASE2:-20}" \
     ESCALATE_COOLDOWN="${E2E_ESCALATE_COOLDOWN:-25}" \
     INOTIFY_TIMEOUT="${E2E_INOTIFY_TIMEOUT:-5}" \
+    ASW_BOOT_GRACE="${E2E_BOOT_GRACE:-2}" \
     bash "$E2E_QUEUE/scripts/inbox_watcher.sh" "$agent_id" "$pane_target" "$cli_type" \
         > "$log_file" 2>&1 &
 
@@ -139,4 +140,39 @@ stop_inbox_watcher() {
     local pid="$1"
     kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
+}
+
+# ─── write_inbox_direct ───
+# Write a message directly to an agent's inbox YAML without sending a tmux nudge.
+# Use this when testing watcher-driven delivery (e.g., Codex startup prompt flow)
+# where the watcher must be the primary delivery mechanism.
+# Usage: write_inbox_direct <agent_id> <content> <type> <from>
+write_inbox_direct() {
+    local agent_id="$1" content="$2" msg_type="${3:-wake_up}" from="${4:-unknown}"
+    local inbox_file="$E2E_QUEUE/queue/inbox/${agent_id}.yaml"
+    local msg_id="msg_$(date +%Y%m%d_%H%M%S)_$(od -An -tx1 -N4 /dev/urandom | tr -d ' \n')"
+    local timestamp
+    timestamp=$(date '+%Y-%m-%dT%H:%M:%S')
+
+    python3 -c "
+import yaml
+data = {'messages': []}
+try:
+    with open('$inbox_file') as f:
+        data = yaml.safe_load(f) or {'messages': []}
+except:
+    pass
+if not isinstance(data.get('messages'), list):
+    data['messages'] = []
+data['messages'].append({
+    'id': '$msg_id',
+    'from': '$from',
+    'timestamp': '$timestamp',
+    'type': '$msg_type',
+    'content': '''$content''',
+    'read': False
+})
+with open('$inbox_file', 'w') as f:
+    yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+" 2>/dev/null
 }

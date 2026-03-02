@@ -11,6 +11,10 @@
 # Background: Codex CLI's /new does NOT auto-reload AGENTS.md and
 # trigger Session Start like Claude Code's /clear does with CLAUDE.md.
 # inbox_watcher must explicitly send a startup prompt after /new.
+#
+# IMPORTANT: These tests use write_inbox_direct (no tmux nudge) so that
+# only the inbox_watcher handles delivery. inbox_write.sh's direct nudge
+# would bypass the watcher's startup prompt flow.
 # ═══════════════════════════════════════════════════════════════
 
 # bats file_tags=e2e
@@ -51,6 +55,26 @@ dump_watcher_log() {
     echo "=== End watcher log ===" >&2
 }
 
+# Helper: start watcher with boot grace disabled for Codex startup tests
+start_codex_watcher() {
+    local agent_id="$1"
+    local pane_idx="$2"
+    local pane_target="${E2E_SESSION}:agents.${pane_idx}"
+    local log_file="/tmp/e2e_inbox_watcher_${agent_id}_$$.log"
+
+    # ASW_BOOT_GRACE=0: disable boot grace so process_unread_once runs immediately
+    ESCALATE_PHASE1="${E2E_ESCALATE_PHASE1:-10}" \
+    ESCALATE_PHASE2="${E2E_ESCALATE_PHASE2:-20}" \
+    ESCALATE_COOLDOWN="${E2E_ESCALATE_COOLDOWN:-25}" \
+    INOTIFY_TIMEOUT="${E2E_INOTIFY_TIMEOUT:-5}" \
+    ASW_BOOT_GRACE=0 \
+    bash "$E2E_QUEUE/scripts/inbox_watcher.sh" "$agent_id" "$pane_target" "codex" \
+        > "$log_file" 2>&1 &
+
+    local pid=$!
+    echo "$pid"
+}
+
 # ═══════════════════════════════════════════════════════════════
 # E2E-008-A: Codex agent receives startup prompt after /new
 #            and processes assigned task
@@ -70,13 +94,15 @@ dump_watcher_log() {
     cp "$PROJECT_ROOT/tests/e2e/fixtures/task_ashigaru1_basic.yaml" \
        "$E2E_QUEUE/queue/tasks/ashigaru1.yaml"
 
-    # 3. Send task_assigned message via inbox_write
-    bash "$E2E_QUEUE/scripts/inbox_write.sh" "ashigaru1" \
+    # 3. Write task_assigned directly to inbox (no tmux nudge)
+    #    so only the watcher handles delivery via startup prompt flow
+    write_inbox_direct "ashigaru1" \
         "タスクYAMLを読んで作業開始せよ。" "task_assigned" "karo"
 
-    # 4. Start inbox_watcher with codex CLI type
+    # 4. Start inbox_watcher (boot grace disabled)
+    #    process_unread_once sees unread → sends /new → sends startup prompt
     local watcher_pid log_file
-    watcher_pid=$(start_inbox_watcher "ashigaru1" 1 "codex")
+    watcher_pid=$(start_codex_watcher "ashigaru1" 1)
     log_file="/tmp/e2e_inbox_watcher_ashigaru1_$$.log"
 
     # 5. Wait for task to complete
@@ -123,16 +149,16 @@ dump_watcher_log() {
     sleep 2
     tmux set-option -p -t "$ashigaru1_pane" @agent_cli "codex"
 
-    # 2. Place task and send inbox message
+    # 2. Place task and write inbox message directly (no tmux nudge)
     cp "$PROJECT_ROOT/tests/e2e/fixtures/task_ashigaru1_basic.yaml" \
        "$E2E_QUEUE/queue/tasks/ashigaru1.yaml"
 
-    bash "$E2E_QUEUE/scripts/inbox_write.sh" "ashigaru1" \
+    write_inbox_direct "ashigaru1" \
         "タスクYAMLを読んで作業開始せよ。" "task_assigned" "karo"
 
-    # 3. Start watcher (codex CLI type)
+    # 3. Start watcher (boot grace disabled)
     local watcher_pid log_file
-    watcher_pid=$(start_inbox_watcher "ashigaru1" 1 "codex")
+    watcher_pid=$(start_codex_watcher "ashigaru1" 1)
     log_file="/tmp/e2e_inbox_watcher_ashigaru1_$$.log"
 
     # 4. Wait for processing
@@ -177,17 +203,25 @@ dump_watcher_log() {
     sleep 2
     tmux set-option -p -t "$ashigaru1_pane" @agent_cli "claude"
 
-    # 2. Place task and send inbox message
+    # 2. Place task and write inbox message directly (no tmux nudge)
     cp "$PROJECT_ROOT/tests/e2e/fixtures/task_ashigaru1_basic.yaml" \
        "$E2E_QUEUE/queue/tasks/ashigaru1.yaml"
 
-    bash "$E2E_QUEUE/scripts/inbox_write.sh" "ashigaru1" \
+    write_inbox_direct "ashigaru1" \
         "タスクYAMLを読んで作業開始せよ。" "task_assigned" "karo"
 
-    # 3. Start watcher (claude CLI type)
+    # 3. Start watcher (claude CLI type, boot grace disabled)
     local watcher_pid log_file
-    watcher_pid=$(start_inbox_watcher "ashigaru1" 1 "claude")
     log_file="/tmp/e2e_inbox_watcher_ashigaru1_$$.log"
+
+    ESCALATE_PHASE1="${E2E_ESCALATE_PHASE1:-10}" \
+    ESCALATE_PHASE2="${E2E_ESCALATE_PHASE2:-20}" \
+    ESCALATE_COOLDOWN="${E2E_ESCALATE_COOLDOWN:-25}" \
+    INOTIFY_TIMEOUT="${E2E_INOTIFY_TIMEOUT:-5}" \
+    ASW_BOOT_GRACE=0 \
+    bash "$E2E_QUEUE/scripts/inbox_watcher.sh" "ashigaru1" "$ashigaru1_pane" "claude" \
+        > "$log_file" 2>&1 &
+    watcher_pid=$!
 
     # 4. Wait for task to complete (claude uses /clear → auto-recovery via mock handle_clear)
     run wait_for_yaml_value "$E2E_QUEUE/queue/tasks/ashigaru1.yaml" "task.status" "done" 45
@@ -231,13 +265,12 @@ dump_watcher_log() {
     cp "$PROJECT_ROOT/tests/e2e/fixtures/task_ashigaru1_basic.yaml" \
        "$E2E_QUEUE/queue/tasks/ashigaru1.yaml"
 
-    # 3. Send clear_command via inbox_write (simulates karo sending /clear)
-    bash "$E2E_QUEUE/scripts/inbox_write.sh" "ashigaru1" \
-        "/clear" "clear_command" "karo"
+    # 3. Write clear_command directly to inbox (no tmux nudge)
+    write_inbox_direct "ashigaru1" "/clear" "clear_command" "karo"
 
-    # 4. Start inbox_watcher with codex CLI type
+    # 4. Start inbox_watcher (boot grace disabled)
     local watcher_pid log_file
-    watcher_pid=$(start_inbox_watcher "ashigaru1" 1 "codex")
+    watcher_pid=$(start_codex_watcher "ashigaru1" 1)
     log_file="/tmp/e2e_inbox_watcher_ashigaru1_$$.log"
 
     # 5. Wait for task to complete
@@ -298,17 +331,14 @@ dump_watcher_log() {
     cp "$PROJECT_ROOT/tests/e2e/fixtures/task_ashigaru1_basic.yaml" \
        "$E2E_QUEUE/queue/tasks/ashigaru1.yaml"
 
-    # 3. Send THREE clear_commands in rapid succession (simulates karo bug)
-    bash "$E2E_QUEUE/scripts/inbox_write.sh" "ashigaru1" \
-        "/clear" "clear_command" "karo"
-    bash "$E2E_QUEUE/scripts/inbox_write.sh" "ashigaru1" \
-        "/clear" "clear_command" "karo"
-    bash "$E2E_QUEUE/scripts/inbox_write.sh" "ashigaru1" \
-        "/clear" "clear_command" "karo"
+    # 3. Write THREE clear_commands directly to inbox (no tmux nudge)
+    write_inbox_direct "ashigaru1" "/clear" "clear_command" "karo"
+    write_inbox_direct "ashigaru1" "/clear" "clear_command" "karo"
+    write_inbox_direct "ashigaru1" "/clear" "clear_command" "karo"
 
-    # 4. Start inbox_watcher with codex CLI type
+    # 4. Start inbox_watcher (boot grace disabled)
     local watcher_pid log_file
-    watcher_pid=$(start_inbox_watcher "ashigaru1" 1 "codex")
+    watcher_pid=$(start_codex_watcher "ashigaru1" 1)
     log_file="/tmp/e2e_inbox_watcher_ashigaru1_$$.log"
 
     # 5. Wait for task to complete
