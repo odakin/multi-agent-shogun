@@ -541,7 +541,7 @@ update_current_tasks() {
     local pane_id agent_name
     for pane_id in "${!STYLED_PANES[@]}"; do
         agent_name="${STYLED_PANES[$pane_id]}"
-        [ -z "$agent_name" ] || [ "$agent_name" = "..." ] && continue
+        { [ -z "$agent_name" ] || [ "$agent_name" = "..." ]; } && continue
 
         # task YAML から task_id + description を取得（⏰滞留チェック付き）
         local task_yaml="$SCRIPT_DIR/queue/tasks/${agent_name}.yaml"
@@ -635,7 +635,7 @@ check_idle_inbox_unread() {
 
     while IFS=' ' read -r pane_id agent_id; do
         [ -z "$pane_id" ] && continue
-        [ -z "$agent_id" ] || [ "$agent_id" = "..." ] && continue
+        { [ -z "$agent_id" ] || [ "$agent_id" = "..." ]; } && continue
         # 将軍のみスキップ（家老・軍師も自動re-nudge対象）
         [[ "$agent_id" == "shogun" || "$agent_id" == "team-lead" || "$agent_id" == "monitor" ]] && continue
 
@@ -678,7 +678,7 @@ check_permission_deadlock() {
 
     while IFS=' ' read -r pane_id agent_id; do
         [ -z "$pane_id" ] && continue
-        [ -z "$agent_id" ] || [ "$agent_id" = "..." ] && continue
+        { [ -z "$agent_id" ] || [ "$agent_id" = "..." ]; } && continue
 
         # ペイン内容をスキャン（最後の20行）
         local content
@@ -748,7 +748,7 @@ check_unresponsive_panes() {
 
     while IFS=' ' read -r pane_id agent_id; do
         [ -z "$pane_id" ] && continue
-        [ -z "$agent_id" ] || [ "$agent_id" = "..." ] && continue
+        { [ -z "$agent_id" ] || [ "$agent_id" = "..." ]; } && continue
 
         # 将軍・モニターは /clear しない（人間との会話履歴を保持）
         [[ "$agent_id" == "shogun" || "$agent_id" == "team-lead" || "$agent_id" == "monitor" ]] && continue

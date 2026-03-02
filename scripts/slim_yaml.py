@@ -62,7 +62,7 @@ def _extract_raw_status_map(raw_content):
         cmd_id = id_match.group(1)
         status_match = re.search(r'^\s*status:\s*(\S+)', block, re.MULTILINE)
         if status_match:
-            raw_status_map[cmd_id] = status_match.group(1)
+            raw_status_map[cmd_id] = status_match.group(1).strip('"\'')
     return raw_status_map
 
 
@@ -179,7 +179,7 @@ def slim_per_cmd_files():
             status_match = re.search(r'^\s*status:\s*(\S+)', raw, re.MULTILINE)
             if not status_match:
                 continue
-            status = status_match.group(1)
+            status = status_match.group(1).strip('"\'')
             if status in ARCHIVE_STATUSES:
                 archive_dir.mkdir(parents=True, exist_ok=True)
                 dest = archive_dir / cmd_file.name

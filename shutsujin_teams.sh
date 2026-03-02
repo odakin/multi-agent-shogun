@@ -214,7 +214,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "モデル構成:"
             echo "  将軍:      Opus（デフォルト。--model で変更可）"
-            echo "  家老:      Sonnet（高速タスク管理）"
+            echo "  家老:      Haiku（機械的ディスパッチ。settings.yaml で変更可）"
             echo "  軍師:      Opus（戦略立案・設計判断）"
             echo "  足軽1-7:   Sonnet（実働部隊）"
             echo ""
@@ -910,8 +910,8 @@ NINJA_EOF
     sleep 1
 
     # 家老（pane 0）
-    # v4.0 ダンベル型アーキテクチャ: 将軍(Opus)←→家老(Sonnet: 中継・ディスパッチ)←→足軽(Opus)
-    # 家老はタスク振り分け・進捗管理に特化するため Sonnet を使用
+    # v4.1 ダンベル型アーキテクチャ: 将軍(Opus)←→家老(Haiku: 機械的配分)←→足軽(Sonnet/Opus)
+    # 家老はタスク振り分けに特化するため Haiku を使用（settings.yaml cli.agents.karo.model で設定）
     p=$((PANE_BASE + 0))
     _karo_cli_type="claude"
     _karo_cmd="claude --model sonnet --dangerously-skip-permissions"
@@ -995,7 +995,7 @@ NINJA_EOF
     if [ "$KESSEN_MODE" = true ]; then
         log_success "✅ 決戦の陣で出陣！全軍Opus！"
     else
-        log_success "✅ 平時の陣で出陣（将軍=Opus, 家老=Sonnet, 足軽=Sonnet, 軍師=Opus）"
+        log_success "✅ 平時の陣で出陣（将軍=Opus, 家老=Haiku, 足軽=Sonnet, 軍師=Opus）"
     fi
     echo ""
 

@@ -10,8 +10,8 @@
 
 set -u
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOCK_FILE="${SCRIPT_DIR}/../queue/.slim_yaml.lock"
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+LOCK_FILE="${SCRIPT_DIR}/queue/.slim_yaml.lock"
 LOCK_TIMEOUT=10
 
 # Acquire exclusive lock
@@ -21,8 +21,8 @@ if ! flock -w "$LOCK_TIMEOUT" 200; then
     exit 1
 fi
 
-# Call the Python implementation
-python3 "$(dirname "$0")/slim_yaml.py" "$@"
+# Call the Python implementation (.venv to ensure PyYAML is available)
+"$SCRIPT_DIR/.venv/bin/python3" "$SCRIPT_DIR/scripts/slim_yaml.py" "$@"
 exit_code=$?
 
 # Lock is automatically released when file descriptor is closed

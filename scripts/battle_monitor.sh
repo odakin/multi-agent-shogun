@@ -93,16 +93,14 @@ get_agent_state() {
     local pane="${AGENT_PANES[$agent]:-}"
     [[ -z "$pane" ]] && { echo "absent"; return; }
 
-    if agent_is_busy_check "$pane" 2>/dev/null; then
-        echo "busy"
-    else
-        local rc=$?
-        case $rc in
-            1) echo "idle" ;;
-            2) echo "absent" ;;
-            *) echo "idle" ;;
-        esac
-    fi
+    agent_is_busy_check "$pane" 2>/dev/null
+    local rc=$?
+    case $rc in
+        0) echo "busy" ;;
+        1) echo "idle" ;;
+        2) echo "absent" ;;
+        *) echo "idle" ;;
+    esac
 }
 
 # ─── Capture pane output (last N lines, non-empty) ───

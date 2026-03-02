@@ -11,13 +11,12 @@ language: ja
 # zsh: zsh用プロンプト
 shell: zsh
 
-# エージェント設定
+# Bloom Routing（cli_adapter.sh が top-level から読み取る）
+bloom_routing: manual  # off | manual | auto — タスク難度に基づくモデル動的選択
+
+# エージェント設定（レガシー — cli.agents を使用せよ）
 agents:
   ashigaru_count: 7   # 足軽の人数（1-9）。Karoがspawn時に参照。
-  bloom_routing: manual  # off | manual | auto — タスク難度に基づくモデル動的選択
-  # agents.karo.model は cli_adapter.sh が読まないため非推奨。cli.agents.karo.model を使用せよ。
-  # karo:
-  #   model: haiku
 
 # CLI設定（cli_adapter.sh が参照）
 cli:
