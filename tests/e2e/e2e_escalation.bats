@@ -52,13 +52,14 @@ setup() {
     cp "$PROJECT_ROOT/tests/e2e/fixtures/task_ashigaru1_basic.yaml" \
        "$E2E_QUEUE/queue/tasks/ashigaru1.yaml"
 
-    # 2. Write task_assigned to inbox
+    # 2. Put agent into busy state FIRST to prevent inbox_write's nudge
+    #    from being processed before busy_hold starts (race condition fix)
+    send_to_pane "$ashigaru1_pane" "busy_hold 8"
+    sleep 2  # Ensure busy state is active
+
+    # 3. Write task_assigned to inbox (nudge will queue in terminal buffer)
     bash "$E2E_QUEUE/scripts/inbox_write.sh" "ashigaru1" \
         "タスクYAMLを読んで作業開始せよ。" "task_assigned" "karo"
-
-    # 3. Put agent into busy state for 6 seconds BEFORE sending nudge
-    send_to_pane "$ashigaru1_pane" "busy_hold 6"
-    sleep 2  # Ensure busy state is active
 
     # 4. Verify agent is busy (pane shows Working)
     run wait_for_pane_text "$ashigaru1_pane" "esc to interrupt" 5

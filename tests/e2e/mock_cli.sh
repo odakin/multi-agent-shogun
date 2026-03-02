@@ -255,11 +255,20 @@ if [ -f "$TASK_FILE" ]; then
 fi
 
 while IFS= read -r input || true; do
-    # Trim whitespace
-    input=$(echo "$input" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    # Trim whitespace and strip control characters (e.g., Ctrl+U 0x15
+    # from watcher's suggestion UI dismissal that wasn't processed as VKILL)
+    input=$(echo "$input" | tr -d '[:cntrl:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
     # Skip empty input
     [ -z "$input" ] && continue
+
+    # Strip leading "x" prefix from watcher's suggestion UI dismissal.
+    # inbox_watcher sends "x" + C-u before commands to dismiss Codex's
+    # suggestion dropdown. C-u (VKILL) may not work in all terminal
+    # configurations, leaving "x" prepended to the actual command.
+    if [[ "$input" =~ ^x(/new|/clear|Session\ Start) ]]; then
+        input="${input#x}"
+    fi
 
     case "$input" in
         /new)
