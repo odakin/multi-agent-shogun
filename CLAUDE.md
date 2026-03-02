@@ -8,8 +8,8 @@ hierarchy: "Grand Lord (human) → Shogun → Karo → Ashigaru 1-7 / Gunshi"
 communication: "YAML files + inbox mailbox system (event-driven, NO polling)"
 
 tmux_sessions:
-  shogun: { pane_0: shogun }
-  multiagent: { pane_0: karo, pane_1-7: ashigaru1-7, pane_8: gunshi }
+  shogun-teams: { pane_0: shogun, pane_1: monitor }
+  multiagent-teams: { pane_0: karo, pane_1-7: ashigaru1-7, pane_8: gunshi }
 
 files:
   config: config/projects.yaml          # Project list (summary)
@@ -18,7 +18,7 @@ files:
   cmd_queue: "queue/cmds/cmd_XXX.yaml"  # Shogun → Karo commands (per-cmd files)
   tasks: "queue/tasks/ashigaru{N}.yaml" # Karo → Ashigaru assignments (per-ashigaru)
   gunshi_task: queue/tasks/gunshi.yaml  # Karo → Gunshi strategic assignments
-  pending_tasks: queue/tasks/pending.yaml # Karo管理の保留タスク（blocked未割当）
+  # pending_tasks: queue/tasks/pending.yaml — 廃止。phases方式で将軍が事前に依存関係を設計。
   reports: "queue/reports/ashigaru{N}_report.yaml" # Ashigaru → Karo reports
   gunshi_report: queue/reports/gunshi_report.yaml  # Gunshi → Karo strategic reports
   dashboard: dashboard.md              # Human-readable summary (secondary data)
@@ -31,12 +31,12 @@ cmd_format:
   validation: "Karo checks acceptance_criteria at Step 11.7. Ashigaru checks parent_cmd purpose on task completion."
 
 task_status_transitions:
-  - "idle → assigned (karo assigns)"
-  - "assigned → done (ashigaru completes)"
-  - "assigned → failed (ashigaru fails)"
-  - "pending_blocked（家老キュー保留）→ assigned（依存完了後に割当）"
-  - "RULE: Ashigaru updates OWN yaml only. Never touch other ashigaru's yaml."
-  - "RULE: blocked状態タスクを足軽へ事前割当しない。前提完了までpending_tasksで保留。"
+  cmd: "pending → in_progress → done/cancelled/deferred"
+  task: "idle → assigned → done/failed"
+  note: "deferred = 将軍が意図的に保留。家老は絶対に処理しない。"
+  rules:
+    - "Ashigaru updates OWN yaml only. Never touch other ashigaru's yaml."
+    - "v4.0: phases方式で将軍が依存関係を事前設計。blocked/pending_blocked は原則不使用。"
 
 # Status definitions are authoritative in:
 # - instructions/common/task_flow.md (Status Reference)
@@ -153,8 +153,8 @@ bash scripts/inbox_write.sh karo "足軽5号、任務完了。報告YAML確認�
 # Karo → Ashigaru
 bash scripts/inbox_write.sh ashigaru3 "タスクYAMLを読んで作業開始せよ。" task_assigned karo
 
-# Karo → Shogun (cmd完了報告)
-bash scripts/inbox_write.sh shogun "cmd_200 完了。河川表示3点修正完了。" cmd_complete karo
+# Gunshi → Shogun (cmd完了報告 — v4.0: 軍師がQC後に直接報告)
+bash scripts/inbox_write.sh shogun "cmd_200 完了。全QC PASS。" cmd_complete gunshi
 ```
 
 Delivery is handled by `inbox_watcher.sh` (infrastructure layer).
@@ -164,7 +164,7 @@ Delivery is handled by `inbox_watcher.sh` (infrastructure layer).
 
 Two layers:
 1. **Message persistence**: `inbox_write.sh` writes to `queue/inbox/{agent}.yaml` with flock. Guaranteed.
-2. **Wake-up signal**: `inbox_watcher.sh` detects file change via `inotifywait` → wakes agent:
+2. **Wake-up signal**: `inbox_watcher.sh` detects file change via `fswatch`(macOS)/`inotifywait`(Linux) → wakes agent:
    - **優先度1**: Agent self-watch (agent's own `inotifywait` on its inbox) → no nudge needed
    - **優先度2**: `tmux send-keys` — short nudge only (text and Enter sent separately, 0.3s gap)
 
@@ -217,10 +217,10 @@ Race condition is eliminated: `/clear` wipes old context. Agent re-reads YAML wi
 
 | Direction | Method | Reason |
 |-----------|--------|--------|
-| Ashigaru → Gunshi | Report YAML + inbox_write | Quality check & dashboard aggregation |
-| Gunshi → Karo | Report YAML + inbox_write | Quality check result + strategic reports |
-| Karo → Shogun | dashboard.md update + **cmd完了時 inbox_write** | cmd完了報告で将軍を起こし、大殿様に奏上させる |
-| Karo → Gunshi | YAML + inbox_write | Strategic task or quality check delegation |
+| Ashigaru → Karo | Report YAML + inbox_write | 足軽完了通知（家老がフェーズ管理） |
+| Karo → Gunshi | YAML + inbox_write | QCタスク割当 or 戦略分析依頼 |
+| Gunshi → Shogun | inbox_write | **cmd完了報告（v4.0: 軍師が直接将軍に報告）** |
+| Gunshi → Karo | inbox_write | QC FAIL → 家老が再割当 |
 | Top → Down | YAML + inbox_write | Standard wake-up |
 
 ## File Operation Rule
@@ -242,10 +242,10 @@ System manages ALL white-collar work, not just self-improvement. Project folders
 
 # Shogun Mandatory Rules
 
-1. **Dashboard**: Karo + Gunshi update. Gunshi: QC results aggregation. Karo: task status/streaks/action items. Shogun reads it, never writes it.
+1. **Dashboard**: Gunshi が主管理者（QC結果集約・戦果更新）。Shogun reads it, never writes it.
 2. **Chain of command**: Shogun → Karo → Ashigaru/Gunshi. Never bypass Karo.
 3. **Reports**: Check `queue/reports/ashigaru{N}_report.yaml` and `queue/reports/gunshi_report.yaml` when waiting.
-4. **Karo state**: Before sending commands, verify karo isn't busy: `tmux capture-pane -t multiagent:0.0 -p | tail -20`
+4. **Karo state**: Before sending commands, verify karo isn't busy: `tmux capture-pane -t multiagent-teams:agents.0 -p | tail -20`
 5. **Screenshots**: See `config/settings.yaml` → `screenshot.path`
 6. **Skill candidates**: Ashigaru reports include `skill_candidate:`. Karo collects → dashboard. Shogun approves → creates design doc.
 7. **Action Required Rule (CRITICAL)**: ALL items needing Grand Lord's decision → dashboard.md 🚨要対応 section. ALWAYS. Even if also written elsewhere. Forgetting = Grand Lord gets angry.

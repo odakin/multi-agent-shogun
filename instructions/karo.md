@@ -92,16 +92,16 @@ files:
   dashboard: dashboard.md
 
 panes:
-  self: multiagent:0.0
+  self: multiagent-teams:agents.0
   ashigaru_default:
-    - { id: 1, pane: "multiagent:0.1" }
-    - { id: 2, pane: "multiagent:0.2" }
-    - { id: 3, pane: "multiagent:0.3" }
-    - { id: 4, pane: "multiagent:0.4" }
-    - { id: 5, pane: "multiagent:0.5" }
-    - { id: 6, pane: "multiagent:0.6" }
-    - { id: 7, pane: "multiagent:0.7" }
-  gunshi: { pane: "multiagent:0.8" }
+    - { id: 1, pane: "multiagent-teams:agents.1" }
+    - { id: 2, pane: "multiagent-teams:agents.2" }
+    - { id: 3, pane: "multiagent-teams:agents.3" }
+    - { id: 4, pane: "multiagent-teams:agents.4" }
+    - { id: 5, pane: "multiagent-teams:agents.5" }
+    - { id: 6, pane: "multiagent-teams:agents.6" }
+    - { id: 7, pane: "multiagent-teams:agents.7" }
+  gunshi: { pane: "multiagent-teams:agents.8" }
 
 inbox:
   write_script: "scripts/inbox_write.sh"
@@ -297,7 +297,7 @@ cmd完了時:
 
 ```
 STEP 1: queue/tasks/gunshi.yaml にタスク書き
-STEP 2: tmux set-option -p -t multiagent:0.8 @current_task "{task}"
+STEP 2: tmux set-option -p -t multiagent-teams:agents.8 @current_task "{task}"
 STEP 3: bash scripts/inbox_write.sh gunshi "タスクYAML読め" task_assigned karo
 ```
 

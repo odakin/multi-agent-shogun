@@ -38,7 +38,7 @@ workflow:
     note: "1コマンド1ファイル。Write ツールで新規作成（race condition なし）。shogun_to_karo.yaml は使わない。"
   - step: 3
     action: inbox_write
-    target: multiagent:0.0
+    target: multiagent-teams:agents.0
     note: "Use scripts/inbox_write.sh — See CLAUDE.md for inbox protocol"
   - step: 4
     action: wait_for_gunshi_report
@@ -59,8 +59,8 @@ files:
   gunshi_report: queue/reports/gunshi_report.yaml
 
 panes:
-  karo: multiagent:0.0
-  gunshi: multiagent:0.8
+  karo: multiagent-teams:agents.0
+  gunshi: multiagent-teams:agents.8
 
 inbox:
   write_script: "scripts/inbox_write.sh"
@@ -234,9 +234,9 @@ dashboard.md is still updated by Karo/Gunshi for human visibility.
 | Agent | Pane | Role |
 |-------|------|------|
 | Shogun | shogun:main | 戦略決定、cmd発行 |
-| Karo | multiagent:0.0 | 配達マシン — 将軍のフェーズ計画に従い機械的に足軽へ配分 |
-| Ashigaru 1-7 | multiagent:0.1-0.7 | 実行 — コード、記事、ビルド、push、done_keywords追記まで自己完結 |
-| Gunshi | multiagent:0.8 | 戦略・品質 — 品質チェック、dashboard更新、レポート集約、設計分析 |
+| Karo | multiagent-teams:agents.0 | 配達マシン — 将軍のフェーズ計画に従い機械的に足軽へ配分 |
+| Ashigaru 1-7 | multiagent-teams:agents.1-0.7 | 実行 — コード、記事、ビルド、push、done_keywords追記まで自己完結 |
+| Gunshi | multiagent-teams:agents.8 | 戦略・品質 — 品質チェック、dashboard更新、レポート集約、設計分析 |
 
 ### Report Flow v4.0（ダンベル型: 賢い入口→馬鹿な中間→賢い出口）
 ```

@@ -27,7 +27,7 @@ Lord: command
 Status is defined per YAML file type. **Keep it minimal. Simple is best.**
 
 Fixed status set (do not add casually):
-- `queue/cmds/cmd_XXX.yaml`: `pending`, `in_progress`, `done`, `cancelled`
+- `queue/cmds/cmd_XXX.yaml`: `pending`, `in_progress`, `done`, `cancelled`, `deferred`
 - `queue/tasks/ashigaruN.yaml`: `assigned`, `blocked`, `done`, `failed`
 - `queue/tasks/pending.yaml`: `pending_blocked`
 - `queue/ntfy_inbox.yaml`: `pending`, `processed`
@@ -53,6 +53,10 @@ Meanings and allowed/forbidden actions (short):
 - `cancelled`: intentionally stopped
   - Allowed: read-only (history)
   - Forbidden: continuing work under this cmd (use a new cmd instead)
+
+- `deferred`: 将軍が意図的に保留
+  - Allowed: 将軍のみが pending に戻せる
+  - Forbidden: **家老は絶対に処理しない。** in_progress に変更するのも禁止。
 
 **Karo rule (ack fast)**:
 - The moment Karo starts processing a cmd (after reading it), update that cmd status:
@@ -82,7 +86,7 @@ Meanings and allowed/forbidden actions (short):
 
 Note:
 - Normally, "idle" is a UI state (no active task), not a YAML status value.
-- Exception (placeholder only): `status: idle` is allowed **only** when `task_id: null` (clean start template written by `shutsujin_departure.sh --clean`).
+- Exception (placeholder only): `status: idle` is allowed **only** when `task_id: null` (clean start template written by `shutsujin_teams.sh --clean`).
   - In that state, the file is a placeholder and should be treated as "no task assigned yet".
 
 ### Pending Tasks (Karo-managed): `queue/tasks/pending.yaml`
