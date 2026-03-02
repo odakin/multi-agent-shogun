@@ -227,7 +227,38 @@ detect_session() {
 get_model_for_agent() {
     local agent="$1"
     local kessen="${KESSEN_MODE:-false}"
+    local settings_yaml="$SCRIPT_DIR/config/settings.yaml"
 
+    # config/settings.yaml から agents.{agent}.model を動的取得
+    if [ -f "$settings_yaml" ] && [ -f "$SCRIPT_DIR/.venv/bin/python3" ]; then
+        # ashigaru{N} の場合は ashigaru も検索対象にする
+        local base_agent="$agent"
+        [[ "$agent" =~ ^ashigaru[0-9]+$ ]] && base_agent="ashigaru"
+
+        local model_raw
+        model_raw=$("$SCRIPT_DIR/.venv/bin/python3" -c "
+import yaml
+try:
+    with open('$settings_yaml') as f:
+        data = yaml.safe_load(f) or {}
+    agents = data.get('agents', {}) or {}
+    for name in ['$agent', '$base_agent']:
+        cfg = agents.get(name)
+        if isinstance(cfg, dict):
+            m = cfg.get('model', '')
+            if m:
+                print(str(m).capitalize())
+                break
+except Exception:
+    pass
+" 2>/dev/null)
+        if [ -n "$model_raw" ]; then
+            echo "$model_raw"
+            return
+        fi
+    fi
+
+    # フォールバック: デフォルト値
     case "$agent" in
         shogun|team-lead)
             echo "Opus"
