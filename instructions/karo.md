@@ -152,6 +152,7 @@ persona:
 
 - `queue/cmds/cmd_XXX.yaml` に1ファイル1コマンド
 - Glob → `status: pending` or `in_progress` だけ処理
+- **`status: deferred` は絶対に処理するな。将軍が意図的に保留した cmd。触るな。**
 - 完了 cmd は slim_yaml.sh で自動アーカイブ
 
 ## Mechanical Dispatch Rules

@@ -1,0 +1,50 @@
+id: cmd_249
+status: done
+timestamp: "2026-03-02T22:40:54Z"
+purpose: "将軍ウィンドウに大殿様の裁可待ちリスト(lord_pending)の表示を復旧する"
+acceptance_criteria:
+  - "将軍ウィンドウのどこかに queue/lord_pending.yaml の裁可待ち項目が常時表示されること"
+  - "status: awaiting_lord の項目が一覧で見えること"
+  - "以前動作していた表示が復旧していること（新規実装ではなくバグ修正）"
+command: |
+  将軍ウィンドウに大殿様の裁可待ちリスト（lord_pending）が表示されていたが、
+  いつの間にか消えている。
+
+  関連ファイル:
+  - queue/lord_pending.yaml — 裁可待ちデータ
+  - 表示を担当していたスクリプトまたは設定を特定すること
+
+  以前は動作していたので、何かの変更で消えた可能性がある。
+  git log で変更履歴を追い、いつ消えたか特定すること。
+
+  リポジトリ: /Users/odakin/Claude/multi-agent-shogun
+project: multi-agent-shogun
+priority: medium
+
+phases:
+  - phase: 1
+    mode: parallel
+    subtasks:
+      - id: s249a
+        description: |
+          裁可待ちリスト表示の実装を調査。
+          - 将軍ウィンドウでの lord_pending 表示を担当していたスクリプトや設定を特定
+          - tmux status-line、別ペイン、モニタスクリプト等どこで表示されていたか
+          - git log で表示が消えた時期と原因を特定
+          - queue/lord_pending.yaml の現在の内容と形式も確認
+          調査結果と復旧方針をレポートにまとめること。
+        bloom_level: L2
+        status: done
+
+  - phase: 2
+    mode: sequential
+    subtasks:
+      - id: s249b
+        description: |
+          Phase 1 (s249a) の調査結果に基づき、裁可待ちリスト表示を復旧。
+          表示が消えた原因を修正し、以前と同等の表示を回復すること。
+        bloom_level: L3
+        status: done
+
+  - phase: 3
+    mode: qc

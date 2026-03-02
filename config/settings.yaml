@@ -24,6 +24,8 @@ cli:
   agents:
     karo:
       model: haiku
+    gunshi:
+      model: opus
 
 # スキル設定
 skill:

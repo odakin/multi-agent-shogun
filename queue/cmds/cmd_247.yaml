@@ -1,0 +1,76 @@
+id: cmd_247
+status: done
+timestamp: "2026-03-02T22:34:38Z"
+purpose: "shogun.md の cmd 書式・指示を Haiku 家老が確実に理解・実行できるよう改善する"
+acceptance_criteria:
+  - "shogun.md 内の cmd 書式ガイドラインが Haiku 家老の能力に合わせて更新されていること"
+  - "phases/subtasks の description の書き方ガイドが、Haiku が機械的に配分できる明確さであること"
+  - "Good/Bad 例が Haiku 家老を前提に更新されていること"
+  - "将軍が書くべきもの・書かないものの境界が Haiku 前提で再定義されていること"
+  - "改善後の shogun.md で将軍が cmd を書き、Haiku 家老が正しく配分できること"
+command: |
+  家老が Haiku モデルで動作するようになった（config/settings.yaml: agents.karo.model: haiku）。
+  しかし shogun.md の cmd 書式ガイドラインは Sonnet/Opus 家老を前提に書かれている。
+
+  Haiku は:
+  - 長い文脈の保持が弱い
+  - 暗黙の意図の推測が苦手
+  - 明示的・構造的な指示には従える
+  - 機械的な繰り返し作業は得意
+
+  v4.0 で家老は「配分マシン」に徹する設計。Haiku の強み（機械的作業）と合致する。
+  しかし cmd の書き方が曖昧だと Haiku は迷う。
+
+  検討すべきポイント:
+  1. subtask description をどこまで具体的に書くべきか（Haiku がそのまま転記するなら、将軍が足軽向けの粒度で書くべきか）
+  2. phases の mode 指定だけで Haiku が正しく並列/直列を判断できるか
+  3. acceptance_criteria を Haiku が QC 依頼時にそのまま軍師に渡せる形式にすべきか
+  4. command フィールドの背景情報を Haiku が正しく task YAML に引き継げるか
+  5. bloom_level → model 変換を Haiku が間違えないよう、より明示的にすべきか
+
+  リポジトリ: /Users/odakin/Claude/multi-agent-shogun
+  対象ファイル: instructions/shogun.md（725行）
+project: multi-agent-shogun
+priority: high
+
+phases:
+  - phase: 1
+    mode: parallel
+    subtasks:
+      - id: s247a
+        description: |
+          instructions/shogun.md の cmd 書式関連セクションを全文読み、
+          Haiku 家老の能力を前提に以下を分析せよ:
+          1. Haiku が迷いそうな曖昧な記述の特定
+          2. 「将軍が書くもの」のうち、Haiku 転記を前提にすると粒度が不足する箇所
+          3. Good/Bad 例で Haiku 向けに更新が必要な箇所
+          改善提案をレポートにまとめること。
+        bloom_level: L3
+        status: done
+      - id: s247b
+        description: |
+          instructions/karo.md の workflow steps を読み、
+          家老が cmd から task YAML を生成する際のフローを把握。
+          家老が将軍の cmd をどう解釈→転記しているかを特定し、
+          「将軍がこう書けば Haiku 家老は間違えない」という
+          cmd 書式のベストプラクティスを提案せよ。
+        bloom_level: L3
+        status: done
+
+  - phase: 2
+    mode: sequential
+    subtasks:
+      - id: s247c
+        description: |
+          Phase 1 (s247a, s247b) の分析結果を統合し、
+          instructions/shogun.md の cmd 書式セクションを改善。
+          - subtask description の推奨粒度を明記
+          - Haiku 転記を前提とした記述ガイドライン追加
+          - Good/Bad 例の更新
+          - 必要に応じて cmd テンプレートの更新
+          修正は shogun.md 内の該当セクションのみ。他セクションは触らない。
+        bloom_level: L4
+        status: done
+
+  - phase: 3
+    mode: qc
