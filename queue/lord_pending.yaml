@@ -7,6 +7,6 @@ pending_decisions:
     status: approved
   - cmd_id: cmd_222
     title: "モニタ3段階リサイズ"
-    summary: "推奨: BUSY/RECENT/IDLE 3段階。~25行変更"
+    summary: "cmd_248で動的リサイズとして再実装・完了済み"
     reported_at: "2026-03-02T06:00:00"
-    status: awaiting_lord
+    status: approved

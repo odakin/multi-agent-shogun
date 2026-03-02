@@ -229,7 +229,7 @@ get_model_for_agent() {
     local kessen="${KESSEN_MODE:-false}"
     local settings_yaml="$SCRIPT_DIR/config/settings.yaml"
 
-    # config/settings.yaml から agents.{agent}.model を動的取得
+    # config/settings.yaml から cli.agents.{agent}.model を動的取得
     if [ -f "$settings_yaml" ] && [ -f "$SCRIPT_DIR/.venv/bin/python3" ]; then
         # ashigaru{N} の場合は ashigaru も検索対象にする
         local base_agent="$agent"
@@ -241,7 +241,9 @@ import yaml
 try:
     with open('$settings_yaml') as f:
         data = yaml.safe_load(f) or {}
-    agents = data.get('agents', {}) or {}
+    # cli.agents パスを優先（cli_adapter.sh と同じパス）
+    cli = data.get('cli', {}) or {}
+    agents = cli.get('agents', {}) or {}
     for name in ['$agent', '$base_agent']:
         cfg = agents.get(name)
         if isinstance(cfg, dict):
@@ -358,11 +360,13 @@ detect_agent_from_pane() {
     if echo "$content" | grep -q "instructions/gunshi.md"; then
         detected="gunshi"; match_count=$((match_count + 1))
     fi
-    # 足軽チェック
-    local ashi_num
-    ashi_num=$(echo "$content" | grep -o "ashigaru[0-9]" | head -1 | grep -o "[0-9]")
-    if [ -n "$ashi_num" ]; then
-        detected="ashigaru${ashi_num}"; match_count=$((match_count + 1))
+    # 足軽チェック（instructions/ashigaru.md を読んでいる + 番号特定）
+    if echo "$content" | grep -q "instructions/ashigaru.md"; then
+        local ashi_num
+        ashi_num=$(echo "$content" | grep -o "ashigaru[0-9]" | head -1 | grep -o "[0-9]")
+        if [ -n "$ashi_num" ]; then
+            detected="ashigaru${ashi_num}"; match_count=$((match_count + 1))
+        fi
     fi
 
     # 単一マッチのみ採用（複数マッチ = 誤検出の可能性大）
