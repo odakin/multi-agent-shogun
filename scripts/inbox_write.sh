@@ -88,6 +88,11 @@ try:
         os.unlink(tmp_path)
         raise
 
+    # Unread count をロック内で算出しファイルに書き出す（レース条件防止）
+    unread = sum(1 for m in data['messages'] if not m.get('read', False))
+    with open(inbox + '.unread', 'w') as uf:
+        uf.write(str(unread))
+
 except Exception as e:
     print(f'ERROR: {e}', file=sys.stderr)
     sys.exit(1)
@@ -130,15 +135,10 @@ except Exception as e:
                 sleep 1  # Wait for prompt to appear after exiting transcript view
             fi
 
-            # Count unread messages for nudge text
+            # Unread count をロック内で書き出したファイルから取得（レース条件なし）
             local unread
-            unread=$(IW_INBOX="$INBOX" "$SCRIPT_DIR/.venv/bin/python3" -c "
-import yaml, os
-with open(os.environ['IW_INBOX']) as f:
-    data = yaml.safe_load(f) or {}
-msgs = data.get('messages', []) or []
-print(sum(1 for m in msgs if not m.get('read', False)))
-" 2>/dev/null || echo "1")
+            unread=$(cat "${INBOX}.unread" 2>/dev/null || echo "1")
+            rm -f "${INBOX}.unread"
 
             # Send nudge: text + Enter (separated to avoid Codex TUI issues)
             timeout 5 tmux send-keys -t "$target_pane" "inbox${unread}" 2>/dev/null || true

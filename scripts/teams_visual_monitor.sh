@@ -527,8 +527,9 @@ try:
     if status in ('assigned', 'in_progress', 'pending'):
         tid = task.get('task_id', '') or ''
         print(tid[:15])
-except:
-    pass
+except Exception as e:
+    import sys
+    print(f'WARN get_task_id: {e}', file=sys.stderr)
 " 2>/dev/null || echo ""
 }
 

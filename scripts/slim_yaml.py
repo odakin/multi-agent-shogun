@@ -183,7 +183,10 @@ def slim_per_cmd_files():
             if status in ARCHIVE_STATUSES:
                 archive_dir.mkdir(parents=True, exist_ok=True)
                 dest = archive_dir / cmd_file.name
-                cmd_file.rename(dest)
+                if dest.exists():
+                    cmd_file.unlink()  # Archive already exists, remove source
+                else:
+                    cmd_file.rename(dest)
                 archived_count += 1
                 print(f"Archived {cmd_file.name} -> archive/", file=sys.stderr)
         except Exception as e:
