@@ -415,6 +415,7 @@ MOCK
         MOCK_CAPTURE_PANE="› Summarize recent commits
   ? for shortcuts                100% context left"
         source "'"$TEST_HARNESS"'"
+        BOOT_TS=0
         agent_is_busy
     '
     [ "$status" -eq 1 ]
@@ -489,6 +490,7 @@ MOCK
         MOCK_CAPTURE_PANE="› Summarize recent commits
   ? for shortcuts                100% context left"
         source "'"$TEST_HARNESS"'"
+        BOOT_TS=0
         # Simulate process_unread no-unread path
         FIRST_UNREAD_SEEN=12345
         normal_count=0
@@ -888,6 +890,7 @@ YAML
         MOCK_CAPTURE_PANE="› prompt
   ? for shortcuts                100% context left"
         source "'"$TEST_HARNESS"'"
+        BOOT_TS=0
         now=$(date +%s)
         LAST_CLEAR_TS=$((now - 40))  # /clear sent 40 seconds ago (past 30s cooldown)
         agent_is_busy
@@ -924,6 +927,7 @@ YAML
         MOCK_CAPTURE_PANE="$(printf "◦ Working on task (12s • esc to interrupt)\nsome output line\nmore output\n\n❯ ")"
         source "'"$TEST_HARNESS"'"
         LAST_CLEAR_TS=0
+        BOOT_TS=0
         if agent_is_busy; then
             echo "WRONGLY_BUSY"
         else
