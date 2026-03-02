@@ -345,6 +345,23 @@ for k, v in data.get('_msg_counts', {}).items():
     buf+=" ${C_GREEN}稼働${busy_count}${C_RESET} │ ${C_DIM}待機${idle_count}${C_RESET} │ 未読$(( $(for a in "${AGENTS[@]}"; do echo "${UNREAD[$a]:-0}"; done | paste -sd+ | bc 2>/dev/null || echo 0) ))  ${C_DIM}${now}${C_RESET}\n"
     buf+="${C_DIM}${sep_line}${C_RESET}\n"
 
+    # Lord pending (裁可待ち) section
+    local lord_items=""
+    if [ -f "$SCRIPT_DIR/queue/lord_pending.yaml" ]; then
+        lord_items=$(awk '
+            /cmd_id:/  { cmd = $2 }
+            /title:/   { title = $0; sub(/^.*title:[[:space:]]*"?/, "", title); sub(/"?[[:space:]]*$/, "", title) }
+            /status:.*awaiting_lord/ { print "📋 " cmd " " title }
+        ' "$SCRIPT_DIR/queue/lord_pending.yaml" 2>/dev/null)
+    fi
+    if [ -n "$lord_items" ]; then
+        buf+="${C_YELLOW}${C_BOLD}═══ 裁可待ち ═══${C_RESET}\n"
+        while IFS= read -r item; do
+            buf+=" ${C_WHITE}${item}${C_RESET}\n"
+        done <<< "$lord_items"
+        buf+="${C_DIM}${thin_sep}${C_RESET}\n"
+    fi
+
     # Busy agents (expanded)
     for agent in "${busy_agents[@]}"; do
         local pane="${AGENT_PANES[$agent]:-}"

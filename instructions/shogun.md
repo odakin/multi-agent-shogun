@@ -381,14 +381,15 @@ Check `config/settings.yaml` → `language`:
 
 ```yaml
 id: cmd_XXX
-status: pending      # ← 必ずここ（id:の直後）。家老がEditでin-place置換する。新行追加禁止。
+status: pending      # ← cmd全体のステータス。必ずid:の直後。家老がEditでin-place置換。新行追加禁止。
 timestamp: "ISO 8601"
 purpose: "What this cmd must achieve (verifiable statement)"
-acceptance_criteria:
+acceptance_criteria:   # 軍師QCが参照。ashigaru task YAMLには転記不要。
   - "Criterion 1 — specific, testable condition"
   - "Criterion 2 — specific, testable condition"
 command: |
   Background context (repository path, Lord's feedback, prior results)
+  # ★ リポジトリパスを必ず記載（家老がsubtask descriptionに補完する）
 project: project-id
 priority: high/medium/low
 
@@ -399,13 +400,21 @@ phases:
     subtasks:
       - id: s{cmd_num}a
         description: |
-          自己完結した1タスクの説明。
-          足軽がこれだけ読めば作業開始できる粒度で書く。
-        bloom_level: L2    # L1-L3=Sonnet足軽, L4-L6=Opus(軍師 or 決戦足軽)
-        status: pending    # 起案時は必ずpending。家老がdispatch時にassigned、完了時にdoneに更新。
+          【目的】何を達成するタスクか（1行）
+          【入力】参照するファイル・パス（commandフィールドのproject_pathを含む）
+          【出力】このタスクの成果物（ファイル名またはレポート内容）
+          【完了条件】何を確認すれば完了か
+        target_path: "対象ファイルのパス（家老がashigaru task YAMLにそのまま転記）"
+        bloom_level: L2    # L1-L3=足軽(model:sonnet), L4-L6=足軽(model:opus)
+                           # ★ bloom_levelはモデル選択のみ。軍師転送はmode:qcで決まる（bloom_level無関係）
+        status: pending    # 起案時はpending。家老がin-place置換(Edit)でassigned/doneに更新。新行追加禁止。
       - id: s{cmd_num}b
         description: |
-          並列で実行可能な別タスク。
+          【目的】並列で実行可能な別タスク
+          【入力】参照するファイル・パス
+          【出力】成果物
+          【完了条件】完了の確認方法
+        target_path: "対象ファイルのパス"
         bloom_level: L2
 
   - phase: 2
@@ -413,12 +422,17 @@ phases:
     subtasks:
       - id: s{cmd_num}c
         description: |
-          Phase 1の成果を統合して実装。
-          s{cmd_num}aとs{cmd_num}bのレポートを参照すること。
+          【目的】Phase 1の成果を統合して実装
+          【入力】s{cmd_num}aとs{cmd_num}bのレポート（queue/reports/ashigaru*_report.yaml, parent_cmd:cmd_XXX）
+          【出力】実装済みファイル
+          【完了条件】テスト通過・ビルド成功・git push済み
+        depends_on: [s{cmd_num}a, s{cmd_num}b]   # Phase 1 subtask IDを列挙
+        target_path: "対象ファイルのパス"
         bloom_level: L3
 
   - phase: 3
     mode: qc              # ★ 自動的に軍師がQC実施。家老が軍師に派遣。
+    qc_for: [s{cmd_num}c]  # QC対象subtask IDを列挙（家老がgunshi task YAMLに転記）
 ```
 
 - **purpose**: One sentence. What "done" looks like.
@@ -426,16 +440,16 @@ phases:
 - **command**: 背景情報のみ。技術手順は書くな。
 - **phases**: ★NEW フェーズ構造。将軍が分解・並列構造を決定。
   - **mode**: `parallel`（同フェーズ内サブタスクを同時実行）/ `sequential`（1つずつ）/ `qc`（軍師QC）
-  - **subtasks**: 各サブタスクの自己完結した説明。家老はこれをほぼそのまま task YAML に転記。
-  - **bloom_level**: モデル選択に使用。L1-L3 = Sonnet, L4-L6 = Opus。
-  - **status**: subtask の状態。起案時は必ず `status: pending` を明記すること。家老が dispatch 時に `assigned`、完了時に `done` に更新する。
+  - **subtasks**: 各サブタスクの自己完結した説明。家老はこれをほぼそのまま task YAML に転記。description 内に project_path を必ず記載（家老が command フィールドを参照して補完する）。
+  - **bloom_level**: モデル選択のみに使用。L1-L3 = 足軽(Sonnet), L4-L6 = 足軽(Opus)。軍師への転送は `mode: qc` フェーズで決まる（bloom_level とは無関係）。
+  - **status**: subtask の状態。起案時は必ず `status: pending` を明記すること。家老が dispatch 時に `assigned`、完了時に `done` に in-place 置換する（新行追加禁止）。
 
 ### phases 設計のガイドライン
 
 ```
 Phase 1: 調査（parallel推奨）
   - 読むだけ・調べるだけ → RACE-001 に抵触しない
-  - 足軽を最大限活用する（7人中4-6人は動かせるはず）
+  - 足軽を最大限活用する（config/settings.yaml の ashigaru_count を参照。全体の60-80%を投入）
   - 例: 既存コード構造解析, データ取得, 要件調査
 
 Phase 2: 実装（parallel or sequential）
@@ -455,7 +469,7 @@ Phase 3: QC（mode: qc — ★義務★）
 # ✅ Good v4.0 — 概念的分解あり、技術手順なし
 - id: cmd_300
   purpose: "旧利根川上流接続線の座標点を大幅に増やし、カクカクを解消する"
-  acceptance_criteria:
+  acceptance_criteria:   # 軍師QCが参照。ashigaru task YAMLには転記不要。
     - "座標点がOSM河川データのフル解像度で取得されていること"
     - "旧荒川上流接続線と同等以上の滑らかさで描画されていること"
     - "旧荒川側の表示を壊さないこと"
@@ -464,37 +478,54 @@ Phase 3: QC（mode: qc — ★義務★）
     大殿様のレビュー: 「利根川の点が少なすぎる。カクカク。データ容量は気にしない」
   project: ishida-tsutsumi-map
   priority: high
-  status: pending
+  status: pending      # ← cmd全体のステータス。家老がEditでin-place置換。新行追加禁止。
   phases:
     - phase: 1
       mode: parallel
       subtasks:
         - id: s300a
           description: |
-            既存の addNakaAyaseUpstreamExt() の座標データと描画ロジックを解析。
-            現在の座標点数、データソース、simplify設定を特定せよ。
-            対象: /Users/odakin/tmp/ishida-tsutsumi-map/src/
+            【目的】既存の addNakaAyaseUpstreamExt() の座標データと描画ロジックを解析
+            【入力】/Users/odakin/tmp/ishida-tsutsumi-map/src/（全ソースファイル）
+            【出力】現在の座標点数・データソース・simplify設定を記載したレポート
+            【完了条件】queue/reports/ashigaru{N}_report.yaml に調査結果を記載済み
+          target_path: "/Users/odakin/tmp/ishida-tsutsumi-map/src/"
           bloom_level: L2
+          status: pending
         - id: s300b
           description: |
-            旧利根川上流部の高密度座標データを取得。
-            既存座標との接続点を確認し、取得範囲を特定せよ。
+            【目的】旧利根川上流部の高密度座標データを取得・特定
+            【入力】/Users/odakin/tmp/ishida-tsutsumi-map/（既存座標データを確認）
+            【出力】高密度座標データと既存座標の接続点・取得範囲をレポート
+            【完了条件】queue/reports/ashigaru{N}_report.yaml に座標データを記載済み
+          target_path: "/Users/odakin/tmp/ishida-tsutsumi-map/"
           bloom_level: L2
+          status: pending
         - id: s300c
           description: |
-            現在の11点 vs 旧荒川15点の品質比較レポートを作成。
-            「十分な滑らかさ」の基準を定量化せよ。
+            【目的】現在の座標点数と旧荒川の品質比較で合格基準を定量化
+            【入力】/Users/odakin/tmp/ishida-tsutsumi-map/（現在11点と旧荒川15点のデータ）
+            【出力】「十分な滑らかさ」の定量基準を記載したレポート
+            【完了条件】queue/reports/ashigaru{N}_report.yaml に定量基準を記載済み
+          target_path: "/Users/odakin/tmp/ishida-tsutsumi-map/"
           bloom_level: L2
+          status: pending
     - phase: 2
       mode: sequential    # 同一ファイルを編集するため
       subtasks:
         - id: s300d
           description: |
-            Phase 1 の調査結果（s300a, s300b, s300c）を統合し、
-            座標データを高密度版に置換。描画の滑らかさを確認。
+            【目的】Phase 1 の調査結果を統合し、座標データを高密度版に置換
+            【入力】s300a・s300b・s300c のレポート（queue/reports/ashigaru*_report.yaml, parent_cmd:cmd_300）
+            【出力】/Users/odakin/tmp/ishida-tsutsumi-map/src/ の座標データを更新済みファイル
+            【完了条件】描画の滑らかさが旧荒川と同等以上、git commit・push済み
+          depends_on: [s300a, s300b, s300c]
+          target_path: "/Users/odakin/tmp/ishida-tsutsumi-map/src/"
           bloom_level: L3
+          status: pending
     - phase: 3
       mode: qc
+      qc_for: [s300d]
 
 # ❌ Bad — 旧 S001 違反（技術手順混入）
 command: |

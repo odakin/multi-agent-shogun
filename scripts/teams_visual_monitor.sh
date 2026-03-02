@@ -59,7 +59,7 @@ _tmux() {
     fi
 }
 
-# Source shared library for busy/idle detection (used by dynamic_resize_panes)
+# Source shared library for busy/idle detection (used by dynamic_resize_by_content)
 if [ -f "$SCRIPT_DIR/lib/agent_status.sh" ]; then
     source "$SCRIPT_DIR/lib/agent_status.sh"
 fi
@@ -317,7 +317,9 @@ get_bg_color_for_agent() {
 detect_agent_from_pane() {
     local pane_id="$1"
 
-    # 方法1: 既に @agent_id が自己登録されている場合（最優先）
+    # 方法1: 既に @agent_id が自己登録されている場合（最優先・上書き禁止）
+    # エージェントが tmux set-option -p @agent_id で自己登録した値は
+    # コンテンツスキャンで絶対に上書きしない（軍師ペインに karo が入るバグの原因）
     local existing_id
     existing_id=$(_tmux show-options -p -t "$pane_id" -v @agent_id 2>/dev/null)
     if [ -n "$existing_id" ] && [ "$existing_id" != "" ] && [ "$existing_id" != "..." ]; then
@@ -325,11 +327,17 @@ detect_agent_from_pane() {
         return
     fi
 
-    # 方法2: ペイン内容をスキャンしてエージェント名を検出
+    # 方法2: STYLED_PANES に記録済みなら再スキャンしない（誤検出防止）
+    # ※ STYLED_PANES はグローバル変数。この関数からは直接参照できないが、
+    #    呼び出し元(メインループ)で既にスタイル済みペインはスキップされる。
+
+    # 方法3: ペイン内容をスキャンして初回検出のみ行う
+    # ⚠️ コンテンツスキャンは誤検出リスクが高い（inbox メッセージ等で別エージェント名が出る）
+    # そのため、検出結果は「自己登録が来るまでの仮ID」として扱う
     local content
     content=$(_tmux capture-pane -t "$pane_id" -p 2>/dev/null | head -30)
 
-    # spawn prompt の set-option パターンから検出
+    # spawn prompt の set-option パターンから検出（最も信頼性が高い）
     local set_id
     set_id=$(echo "$content" | grep -o "@agent_id ['\"]\\?[a-z]*[0-9]*['\"]\\?" | head -1 | grep -o "[a-z]*[0-9]*$" | head -1)
     if [ -n "$set_id" ]; then
@@ -338,22 +346,28 @@ detect_agent_from_pane() {
     fi
 
     # instructions ファイルの読み込みパターンから検出
-    if echo "$content" | grep -q "instructions/shogun.md\|将軍として"; then
-        echo "shogun"
-        return
-    elif echo "$content" | grep -q "instructions/karo.md\|家老なり\|汝は家老"; then
-        echo "karo"
-        return
-    elif echo "$content" | grep -q "instructions/gunshi.md\|軍師なり\|汝は軍師"; then
-        echo "gunshi"
-        return
+    # ⚠️ 複数エージェント名がマッチする場合は検出しない（誤検出防止）
+    local match_count=0
+    local detected=""
+    if echo "$content" | grep -q "instructions/shogun.md"; then
+        detected="shogun"; match_count=$((match_count + 1))
+    fi
+    if echo "$content" | grep -q "instructions/karo.md"; then
+        detected="karo"; match_count=$((match_count + 1))
+    fi
+    if echo "$content" | grep -q "instructions/gunshi.md"; then
+        detected="gunshi"; match_count=$((match_count + 1))
+    fi
+    # 足軽チェック
+    local ashi_num
+    ashi_num=$(echo "$content" | grep -o "ashigaru[0-9]" | head -1 | grep -o "[0-9]")
+    if [ -n "$ashi_num" ]; then
+        detected="ashigaru${ashi_num}"; match_count=$((match_count + 1))
     fi
 
-    # 足軽の番号を検出
-    local ashi_num
-    ashi_num=$(echo "$content" | grep -o "ashigaru[0-9]\|足軽[0-9]\|足軽[0-9]号" | head -1 | grep -o "[0-9]")
-    if [ -n "$ashi_num" ]; then
-        echo "ashigaru${ashi_num}"
+    # 単一マッチのみ採用（複数マッチ = 誤検出の可能性大）
+    if [ "$match_count" -eq 1 ]; then
+        echo "$detected"
         return
     fi
 
@@ -370,17 +384,22 @@ style_pane() {
 
     model=$(get_model_for_agent "$agent_name")
 
-    # @agent_id が既に自己登録で正しく設定されていればそのまま維持
+    # @agent_id: 自己登録値がある場合は上書きしない（誤検出防止）
+    # コンテンツスキャンの結果が自己登録と異なる場合、自己登録を優先する
     local current_id
     current_id=$(_tmux show-options -p -t "$pane_id" -v @agent_id 2>/dev/null)
-    if [ "$current_id" != "$agent_name" ]; then
+    if [ -n "$current_id" ] && [ "$current_id" != "..." ] && [ "$current_id" != "$agent_name" ]; then
+        # 既に有効な agent_id が設定済み → 上書きしない（自己登録優先）
+        agent_name="$current_id"
+        model=$(get_model_for_agent "$agent_name")
+    elif [ "$current_id" != "$agent_name" ]; then
         _tmux set-option -p -t "$pane_id" @agent_id "$agent_name" 2>/dev/null
     fi
 
-    # @model_name も自己登録を尊重（spawn prompt で設定済みの場合がある）
+    # @model_name: settings.yaml の値を正とする（起動時の自己登録より優先）
     local current_model
     current_model=$(_tmux show-options -p -t "$pane_id" -v @model_name 2>/dev/null)
-    if [ -z "$current_model" ] || [ "$current_model" = "..." ]; then
+    if [ "$current_model" != "$model" ]; then
         _tmux set-option -p -t "$pane_id" @model_name "$model" 2>/dev/null
     fi
 
@@ -413,8 +432,12 @@ apply_border_format() {
     windows=$(_tmux list-windows -t "$session" -F '#{window_id}' 2>/dev/null)
     for win in $windows; do
         _tmux set-option -w -t "$win" pane-border-status top 2>/dev/null
+        _tmux set-option -w -t "$win" pane-border-style "fg=colour240" 2>/dev/null
+        _tmux set-option -w -t "$win" pane-active-border-style "fg=colour33,bold" 2>/dev/null
+        # heavy: 太線で9ペイン密集時の境界が明確。フォントにより崩れる場合は "single" に変更。
+        _tmux set-option -w -t "$win" pane-border-lines "heavy" 2>/dev/null
         _tmux set-option -w -t "$win" pane-border-format \
-            '#{?pane_active,#[reverse],}#[bold]#{@agent_id}#[default] (#{@model_name}) #{@current_task}' \
+            '#{?pane_active,#[fg=colour33,bold],#[fg=colour240]}#{@agent_id}#[default] #[dim](#{@model_name})#[default] #{@current_task}' \
             2>/dev/null
     done
 }
@@ -576,7 +599,7 @@ except Exception:
             local inbox_file="$SCRIPT_DIR/queue/inbox/${agent_name}.yaml"
             if [ -f "$inbox_file" ]; then
                 local unread
-                unread=$(grep -c "read: false" "$inbox_file" 2>/dev/null || echo "0")
+                unread=$(grep -c "read: false" "$inbox_file" 2>/dev/null) || unread=0
                 if [ "$unread" -gt 0 ]; then
                     local is_busy=false
                     if type agent_is_busy_check &>/dev/null; then
@@ -615,7 +638,7 @@ check_idle_inbox_unread() {
         local inbox_file="$SCRIPT_DIR/queue/inbox/${agent_id}.yaml"
         [ -f "$inbox_file" ] || continue
         local unread
-        unread=$(grep -c "read: false" "$inbox_file" 2>/dev/null || echo "0")
+        unread=$(grep -c "read: false" "$inbox_file" 2>/dev/null) || unread=0
         [ "$unread" -gt 0 ] || continue
 
         # idle 判定（busy なら re-nudge しない）
@@ -765,19 +788,20 @@ check_unresponsive_panes() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 動的リサイズ — 稼働中ペインを大きく、待機中を小さく（列独立）
+# 動的リサイズ — コンテンツスコアベースで高さを動的に追従（列独立）
 # ═══════════════════════════════════════════════════════════════════════════════
-# 列ファースト {col[rows]} 構造のカスタムレイアウトを構築し select-layout で
-# 一括適用。各列の行高さが完全に独立しているため、列0のリサイズが列1・2に
-# 波及しない。
+# cursor_y と history_size のデルタでコンテンツスコアを累積管理。
+# スコアが高いペインを大きく、idle+無増加ペインは25%減衰で縮小。
+# select-layout + 列ファースト構造で各列独立リサイズを保証。
 # ═══════════════════════════════════════════════════════════════════════════════
 MIN_PANE_HEIGHT=6
 PREV_RESIZE_STATE=""
 RESIZE_DEBUG_COUNTER=0
-RECENT_WINDOW_SEC=30
-declare -A PANE_LAST_IDLE_TS
+declare -A PANE_CONTENT_SCORE=()      # 各ペインのコンテンツスコア（累積）
+declare -A PANE_PREV_CURSOR_Y=()      # 前サイクルの cursor_y
+declare -A PANE_PREV_HISTORY_SIZE=()  # 前サイクルの history_size
 
-dynamic_resize_panes() {
+dynamic_resize_by_content() {
     local session="$1"
 
     # agent_is_busy_check が使えなければスキップ
@@ -805,104 +829,107 @@ dynamic_resize_panes() {
     [ -z "$win_width" ] || [ "$win_width" -lt 10 ] && return
     [ -z "$win_height" ] || [ "$win_height" -lt 10 ] && return
 
-    # 全ペインの busy/idle 状態を収集
+    # 全ペイン情報を収集
     local pane_list
     pane_list=$(_tmux list-panes -t "$win_id" -F '#{pane_id} #{@agent_id}' 2>/dev/null)
     [ -z "$pane_list" ] && return
 
-    local pane_ids=() pane_nums=() pane_busy=()
-    local current_state=""
-    local i=0
+    local pane_ids=() pane_nums=() scores_arr=()
     while IFS=' ' read -r pid aid; do
         pane_ids+=("$pid")
         pane_nums+=("${pid#%}")    # %5 → 5
-        if [ -n "$aid" ] && [ "$aid" != "..." ] && agent_is_busy_check "$pid" 2>/dev/null; then
-            pane_busy+=(1)
-            current_state+="B"
-            # BUSY遷移: 遷移前のアイドルタイムスタンプをリセット
-            unset "PANE_LAST_IDLE_TS[$pid]"
+
+        # cursor_y と history_size を1回で取得
+        local metrics
+        metrics=$(_tmux display-message -t "$pid" -p '#{cursor_y} #{history_size}' 2>/dev/null)
+        local cur_y="${metrics%% *}"
+        local hist_size="${metrics##* }"
+
+        # 非数値は0として扱う（エラー時の安全策）
+        [[ "$cur_y" =~ ^[0-9]+$ ]] || cur_y=0
+        [[ "$hist_size" =~ ^[0-9]+$ ]] || hist_size=0
+
+        # デルタ計算（負値は無視: カーソル上移動・リサイズ起因の変化を除外）
+        local prev_y="${PANE_PREV_CURSOR_Y[$pid]:-$cur_y}"
+        local prev_hist="${PANE_PREV_HISTORY_SIZE[$pid]:-$hist_size}"
+        local dy=$(( cur_y - prev_y ))
+        local dh=$(( hist_size - prev_hist ))
+        [ "$dy" -lt 0 ] && dy=0
+        [ "$dh" -lt 0 ] && dh=0
+        local delta=$(( dy + dh ))
+
+        # スコア更新
+        local score="${PANE_CONTENT_SCORE[$pid]:-0}"
+        if [ "$delta" -gt 0 ]; then
+            # コンテンツ増加 → スコア加算
+            score=$(( score + delta ))
         else
-            local now
-            now=$(date +%s)
-            local prev_char="${PREV_RESIZE_STATE:$i:1}"
-            [[ "$prev_char" == "B" ]] && PANE_LAST_IDLE_TS["$pid"]=$now
-            local idle_ts=${PANE_LAST_IDLE_TS["$pid"]:-0}
-            if [[ $idle_ts -gt 0 && $(( now - idle_ts )) -le $RECENT_WINDOW_SEC ]]; then
-                pane_busy+=(2)
-                current_state+="R"
-            else
-                pane_busy+=(0)
-                current_state+="I"
+            # idle かつ delta==0 → スコア25%減衰
+            local is_busy=false
+            if [ -n "$aid" ] && [ "$aid" != "..." ]; then
+                agent_is_busy_check "$pid" 2>/dev/null && is_busy=true
+            fi
+            if [ "$is_busy" = "false" ]; then
+                score=$(( score * 3 / 4 ))
             fi
         fi
-        i=$((i + 1))
+
+        PANE_CONTENT_SCORE[$pid]=$score
+        PANE_PREV_CURSOR_Y[$pid]=$cur_y
+        PANE_PREV_HISTORY_SIZE[$pid]=$hist_size
+        scores_arr+=("$score")
     done <<< "$pane_list"
 
-    # ペイン数確認
     [ "${#pane_ids[@]}" -ne 9 ] && return
 
-    # 定期デバッグログ（30サイクル≒90秒ごと）
-    RESIZE_DEBUG_COUNTER=$((RESIZE_DEBUG_COUNTER + 1))
-    if [ "$((RESIZE_DEBUG_COUNTER % 30))" -eq 0 ]; then
-        log "dynamic_resize_debug: state=$current_state prev=$PREV_RESIZE_STATE"
-    fi
+    # 高さ計算（列ごと独立）
+    # 各ペインに MIN_PANE_HEIGHT を確保後、残りをスコア比例で配分
+    local usable_h=$(( win_height - 2 ))
+    local remaining=$(( usable_h - MIN_PANE_HEIGHT * 3 ))
+    [ "$remaining" -lt 0 ] && remaining=0
 
-    # 前回と同じ状態ならスキップ
-    if [ "$current_state" = "$PREV_RESIZE_STATE" ]; then
-        return
-    fi
-    PREV_RESIZE_STATE="$current_state"
-
-    # 各列の高さを独立に計算（行ボーダー2本分を引く）
-    local usable_h=$((win_height - 2))
     local heights=()
-
     for col in 0 1 2; do
-        local busy_cnt=0 recent_cnt=0 idle_cnt=0
+        local col_scores=()
         for row in 0 1 2; do
-            local idx=$((col * 3 + row))
-            if [ "${pane_busy[$idx]}" -eq 1 ]; then
-                busy_cnt=$((busy_cnt + 1))
-            elif [ "${pane_busy[$idx]}" -eq 2 ]; then
-                recent_cnt=$((recent_cnt + 1))
-            else
-                idle_cnt=$((idle_cnt + 1))
-            fi
+            col_scores+=("${scores_arr[$((col * 3 + row))]}")
+        done
+
+        # 列内スコア合計
+        local total_score=0
+        for s in "${col_scores[@]}"; do
+            total_score=$(( total_score + s ))
         done
 
         local col_h=()
-        if [ "$busy_cnt" -eq 0 ] && [ "$recent_cnt" -eq 0 ]; then
-            # 全員IDLE → 均等
-            local eq=$((usable_h / 3))
-            col_h=("$eq" "$eq" "$eq")
-        elif [ "$busy_cnt" -eq 0 ]; then
-            # 全員RECENT → 均等分割
-            local eq=$((usable_h / 3))
+        if [ "$total_score" -le 0 ]; then
+            # 全員スコア0 → 均等配分
+            local eq=$(( usable_h / 3 ))
             col_h=("$eq" "$eq" "$eq")
         else
-            # BUSY有り → 3段階: BUSY最大、RECENT中間、IDLE最小
-            local idle_total=$((idle_cnt * MIN_PANE_HEIGHT))
-            local busy_h=$(( (usable_h - idle_total) / (busy_cnt + recent_cnt) ))
-            [ "$busy_h" -lt "$MIN_PANE_HEIGHT" ] && busy_h=$MIN_PANE_HEIGHT
-            local recent_h=$(( (MIN_PANE_HEIGHT + busy_h) / 2 ))
-            [ "$recent_h" -lt "$MIN_PANE_HEIGHT" ] && recent_h=$MIN_PANE_HEIGHT
             for row in 0 1 2; do
-                local idx=$((col * 3 + row))
-                if [ "${pane_busy[$idx]}" -eq 1 ]; then
-                    col_h+=("$busy_h")
-                elif [ "${pane_busy[$idx]}" -eq 2 ]; then
-                    col_h+=("$recent_h")
-                else
-                    col_h+=("$MIN_PANE_HEIGHT")
-                fi
+                local s="${col_scores[$row]}"
+                local extra=$(( remaining * s / total_score ))
+                col_h+=("$(( MIN_PANE_HEIGHT + extra ))")
             done
         fi
 
-        # 端数を最後のペインで吸収
-        local sum=$((col_h[0] + col_h[1] + col_h[2]))
-        col_h[2]=$((col_h[2] + usable_h - sum))
+        # 端数を最終ペインで吸収（合計を usable_h に）
+        local col_sum=$(( col_h[0] + col_h[1] + col_h[2] ))
+        col_h[2]=$(( col_h[2] + usable_h - col_sum ))
+        [ "${col_h[2]}" -lt "$MIN_PANE_HEIGHT" ] && col_h[2]=$MIN_PANE_HEIGHT
+
         heights+=("${col_h[@]}")
     done
+
+    # 状態変化チェック（同一高さ構成ならスキップ）
+    local dim_key="${win_width}x${win_height}"
+    local heights_key="${heights[*]}"
+    local full_state="${dim_key}|${heights_key}"
+    if [ "$full_state" = "$PREV_RESIZE_STATE" ]; then
+        return
+    fi
+    PREV_RESIZE_STATE="$full_state"
 
     # カスタムレイアウト構築・適用（列ファースト構造 = 列ごと独立）
     local layout_str
@@ -910,7 +937,11 @@ dynamic_resize_panes() {
         "${pane_nums[@]}" "${heights[@]}")
     _tmux select-layout -t "$win_id" "$layout_str" 2>/dev/null
 
-    log "dynamic_resize: state=$current_state (column-independent)"
+    # 定期デバッグログ（10回select-layoutごと）
+    RESIZE_DEBUG_COUNTER=$((RESIZE_DEBUG_COUNTER + 1))
+    if [ "$((RESIZE_DEBUG_COUNTER % 10))" -eq 0 ]; then
+        log "dynamic_resize_by_content: scores=${scores_arr[*]} heights=${heights[*]}"
+    fi
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1072,7 +1103,7 @@ while true; do
 
     # 動的リサイズ（毎サイクル、状態変化時のみ実際にリサイズ）
     if [ "$pane_count" -eq 9 ]; then
-        dynamic_resize_panes "$local_session" 2>/dev/null || true
+        dynamic_resize_by_content "$local_session" 2>/dev/null || true
     fi
 
     # Permission デッドロック検出（5サイクルごと = 約15秒ごと）
