@@ -9,6 +9,10 @@
 # Step 2: ディレクトリの探索を許可（中身は個別に許可）
 !*/
 
+# Step 2.5: venv/node_modules は探索対象外（LICENSE等のホワイトリストに誤マッチ防止）
+.venv/
+node_modules/
+
 # Step 3: OSS公開対象ファイルを許可
 !.gitignore
 !.gitattributes
