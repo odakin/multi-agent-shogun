@@ -1157,7 +1157,7 @@ while true; do
             WAITED=0
             while [ "$WAITED" -lt "$INOTIFY_TIMEOUT" ] && kill -0 "$FSWATCH_PID" 2>/dev/null; do
                 sleep 2
-                WAITED=$((WAITED + 1))
+                WAITED=$((WAITED + 2))
             done
             if kill -0 "$FSWATCH_PID" 2>/dev/null; then
                 kill "$FSWATCH_PID" 2>/dev/null

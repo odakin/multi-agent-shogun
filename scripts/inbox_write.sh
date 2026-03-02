@@ -27,7 +27,7 @@ if [ ! -f "$INBOX" ]; then
 fi
 
 # Generate unique message ID (timestamp-based)
-MSG_ID="msg_$(date +%Y%m%d_%H%M%S)_$(head -c 4 /dev/urandom | xxd -p)"
+MSG_ID="msg_$(date +%Y%m%d_%H%M%S)_$(od -An -tx1 -N4 /dev/urandom | tr -d ' \n')"
 TIMESTAMP=$(date "+%Y-%m-%dT%H:%M:%S")
 
 # Atomic write with flock (3 retries)
@@ -39,12 +39,17 @@ while [ $attempt -lt $max_attempts ]; do
         flock -w 5 200 || exit 1
 
         # Add message via python3 (unified YAML handling)
+        # Pass variables via environment to avoid shell/Python injection issues
+        IW_INBOX="$INBOX" IW_MSG_ID="$MSG_ID" IW_FROM="$FROM" \
+        IW_TIMESTAMP="$TIMESTAMP" IW_TYPE="$TYPE" IW_CONTENT="$CONTENT" \
         "$SCRIPT_DIR/.venv/bin/python3" -c "
-import yaml, sys
+import yaml, sys, os
 
 try:
+    inbox = os.environ['IW_INBOX']
+
     # Load existing inbox
-    with open('$INBOX') as f:
+    with open(inbox) as f:
         data = yaml.safe_load(f)
 
     # Initialize if needed
@@ -55,11 +60,11 @@ try:
 
     # Add new message
     new_msg = {
-        'id': '$MSG_ID',
-        'from': '$FROM',
-        'timestamp': '$TIMESTAMP',
-        'type': '$TYPE',
-        'content': '''$CONTENT''',
+        'id': os.environ['IW_MSG_ID'],
+        'from': os.environ['IW_FROM'],
+        'timestamp': os.environ['IW_TIMESTAMP'],
+        'type': os.environ['IW_TYPE'],
+        'content': os.environ['IW_CONTENT'],
         'read': False
     }
     data['messages'].append(new_msg)
@@ -73,12 +78,12 @@ try:
         data['messages'] = unread + read[-30:]
 
     # Atomic write: tmp file + rename (prevents partial reads)
-    import tempfile, os
-    tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname('$INBOX'), suffix='.tmp')
+    import tempfile
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(inbox), suffix='.tmp')
     try:
         with os.fdopen(tmp_fd, 'w') as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, indent=2)
-        os.replace(tmp_path, '$INBOX')
+        os.replace(tmp_path, inbox)
     except:
         os.unlink(tmp_path)
         raise
@@ -127,9 +132,9 @@ except Exception as e:
 
             # Count unread messages for nudge text
             local unread
-            unread=$("$SCRIPT_DIR/.venv/bin/python3" -c "
-import yaml
-with open('$INBOX') as f:
+            unread=$(IW_INBOX="$INBOX" "$SCRIPT_DIR/.venv/bin/python3" -c "
+import yaml, os
+with open(os.environ['IW_INBOX']) as f:
     data = yaml.safe_load(f) or {}
 msgs = data.get('messages', []) or []
 print(sum(1 for m in msgs if not m.get('read', False)))
