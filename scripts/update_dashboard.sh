@@ -27,10 +27,12 @@ timestamp() {
     date "+%Y-%m-%d %H:%M"
 }
 
-# YAML から値を抽出（簡易パーサー）
+# YAML から値を抽出（簡易パーサー — トップレベルキーのみ）
+# Note: grep "^key:" はネストされた同名キーも誤認するため、
+#       インデントなし行のみマッチさせる
 yaml_get() {
     local file="$1" key="$2"
-    grep "^${key}:" "$file" 2>/dev/null | head -1 | sed "s/^${key}:[[:space:]]*//" | sed 's/^"//' | sed 's/"$//' || echo ""
+    grep -E "^${key}:" "$file" 2>/dev/null | grep -v "^[[:space:]]" | head -1 | sed "s/^${key}:[[:space:]]*//" | sed 's/^"//' | sed 's/"$//' || echo ""
 }
 
 # タスクファイルをスキャンしてステータス集計
