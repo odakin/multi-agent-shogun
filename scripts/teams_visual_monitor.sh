@@ -55,6 +55,8 @@ TMUX_SOCKET=""               # -L オプションの値（空なら デフォル
 declare -A TASK_DESC_CACHE   # agent名 → description冒頭テキスト
 declare -A TASK_ID_CACHE     # agent名 → 前回のtask_id
 declare -A BORDER_FORMAT_WIN_CACHE  # window_id → 適用済みborder format（差分更新・フリッカー防止用）
+declare -A PANE_BG_CACHE            # pane_id → 適用済み背景色（差分更新・フリッカー防止用）
+declare -A PANE_AGENT_NAME_JA_CACHE # pane_id → 適用済み日本語名（差分更新・フリッカー防止用）
 
 mkdir -p "$LOG_DIR"
 
@@ -451,8 +453,13 @@ style_pane() {
         _tmux set-option -p -t "$pane_id" @agent_id "$agent_name" 2>/dev/null
     fi
 
-    # @agent_name_ja: 日本語表示名（表示専用。routing には使わない）
-    _tmux set-option -p -t "$pane_id" @agent_name_ja "$(to_ja "$agent_name")" 2>/dev/null
+    # @agent_name_ja: 日本語表示名（差分更新: 変化時のみ set-option してフリッカー防止）
+    local ja_name
+    ja_name="$(to_ja "$agent_name")"
+    if [ "${PANE_AGENT_NAME_JA_CACHE[$pane_id]:-}" != "$ja_name" ]; then
+        _tmux set-option -p -t "$pane_id" @agent_name_ja "$ja_name" 2>/dev/null
+        PANE_AGENT_NAME_JA_CACHE[$pane_id]="$ja_name"
+    fi
 
     # @model_name: ペインから実際のモデルを検出して表示（settings.yaml 上書き廃止）
     local actual_model
@@ -487,13 +494,13 @@ style_pane() {
     task_id_val=$(get_task_id_from_yaml "$agent_name")
     _tmux set-option -p -t "$pane_id" @current_task "$task_id_val" 2>/dev/null
 
-    # 背景色の適用（空なら白デフォルトにリセット）
+    # 背景色の差分更新（変化時のみ select-pane -P を実行してフリッカー防止）
     local bg_color
     bg_color=$(get_bg_color_for_agent "$agent_name")
-    if [ -n "$bg_color" ]; then
-        _tmux select-pane -t "$pane_id" -P "$bg_color" 2>/dev/null
-    else
-        _tmux select-pane -t "$pane_id" -P 'default' 2>/dev/null
+    local bg_target="${bg_color:-default}"
+    if [ "${PANE_BG_CACHE[$pane_id]:-}" != "$bg_target" ]; then
+        _tmux select-pane -t "$pane_id" -P "$bg_target" 2>/dev/null
+        PANE_BG_CACHE[$pane_id]="$bg_target"
     fi
 
     log "Styled pane $pane_id as $agent_name ($model) ${bg_color:+[$bg_color]}"
@@ -1040,6 +1047,15 @@ dynamic_resize_by_content() {
     layout_str=$(build_column_first_layout "$win_width" "$win_height" \
         "${pane_nums[@]}" "${heights[@]}")
     _tmux select-layout -t "$win_id" "$layout_str" 2>/dev/null
+
+    # select-layout 後に色付きペインの背景を再確認・再適用
+    # （select-layout が select-pane -P をリセットする場合に備える。defaultは再設定不要）
+    for pane_id in "${!STYLED_PANES[@]}"; do
+        local cached_bg="${PANE_BG_CACHE[$pane_id]:-}"
+        # "default" や空値はスキップ（再設定してもフリッカーが増えるだけ）
+        [ -z "$cached_bg" ] || [ "$cached_bg" = "default" ] && continue
+        _tmux select-pane -t "$pane_id" -P "$cached_bg" 2>/dev/null
+    done
 
     # 定期デバッグログ（10回select-layoutごと）
     RESIZE_DEBUG_COUNTER=$((RESIZE_DEBUG_COUNTER + 1))
