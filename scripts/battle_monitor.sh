@@ -39,14 +39,52 @@ setup_terminal() {
     tput smcup 2>/dev/null
     tput civis 2>/dev/null
     tput clear 2>/dev/null
+    printf '\033[?7l'  # Disable DECAWM (auto-wrap) as safety net
 }
 
 cleanup_terminal() {
+    printf '\033[?7h'  # Re-enable DECAWM (auto-wrap)
     tput cnorm 2>/dev/null
     tput rmcup 2>/dev/null
 }
 
 trap cleanup_terminal EXIT INT TERM
+
+# ─── ANSI-aware line trim (CJK 全角=2 カラム対応) ───
+# 出力行をペイン幅 max カラムで切り詰め、ESC シーケンスは幅ゼロで通過させる
+trim_ansi_line() {
+    local line="$1" max="$2"
+    local j=0 w=0 result="" in_esc=0 esc_seq=""
+    while [[ $j -lt ${#line} ]]; do
+        local c="${line:$j:1}"
+        if (( in_esc )); then
+            esc_seq+="$c"
+            if [[ "$c" =~ [A-Za-z] ]]; then
+                result+="$esc_seq"
+                in_esc=0
+                esc_seq=""
+            fi
+            (( j++ ))
+            continue
+        fi
+        if [[ "$c" == $'\033' ]]; then
+            in_esc=1
+            esc_seq="$c"
+            (( j++ ))
+            continue
+        fi
+        local cw=1
+        [[ "$c" == [[:ascii:]] ]] || cw=2
+        if (( w + cw > max )); then
+            printf '%s\033[0m\033[K\n' "$result"
+            return
+        fi
+        result+="$c"
+        (( w += cw ))
+        (( j++ ))
+    done
+    printf '%s\033[K\n' "$result"
+}
 
 # ─── Single Python data fetch (all sections) ───
 fetch_all_data() {
@@ -382,13 +420,12 @@ render() {
         done
     fi
 
-    # Output — cursor to top, clear each line to prevent residual chars
-    printf '\033[H'
+    # Output — 全消去 + カーソルをホームへ。ANSI-aware trim でペイン幅超え折り返しゼロ
+    printf '\033[2J\033[H'
     local _ln
     while IFS= read -r _ln; do
-        printf '%s\033[K\n' "$_ln"
+        trim_ansi_line "$_ln" "$term_w"
     done < <(printf '%b' "$buf")
-    printf '\033[J'
 }
 
 # ─── Main ───
