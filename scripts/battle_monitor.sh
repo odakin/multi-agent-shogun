@@ -145,21 +145,38 @@ for agent in agents:
     except: pass
     result[agent] = {'task_id': str(tid), 'status': str(status), 'unread': unread}
 
-# Current cmd (per-cmd files)
+# Current cmd (per-cmd files + recent archive)
 try:
     import glob
-    cmd_parts = []
+    all_cmds = []
     for cf in sorted(glob.glob(f'{root}/queue/cmds/*.yaml')):
         with open(cf) as f:
             cmd = yaml.safe_load(f) or {}
         if isinstance(cmd, dict):
             cid = cmd.get('id') or '?'
-            purpose = cmd.get('purpose') or cmd.get('description', '?')
-            if isinstance(purpose, str) and len(purpose) > 40:
-                purpose = purpose[:40]
-            cmd_parts.append(f'{cid}: {purpose}')
-    result['_cmd'] = ' / '.join(cmd_parts) if cmd_parts else '(指令なし)'
-except: result['_cmd'] = '(指令なし)'
+            purpose = cmd.get('purpose') or cmd.get('description', '?') or '?'
+            if isinstance(purpose, str): purpose = purpose.strip().replace('\n', ' ')
+            status = cmd.get('status', '?') or '?'
+            all_cmds.append({'id': cid, 'status': status, 'purpose': purpose, 'archived': False})
+    for cf in sorted(glob.glob(f'{root}/queue/archive/cmd_*.yaml')):
+        with open(cf) as f:
+            cmd = yaml.safe_load(f) or {}
+        if isinstance(cmd, dict):
+            cid = cmd.get('id') or '?'
+            purpose = cmd.get('purpose') or cmd.get('description', '?') or '?'
+            if isinstance(purpose, str): purpose = purpose.strip().replace('\n', ' ')
+            status = cmd.get('status', '?') or '?'
+            all_cmds.append({'id': cid, 'status': status, 'purpose': purpose, 'archived': True})
+    def cmd_num(c):
+        try: return int(c['id'].replace('cmd_',''))
+        except: return 0
+    all_cmds.sort(key=cmd_num, reverse=True)
+    result['_cmds'] = all_cmds[:10]
+    active_parts = [f"{c['id']}: {c['purpose'][:40]}" for c in all_cmds if not c['archived']]
+    result['_cmd'] = ' / '.join(active_parts) if active_parts else '(指令なし)'
+except:
+    result['_cmd'] = '(指令なし)'
+    result['_cmds'] = []
 
 # Collect inbox events from ALL agents + shogun
 new_events = []
@@ -305,11 +322,20 @@ for k, v in data.get('_msg_counts', {}).items():
 # Lord pending items
 for item in data.get('_lord_pending', []):
     print(f\"_lord\t{item['cmd_id']}\t{item['title']}\t{item['summary']}\t{item['age']}\")
+# Cmd table items
+_STATUS_EMOJI = {'pending': '⏳', 'in_progress': '🔄', 'done': '✅', 'qc_pass': '✅', 'failed': '❌', 'deferred': '⏸'}
+for c in data.get('_cmds', []):
+    cid = str(c.get('id', '?'))
+    cstat = str(c.get('status', '?'))
+    cpurp = str(c.get('purpose', '?'))[:25]
+    emoji = _STATUS_EMOJI.get(cstat, cstat)
+    print(f'_cmds\t{cid}\t{emoji}\t{cpurp}')
 " <<< "$yaml_json" 2>/dev/null)
 
     # Parse into arrays
     declare -A TASK_ID TASK_STATUS UNREAD
     declare -a LORD_ITEMS=()
+    declare -a CMD_ITEMS=()
     local CMD_LINE=""
     while IFS=$'\t' read -r key v1 v2 v3 v4; do
         case "$key" in
@@ -317,6 +343,7 @@ for item in data.get('_lord_pending', []):
             _event) [[ -n "$v1" ]] && ACTIVITY_LOG+=("$v1") ;;
             _count) [[ -n "$v1" && -n "$v2" ]] && PREV_MSG_COUNT["$v1"]="$v2" ;;
             _lord)  [[ -n "$v1" ]] && LORD_ITEMS+=("${v1}	${v2}	${v3}	${v4}") ;;
+            _cmds)  [[ -n "$v1" ]] && CMD_ITEMS+=("${v1}	${v2}	${v3}") ;;
             *)
                 TASK_ID["$key"]="$v1"
                 TASK_STATUS["$key"]="$v2"
@@ -325,6 +352,9 @@ for item in data.get('_lord_pending', []):
         esac
     done <<< "$parsed"
     local lord_count=${#LORD_ITEMS[@]}
+    local cmd_count=${#CMD_ITEMS[@]}
+    local cmd_table_lines=0
+    [[ $cmd_count -gt 0 ]] && cmd_table_lines=$(( cmd_count + 2 ))
 
     # Trim activity log to max
     while [[ ${#ACTIVITY_LOG[@]} -gt $MAX_ACTIVITY ]]; do
@@ -351,7 +381,7 @@ for item in data.get('_lord_pending', []):
     # Fixed lines: header(2) + separator(1) + idle section(~ceil(idle_count/3)+1) + footer(2) + separators(busy_count)
     local idle_rows=$(( (idle_count + 2) / 3 ))  # 3 agents per row
     [[ $idle_count -gt 0 ]] && idle_rows=$((idle_rows + 1))  # +1 for separator
-    local fixed_lines=$((2 + 1 + idle_rows + 2 + busy_count))
+    local fixed_lines=$((2 + 1 + cmd_table_lines + idle_rows + 2 + busy_count))
     local avail_for_busy=$((term_height - fixed_lines))
     local lines_per_busy=$BUSY_LINES
     if [[ $busy_count -gt 0 ]]; then
@@ -377,6 +407,18 @@ for item in data.get('_lord_pending', []):
     [[ ${lord_count:-0} -gt 0 ]] && lord_badge=" │ ${C_YELLOW}${C_BOLD}🚨裁可待ち${lord_count}${C_RESET}"
     buf+=" ${C_GREEN}稼働${busy_count}${C_RESET} │ ${C_DIM}待機${idle_count}${C_RESET} │ 未読$(( $(for a in "${AGENTS[@]}"; do echo "${UNREAD[$a]:-0}"; done | paste -sd+ | bc 2>/dev/null || echo 0) ))${lord_badge}  ${C_DIM}${now}${C_RESET}\n"
     buf+="${C_DIM}${sep_line}${C_RESET}\n"
+
+    # Cmd table (OPT-A: sep_line直後、lord_pending前)
+    if [[ $cmd_count -gt 0 ]]; then
+        buf+=" ${C_BOLD}📋 cmd一覧${C_RESET}\n"
+        for cmd_item in "${CMD_ITEMS[@]}"; do
+            IFS=$'\t' read -r cid cemoji cpurpose <<< "$cmd_item"
+            local cpurp_short
+            cpurp_short=$(truncate_str "$cpurpose" $((term_width - 16)))
+            buf+="  ${C_BOLD}${cid}${C_RESET} ${cemoji}  ${C_DIM}${cpurp_short}${C_RESET}\n"
+        done
+        buf+="${C_DIM}${thin_sep}${C_RESET}\n"
+    fi
 
     # Lord pending (裁可待ち) section — P1:awk廃止 P2:視認性強化 P4:経過時間 P5:summary表示 P6:幅制限
     if [[ ${lord_count:-0} -gt 0 ]]; then
@@ -456,7 +498,7 @@ for item in data.get('_lord_pending', []):
     # Count lines used so far (count \n in buf)
     local tmp="${buf//[!\\]/}"
     # Approximate: header(3) + busy(busy_count*(lines_per_busy+2)) + idle(1+idle_count) + separator(1)
-    local used_lines=$((3 + busy_count * (lines_per_busy + 2) + idle_count + 2))
+    local used_lines=$((3 + cmd_table_lines + busy_count * (lines_per_busy + 2) + idle_count + 2))
     [[ ${#idle_agents[@]} -gt 0 ]] && used_lines=$((used_lines + 1))  # blank line before idle
     local feed_lines=$((term_height - used_lines))
     [[ $feed_lines -lt 1 ]] && feed_lines=1
