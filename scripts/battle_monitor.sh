@@ -153,7 +153,7 @@ for agent in agents:
     except: pass
     result[agent] = {'task_id': str(tid), 'status': str(status), 'unread': unread}
 
-# Cmd table data (active cmds + last 5 archived, sorted ascending)
+# Cmd table data (queue/cmds/ + queue/archive/, latest 10 sorted descending)
 try:
     import glob
     def _cmd_num(cid):
@@ -181,9 +181,9 @@ try:
             archive_cmds.append({'id': str(cmd['id']), 'num': _cmd_num(cmd['id']),
                 'purpose': purpose, 'status': str(cmd.get('status','?'))})
         except: pass
-    archive_cmds.sort(key=lambda c: c['num'])
-    cmd_rows = archive_cmds[-5:] + active_cmds
-    cmd_rows.sort(key=lambda c: c['num'])
+    all_cmds = active_cmds + archive_cmds
+    all_cmds.sort(key=lambda c: c['num'], reverse=True)
+    cmd_rows = all_cmds[:10]
     result['_cmd_table'] = cmd_rows
     active_parts = [f"{c['id']}: {c['purpose'][:40]}" for c in active_cmds]
     result['_cmd'] = ' / '.join(active_parts) if active_parts else '(指令なし)'
