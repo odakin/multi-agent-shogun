@@ -1,0 +1,52 @@
+task:
+  task_id: gunshi_qc_cmd_292
+  parent_cmd: cmd_292
+  type: quality_check
+  status: done
+  priority: critical
+  bloom_level: L3
+  description: |
+    【QC】cmd_292 Phase 2 — battle_monitor チラツキ完全解消 + 47列グリッド対応の検証
+
+    【成果物】
+    s292a3 (ashigaru2): battle_monitor.sh チラツキ根本修正 v4 + 47列グリッド対応
+
+    【修正の概要】
+    1. TRIM_LINE_BUF グローバル変数を導入
+    2. _trim_line() 関数で fork なしに直接バッファへ出力
+    3. pure bash string concatenation で _outframe を構築
+    4. printf '%s' "$_outframe" = 1回の write(2) syscall
+
+    結果: フレーム分割ゼロ → チラツキ完全消滅
+
+    【Acceptance Criteria】
+    1. ashigaru2_report (s292a3) で実機検証完了を確認
+    2. commit e9ebe9b の修正内容を確認
+    3. battle_monitor.sh の code review
+       - TRIM_LINE_BUF グローバル変数の追加確認
+       - _trim_line() 関数の fork/subshell 廃止確認
+       - _outframe 構築ロジックの確認
+       - printf '%s' 1回write 確認
+    4. bash -n 構文チェック PASS
+    5. 47列グリッド fallback ロジックの確認（既実装、変更なし）
+    6. 実機検証結果の確認
+       - 複数フレーム観測（15:24:08, 15:24:10, 15:24:13...）
+       - 全セクション表示（🚨 裁可待ち、📋 指令、⚔ 稼働状況、📜 直近）
+       - 47列グリッド表示確認
+
+    【検証手順】
+    1. git show e9ebe9b で修正内容確認
+    2. queue/reports/s292a3_ashigaru2.yaml の実機検証セクション確認
+    3. battle_monitor.sh の TRIM_LINE_BUF, _trim_line() を確認
+    4. bash -n scripts/battle_monitor.sh で構文チェック
+    5. grid_47col セクションで Python/Bash fallback ロジック確認
+
+    【リスク評価】
+    - チラツキは多くの QC で見逃されていた（cmd_280, cmd_281, cmd_286）
+    - ashigaru2 の v4 アプローチは革新的で信頼性が高い（pure bash）
+    - 実機検証が完全に実施されている
+    - 前回の ashigaru1 s292a2 との比較で v4 が優位性あり
+
+  timestamp: '2026-03-03T15:45:00+09:00'
+  ashigaru_report_ids:
+    - s292a3_ashigaru2

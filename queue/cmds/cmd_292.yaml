@@ -1,0 +1,81 @@
+id: cmd_292
+status: done
+timestamp: "2026-03-03T15:25:00+09:00"
+purpose: "battle_monitorのチラツキとグリッド表示を実機検証付きで修正する（cmd_280/281/286の再挑戦）"
+acceptance_criteria:
+  - "右ペインにチラツキ（一瞬何かが表示されて消える現象）がないこと — 実機検証必須"
+  - "稼働状況グリッドが47列ペインで全9エージェント表示されること — 実機検証必須"
+  - "1秒間隔の更新で画面が安定していること"
+  - "実機検証: tmux capture-paneで2回キャプチャし差分がないこと"
+  - "実機検証: グリッド行が47列以内に収まっていること"
+command: |
+  リポジトリ: /Users/odakin/Claude/multi-agent-shogun
+
+  問題:
+  cmd_280（グリッド）、cmd_281（チラツキ）、cmd_286（チラツキ再挑戦）が
+  全てQC PASSと判定されたが、大御所様の目視確認で直っていない。
+  原因: QCがコードレビューのみで実機検証していなかった。
+
+  cmd_289で実機検証プロトコルがgunshi.mdに追加されたので、
+  今回は実機検証を前提に修正する。
+
+  チラツキの原因候補（過去の対策で不十分だったもの）:
+  1. printf '%b' / printf '%s' の出力が複数write(2)に分割される
+  2. render()内のsubshell/fork（Python subprocess等）が割り込む
+  3. tput civis が失われてカーソルが点滅する
+  4. render間隔の排他制御がない（前回renderが終わる前に次が開始）
+  → 最も確実な方法: 全出力をtmpfileに書き、write(1)で一括転送
+
+  グリッドの問題:
+  - 3列グリッドが47列ペインに収まらない
+  - 2列に自動切替するか、セル幅を動的に調整する
+
+  ★実機検証手順（cmd_289で定義済み）:
+  1. battle_monitor.sh をバックグラウンドで起動
+  2. 3秒待機
+  3. tmux capture-pane で2回キャプチャ
+  4. チラツキ判定: 2回のキャプチャが同一か
+  5. レイアウト判定: 各行が47列以内か
+  6. 全セクション存在確認
+
+  対象ファイル:
+  - /Users/odakin/Claude/multi-agent-shogun/scripts/battle_monitor.sh
+project: multi-agent-shogun
+priority: critical
+
+phases:
+  - phase: 1
+    mode: sequential
+    subtasks:
+      - id: s292a3
+        redo_of: s292a2
+        description: |
+          【REDO】battle_monitorのチラツキ完全解消 + グリッド47列適応（実機検証付き）
+
+          【背景】
+          前回割当 (ashigaru7) は health_checker auto_closed で作業未開始。
+          cmd_289の実機検証プロトコルを厳格に適用して実施。
+
+          【入力】
+            - /Users/odakin/Claude/multi-agent-shogun/scripts/battle_monitor.sh
+            - cmd_280/281/286の過去修正履歴（git log確認）
+            - cmd_289の実機検証プロトコル（gunshi.md参照）
+
+          【出力】修正済みファイル:
+            1. チラツキなしの安定表示（実機検証済み）
+            2. 47列ペインで全9エージェント表示（実機検証済み）
+            3. 実機検証ログ（capture-pane 2回分の出力 + 差分結果）
+
+          【完了条件】
+            - ✅ チラツキなしの安定表示（実機検証済み）
+            - ✅ 47列ペインで全エージェント表示（実機検証済み）
+            - ✅ 1秒間隔の更新で画面が安定
+            - ✅ bash -n 構文チェック PASS
+            - ✅ git commit済み
+        target_path: "/Users/odakin/Claude/multi-agent-shogun/scripts/battle_monitor.sh"
+        bloom_level: L4
+        status: done
+  - phase: 2
+    mode: qc
+    qc_for: [s292a3]
+    status: done

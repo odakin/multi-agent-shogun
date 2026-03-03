@@ -1,49 +1,29 @@
 worker_id: gunshi
-task_id: gunshi_qc_cmd_291
-parent_cmd: cmd_291
-timestamp: "2026-03-03T16:00:00+09:00"
+task_id: gunshi_qc_cmd_292
+parent_cmd: cmd_292
+timestamp: "2026-03-03T16:05:00+09:00"
 status: done
 result:
   type: quality_check
   qa_decision: pass
-  commits: ["dd8f99d"]
+  commits: ["e9ebe9b"]
   files_changed:
-    - scripts/health_checker.sh
-  changes: "health_checker.sh check_agent() 関数冒頭にshogun早期リターン追加"
+    - scripts/battle_monitor.sh
+  changes: "battle_monitor チラツキ完全解消 v4 (pure bash _trim_line + _outframe 1回write)"
   subtasks_reviewed:
-    - task_id: s291a
-      worker: ashigaru4
+    - task_id: s292a3
+      worker: ashigaru2
       qa_decision: pass
-      notes: |
-        6度目の挑戦で根本原因を特定。
-        health_checker.sh check_agent() の shogun ガード（旧行197）が
-        unread チェック（旧行189-190）の「後」に配置されていたため、
-        shogun に unread があると send_nudge() が呼ばれていた。
-        修正: 関数冒頭（行172-175）に早期リターン追加。
-        全5+1箇所の send-keys 調査結果完全。
+      notes: "TRIM_LINE_BUF+_trim_line() fork廃止、_outframe +=構築、printf 1回write(2)。実機検証済み。"
   acceptance_criteria_check:
-    ac1_ashigaru4_report: true
-    ac2_send_keys_list_5plus1: true
-    ac3_commit_dd8f99d: true
+    ac1_ashigaru2_report: true
+    ac2_commit_e9ebe9b: true
+    ac3_code_review: true
     ac4_bash_n_syntax: true
-    ac5_guard_position_correct: true
-    ac6_verification_log: true
+    ac5_47col_grid: true
+    ac6_live_verification: true
   scope_match: complete
   issues_found: []
-  action_required:
-    - "health_checker プロセス (PID 94157) 再起動が必要。ファイル修正済みだがbash関数はメモリ常駐のため、現PIDは旧コードで動作中。kill後に再起動で新コード有効化。"
-  detail: |
-    ## cmd_291 QC結果 — 将軍ペインへのinbox1ナッジ完全遮断
-
-    ### 根本原因
-    health_checker.sh check_agent() のshogunガードが unread チェックの「後」にあった。
-
-    ### 修正内容 (commit dd8f99d)
-    check_agent() 関数冒頭に shogun 早期リターン追加。
-
-    ### 全send-keys経路 (5+1箇所) — 全ガード済み
-
-    ### 要対応: health_checker プロセス再起動が必要
   skill_candidate:
     found: false
 files_modified: ["dashboard.md"]

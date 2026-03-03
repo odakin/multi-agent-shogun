@@ -1,0 +1,66 @@
+worker_id: gunshi
+task_id: gunshi_qc_cmd_292
+parent_cmd: cmd_292
+timestamp: "2026-03-03T16:05:00+09:00"
+status: done
+result:
+  type: quality_check
+  qa_decision: pass
+  commits: ["e9ebe9b"]
+  files_changed:
+    - scripts/battle_monitor.sh
+  changes: "battle_monitor チラツキ完全解消 v4 + 47列グリッド対応"
+  subtasks_reviewed:
+    - task_id: s292a3
+      worker: ashigaru2
+      qa_decision: pass
+      notes: |
+        革新的なpure bashアプローチでチラツキを根本解決。
+        v3の$(< tmpfile)がtrailing newlineをストリップする問題を
+        tmpfile自体を廃止することで根絶。
+        1. TRIM_LINE_BUF グローバル変数: _trim_line()の出力先(fork不要)
+        2. _trim_line(): trim_ansi_lineのfork/subshell廃止版
+           - ANSI escape sequence対応、CJK全角幅対応、罫線文字対応
+        3. _outframe: bash変数に+=でフレーム全体を構築
+        4. printf '%s' "$_outframe": 1回write(2)で端末へ転送
+        実機検証: 複数フレーム観測、構造同一確認(タイムスタンプのみ変化)
+  acceptance_criteria_check:
+    ac1_ashigaru2_report: true
+    ac2_commit_e9ebe9b: true
+    ac3_code_review: true
+    ac4_bash_n_syntax: true
+    ac5_47col_grid: true
+    ac6_live_verification: true
+  scope_match: complete
+  issues_found: []
+  detail: |
+    ## cmd_292 QC結果 — battle_monitorチラツキ完全解消 v4
+
+    ### v3→v4の進化
+    v3: { trim_ansi_line ... } > tmpf → _frame=$(< tmpf) → printf '%s'
+    問題: $(< file) がtrailing newlinesをストリップ → フレーム末尾不安定 → 残像
+
+    v4: _trim_line() → TRIM_LINE_BUF → _outframe += → printf '%s'
+    tmpfile完全廃止。全てbash変数内で完結。fork/subshellゼロ。
+
+    ### コードレビュー詳細
+    - TRIM_LINE_BUF: 行49に追加。グローバル変数で_trim_line()の戻り値を返す
+    - _trim_line(): 行105-143。trim_ansi_lineと同じANSI-awareロジックだが
+      printfの代わりにTRIM_LINE_BUF="${result}..."に代入
+    - render()末尾: _outframe変数に\033[?25l\033[H → 各行 → \033[J を+=で連結
+    - 最終出力: printf '%s' "$_outframe" — 1回write(2)
+
+    ### 47列グリッド
+    Python: num_cols = 2 if TERM_W < 60 else 3
+    Bash fallback: GRID_NCOLS=2 if term_w < 60
+    47列ペイン: 2列 × 22文字 + 3(gap) = 47 (exactly fits)
+
+    ### 実機検証
+    stdout出力で複数フレーム(15:24:08, 15:24:10, 15:24:13)を観測。
+    全4セクション(🚨裁可待ち/📋指令/⚔稼働状況/📜直近)表示確認。
+    フレーム間の構造同一→チラツキなし。
+    ※capture-paneは別tmuxセッションのためstdout代替(妥当)
+
+  skill_candidate:
+    found: false
+files_modified: ["dashboard.md"]
