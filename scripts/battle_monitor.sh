@@ -112,7 +112,11 @@ from datetime import datetime, timezone
 
 root = '$SCRIPT_DIR'
 prev_counts = ${prev_counts_py}
-CELL_W = ${CELL_W}
+TERM_W = ${term_w}
+num_cols = 2 if TERM_W < 60 else 3
+border_chars = num_cols + 1  # │ on each side + between cols
+CELL_W = max(8, (TERM_W - border_chars) // num_cols)
+print(f'grid_meta\t{num_cols}\t{CELL_W}')
 
 agents = ['karo','ashigaru1','ashigaru2','ashigaru3','ashigaru4',
           'ashigaru5','ashigaru6','ashigaru7','gunshi']
@@ -194,11 +198,6 @@ except:
     pass
 
 # ── 3. Agent grid ──
-GRID = [
-    ['karo',      'ashigaru3', 'ashigaru6'],
-    ['ashigaru1', 'ashigaru4', 'ashigaru7'],
-    ['ashigaru2', 'ashigaru5', 'gunshi'],
-]
 FIXED_ICONS = {
     'karo':   ('🏯', '家老', 'karo'),
     'gunshi': ('🧠', '軍師', 'gunshi'),
@@ -208,6 +207,10 @@ ASHIGARU_NAMES = {
     'ashigaru4': '足軽４', 'ashigaru5': '足軽５', 'ashigaru6': '足軽６',
     'ashigaru7': '足軽７',
 }
+
+# Build dynamic grid: agents in order, split into num_cols columns
+AGENTS_FLAT = agents  # ['karo','ashigaru1',...,'ashigaru7','gunshi']
+num_rows = (len(AGENTS_FLAT) + num_cols - 1) // num_cols
 
 agent_states = {}
 active_c = idle_c = 0
@@ -229,8 +232,14 @@ for ag in agents:
 
 print(f'summary\t{active_c}\t{idle_c}')
 
-for ri, row in enumerate(GRID):
-    for ci, ag in enumerate(row):
+for ri in range(num_rows):
+    for ci in range(num_cols):
+        idx = ri * num_cols + ci
+        if idx >= len(AGENTS_FLAT):
+            # Empty cell (last row padding)
+            print(f'cell\t{ri}\t{ci}\t{pad_to("", CELL_W)}\tidle\tempty')
+            continue
+        ag = AGENTS_FLAT[idx]
         tid, tstat = agent_states.get(ag, ('---', '---'))
         active = tstat in ('assigned', 'in_progress')
         if ag in FIXED_ICONS:
@@ -299,12 +308,14 @@ render() {
     declare -a LORD_ITEMS=() CMD_ITEMS=()
     declare -A GRID_CELLS=() GRID_STATUS=() GRID_ROLE=()
     local active_count=0 idle_count=0 unread_count=0
+    local GRID_NCOLS=3 GRID_CW=$CELL_W  # defaults; overridden by grid_meta
 
     while IFS=$'\t' read -r key v1 v2 v3 v4 v5; do
         case "$key" in
-            lord)    LORD_ITEMS+=("${v1}	${v2}	${v3}	${v4}") ;;
-            cmd)     CMD_ITEMS+=("${v1}	${v2}	${v3}	${v4}") ;;
-            summary) active_count="${v1:-0}"; idle_count="${v2:-0}" ;;
+            lord)      LORD_ITEMS+=("${v1}	${v2}	${v3}	${v4}") ;;
+            cmd)       CMD_ITEMS+=("${v1}	${v2}	${v3}	${v4}") ;;
+            summary)   active_count="${v1:-0}"; idle_count="${v2:-0}" ;;
+            grid_meta) GRID_NCOLS="${v1:-3}"; GRID_CW="${v2:-$CELL_W}" ;;
             cell)
                 GRID_CELLS["${v1},${v2}"]="$v3"
                 GRID_STATUS["${v1},${v2}"]="${v4:-idle}"
@@ -377,20 +388,38 @@ render() {
     fi
     buf+="\n${C_DIM}${thin}${C_RESET}\n"
 
-    # ════ Section 3: ⚔ 稼働状況 (3-column Box Drawing grid) ════
+    # ════ Section 3: ⚔ 稼働状況 (dynamic-column grid) ════
     buf+="\n"
     buf+="${C_BOLD} ⚔ 稼働状況${C_RESET}\n"
-    local cw=$CELL_W
+    local cw=$GRID_CW
+    local nc=$GRID_NCOLS
+
+    # Build border strings using ASCII '-' (1-col wide, safe for trim_ansi_line)
     local dashes
-    dashes=$(printf '─%.0s' $(seq 1 "$cw"))
-    buf+="┌${dashes}┬${dashes}┬${dashes}┐\n"
+    dashes=$(printf '%*s' "$cw" '' | tr ' ' '-')
+    # Top border: ┌──┬──┐ (nc columns)
+    local top_border="+"
+    local mid_border="+"
+    local bot_border="+"
+    local _ci
+    for (( _ci = 0; _ci < nc; _ci++ )); do
+        top_border+="${dashes}+"
+        mid_border+="${dashes}+"
+        bot_border+="${dashes}+"
+    done
+    buf+="${C_DIM}${top_border}${C_RESET}\n"
+
+    # Determine number of rows: ceil(9 agents / nc)
+    local nagents=9
+    local grid_rows=$(( (nagents + nc - 1) / nc ))
+
     local row col
-    for row in 0 1 2; do
-        local rline="│"
-        for col in 0 1 2; do
+    for (( row = 0; row < grid_rows; row++ )); do
+        local rline="${C_DIM}|${C_RESET}"
+        for (( col = 0; col < nc; col++ )); do
             local gk="${row},${col}"
             local gcell="${GRID_CELLS[$gk]:-}"
-            [[ -z "$gcell" ]] && gcell=$(printf "%-${cw}s" '---')
+            [[ -z "$gcell" ]] && gcell=$(printf "%-${cw}s" '')
             local gstat="${GRID_STATUS[$gk]:-idle}"
             local grole="${GRID_ROLE[$gk]:-ashigaru}"
             local gcolored
@@ -407,11 +436,15 @@ render() {
                     && gcolored="${C_GREEN}${gcell}${C_RESET}" \
                     || gcolored="${C_DIM}${gcell}${C_RESET}"
             fi
-            rline+="${gcolored}│"
+            rline+="${gcolored}${C_DIM}|${C_RESET}"
         done
         buf+="${rline}\n"
+        # Mid-separator between rows (except after last)
+        if (( row < grid_rows - 1 )); then
+            buf+="${C_DIM}${mid_border}${C_RESET}\n"
+        fi
     done
-    buf+="└${dashes}┴${dashes}┴${dashes}┘\n"
+    buf+="${C_DIM}${bot_border}${C_RESET}\n"
     buf+="\n${C_DIM}${thin}${C_RESET}\n"
 
     # ════ Section 4: 📜 直近 ════
