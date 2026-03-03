@@ -961,18 +961,21 @@ dynamic_resize_by_content() {
 
         # スコア更新
         local score="${PANE_CONTENT_SCORE[$pid]:-0}"
+        # busy 判定（delta に関わらず先に取得）
+        local is_busy=false
+        if [ -n "$aid" ] && [ "$aid" != "..." ]; then
+            agent_is_busy_check "$pid" 2>/dev/null && is_busy=true
+        fi
+
         if [ "$delta" -gt 0 ]; then
             # コンテンツ増加 → スコア加算
             score=$(( score + delta ))
+        elif [ "$is_busy" = "true" ]; then
+            # busy だが delta==0（thinking/API待ち）→ busy ボーナスでスコア維持・拡大
+            score=$(( score + 2 ))
         else
             # idle かつ delta==0 → スコア25%減衰
-            local is_busy=false
-            if [ -n "$aid" ] && [ "$aid" != "..." ]; then
-                agent_is_busy_check "$pid" 2>/dev/null && is_busy=true
-            fi
-            if [ "$is_busy" = "false" ]; then
-                score=$(( score * 3 / 4 ))
-            fi
+            score=$(( score * 3 / 4 ))
         fi
 
         PANE_CONTENT_SCORE[$pid]=$score
