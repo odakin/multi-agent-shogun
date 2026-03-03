@@ -333,6 +333,14 @@ render() {
         esac
     done <<< "$raw"
 
+    # Bash-side fallback: Python失敗 or grid_meta未受信時に端末幅から列数を計算
+    # Python出力が空でもデフォルト(GRID_NCOLS=3)のままにならないよう保護
+    if [[ $GRID_NCOLS -eq 3 && $term_w -gt 0 && $term_w -lt 60 ]]; then
+        GRID_NCOLS=2
+        GRID_CW=$(( (term_w - 3) / 2 ))
+        [[ $GRID_CW -lt 8 ]] && GRID_CW=8
+    fi
+
     while [[ ${#ACTIVITY_LOG[@]} -gt $MAX_ACTIVITY ]]; do
         ACTIVITY_LOG=("${ACTIVITY_LOG[@]:1}")
     done
@@ -467,26 +475,22 @@ render() {
         done
     fi
 
-    # Output — 全フレーム一括出力（チラツキ完全防止）
+    # Output — 全フレーム一括出力（チラツキ完全防止 v3）
     # 1. 全行を /dev/shm 一時ファイルに書き出す（trim_ansi_line fork ゼロ）
-    # 2. bash 組み込み "$(<file)" でファイルを1回 read → cat プロセス生成なし
+    # 2. \033[J で画面末尾まで一括消去 → 末尾\nループ不要 + $(<file)末尾ストリップ問題を解消
+    #    ※ $(< file) は末尾連続\nを全削除するため、空行埋めループを\033[J に替えた
     # 3. printf '%s' 1回 write(2) で端末へ転送 → 分割フレームが端末に届かない
     # ★ 先頭に \033[?25l でカーソル非表示を毎フレーム保証（setup_terminal補強）
     local _tmpf _frame
     _tmpf=$(mktemp /dev/shm/bmon_XXXXXX 2>/dev/null || mktemp)
     {
         printf '\033[?25l\033[H'  # カーソル非表示 + 左上へ
-        local _line_num=0
         while IFS= read -r _ln; do
             trim_ansi_line "$_ln" "$term_w"
-            (( _line_num++ )) || true
         done < <(printf '%b' "$buf")
-        while (( _line_num < term_h )); do
-            printf '\033[K\n'
-            (( _line_num++ )) || true
-        done
+        printf '\033[J'  # カーソル位置から画面末尾まで一括消去（末尾\nなし）
     } > "$_tmpf"
-    _frame=$(< "$_tmpf")   # bash組み込み read: fork なし、末尾改行のみ除去
+    _frame=$(< "$_tmpf")   # bash組み込み: fork なし。\033[J で末尾\nなし → ストリップなし
     rm -f "$_tmpf"
     printf '%s' "$_frame"  # 1回 write(2): 端末が分割フレームを受け取らない
 }
