@@ -29,7 +29,7 @@ POLL_INTERVAL=3
 LAYOUT_APPLIED=false
 BORDER_APPLIED=false
 # pane-border-format の目標値（差分更新用）。先頭スペースで罫線と文字の間にパディング挿入。
-TARGET_BORDER_FORMAT=' #{?pane_active,#[fg=colour33,bold],#[fg=colour240]}#{?#{@agent_name_ja},#{@agent_name_ja},#{@agent_id}}#[default] #[dim](#{@model_name})#[default] #{@current_task}'
+TARGET_BORDER_FORMAT=' #{?pane_active,#[fg=colour33,bold],#[fg=colour240]}#{?#{@agent_name_ja},#{@agent_name_ja},#{@agent_id}}#[default] #[dim](#{@model_name})#[default]#{?#{==:Opus,#{@model_name}}, #[fg=colour63,bold]★#[default],} #{@current_task}'
 
 # pane-border-lines スタイル: heavy は tmux 3.2+ 必須。バージョン検出して自動選択。
 _detect_border_line_style() {
@@ -347,6 +347,7 @@ declare -A MODEL_RECONCILED 2>/dev/null || true
 # ═══════════════════════════════════════════════════════════════════════════════
 get_bg_color_for_agent() {
     local agent="$1"
+    local model="${2:-}"
     case "$agent" in
         shogun|team-lead)
             echo ""                          # 白背景（デフォルト）
@@ -358,7 +359,12 @@ get_bg_color_for_agent() {
             echo "fg=#d0d0d0,bg=#6b6b10"    # 金/黄（軍師）+ 明文字
             ;;
         ashigaru*)
-            echo ""                          # 白背景（デフォルト）
+            # Opus使用中の足軽は濃青で視覚的に区別（bloom_level L4+ 動的切替後）
+            if [[ "${model,,}" == "opus"* ]]; then
+                echo "fg=#d0d0d0,bg=#1a3a6b"    # 濃青（Opus足軽）+ 明文字
+            else
+                echo ""                          # 白背景（デフォルト: Sonnet/Haiku）
+            fi
             ;;
         *)
             echo ""                          # 白背景（デフォルト）
@@ -495,8 +501,11 @@ style_pane() {
     _tmux set-option -p -t "$pane_id" @current_task "$task_id_val" 2>/dev/null
 
     # 背景色の差分更新（変化時のみ select-pane -P を実行してフリッカー防止）
+    # @model_name を参照して Opus足軽の色を動的に決定
+    local pane_model
+    pane_model=$(_tmux show-options -p -t "$pane_id" -v @model_name 2>/dev/null)
     local bg_color
-    bg_color=$(get_bg_color_for_agent "$agent_name")
+    bg_color=$(get_bg_color_for_agent "$agent_name" "$pane_model")
     local bg_target="${bg_color:-default}"
     if [ "${PANE_BG_CACHE[$pane_id]:-}" != "$bg_target" ]; then
         _tmux select-pane -t "$pane_id" -P "$bg_target" 2>/dev/null
@@ -1174,11 +1183,20 @@ while true; do
                 style_pane "$pane_id" "$current_id"
                 STYLED_PANES[$pane_id]="$current_id"
             else
-                # bg_color が空でないエージェント（karo/gunshi）は毎サイクル色を再適用
+                # bg_color が空でないエージェント（karo/gunshi/Opus足軽）は毎サイクル色を再適用
                 styled_agent="${STYLED_PANES[$pane_id]}"
                 bg_check=$(get_bg_color_for_agent "$styled_agent")
                 if [ -n "$bg_check" ]; then
                     style_pane "$pane_id" "$styled_agent"
+                elif [[ "$styled_agent" == ashigaru* ]]; then
+                    # Opus足軽の動的検出: @model_name が Opus の場合に再スタイル
+                    current_model=$(_tmux show-options -p -t "$pane_id" -v @model_name 2>/dev/null)
+                    if [[ "${current_model,,}" == "opus"* ]]; then
+                        style_pane "$pane_id" "$styled_agent"
+                    elif [ "${PANE_BG_CACHE[$pane_id]:-default}" != "default" ]; then
+                        # Sonnetに戻った場合: 濃青→デフォルト背景にリセット
+                        style_pane "$pane_id" "$styled_agent"
+                    fi
                 fi
             fi
             continue
