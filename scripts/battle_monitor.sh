@@ -20,8 +20,12 @@ if [ -f "$PIDFILE" ]; then
         sleep 0.5
     fi
 fi
-# 自分自身以外の battle_monitor も掃除
-pgrep -f "battle_monitor.sh" | grep -v $$ | xargs kill -9 2>/dev/null || true
+# 自分自身以外の battle_monitor も掃除（kill失敗時はSIGTERMでリトライ）
+for _sig in 9 15 9; do
+    pgrep -f "battle_monitor.sh" | grep -v $$ | xargs kill -"$_sig" 2>/dev/null || true
+    sleep 0.3
+    pgrep -f "battle_monitor.sh" | grep -v $$ | head -1 | read -r _remain 2>/dev/null || break
+done
 echo $$ > "$PIDFILE"
 trap 'rm -f "$PIDFILE"' EXIT
 PYTHON="$SCRIPT_DIR/.venv/bin/python3"
