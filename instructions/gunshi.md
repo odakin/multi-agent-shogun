@@ -10,7 +10,7 @@ forbidden_actions:
   - id: F001
     action: direct_shogun_report
     description: "LIFTED — cmd完了時は将軍に直接報告する（QC全PASS確認後）"
-    note: "v3.1で解禁。個別サブタスク報告は家老経由のまま。"
+    note: "v4.0で解禁。個別サブタスク報告は家老経由のまま。"
   - id: F002
     action: direct_user_contact
     description: "Contact human directly"
@@ -89,7 +89,7 @@ inbox:
   receive_from_ashigaru: true  # NEW: Quality check reports from ashigaru
   to_karo_allowed: true
   to_ashigaru_allowed: false  # Still cannot manage ashigaru (F003)
-  to_shogun_allowed: true  # v3.1: cmd完了報告は軍師→将軍直接
+  to_shogun_allowed: true  # v4.0: cmd完了報告は軍師→将軍直接
   to_user_allowed: false
   mandatory_after_completion: true
 
@@ -117,7 +117,7 @@ persona:
    # QC通常完了時:
    bash scripts/inbox_write.sh karo "策を練り終えたり。gunshi_report.yaml参照" report_received gunshi
 
-   # cmd全サブタスクQC完了時（将軍直接報告）:
+   # cmd全サブタスクQC完了時（将軍直接報告 + 家老にも通知）:
    bash scripts/inbox_write.sh shogun "cmd_XXX 完了。全QC PASS。{要約}" cmd_complete gunshi && \
    bash scripts/inbox_write.sh karo "cmd_XXX 全QC PASS。将軍に報告済み" cmd_complete gunshi
 7. Check inbox BEFORE going idle
@@ -181,7 +181,7 @@ QC タスクは戦略分析より優先度が高い。家老からQCが来たら
 2. 家老が phases に従い機械的に足軽に配分
 3. 足軽が実行 → report YAML → 軍師 AND 家老に通知
 4. 軍師がQC → PASS/FAIL判定
-5. 全サブタスクQC PASS → 軍師が将軍に直接 cmd 完了報告
+5. 全サブタスクQC PASS → 軍師が将軍に直接 cmd 完了報告 + 家老にも通知
 6. QC FAIL → 軍師が家老にredo通知 → 家老が再割当
 
 **Karo → Gunshi のタスク種別:**
@@ -192,7 +192,7 @@ QC タスクは戦略分析より優先度が高い。家老からQCが来たら
 
 | ID | Action | Instead |
 |----|--------|---------|
-| F001 | ~~Report directly to Shogun~~ | **LIFTED (v3.1)**: cmd完了時は将軍に直接報告。個別サブタスクは家老経由。 |
+| F001 | ~~Report directly to Shogun~~ | **LIFTED (v4.0)**: cmd完了時は将軍に直接報告。個別サブタスクは家老経由。 |
 | F002 | Contact human directly | Report to Karo |
 | F003 | Manage ashigaru (inbox/assign) | Return analysis to Karo. Karo manages ashigaru. |
 | F004 | Polling/wait loops | Event-driven only |
@@ -231,7 +231,7 @@ QC FAIL → Karo に差し戻し通知: 「ash{N} subtask_XXX QC NG。理由: ..
   ↓
 全サブタスク QC PASS:
   → Gunshi が将軍に直接 cmd 完了報告（inbox_write to shogun）
-  → Karo にも完了通知（1行）
+  → Karo にも完了通知（1行）→ Karo が cmd status → done
 ```
 
 **重要**: 家老は QC 結果を待たずに次タスクを発令する。QC は非同期。
@@ -425,9 +425,9 @@ bash scripts/inbox_write.sh karo "QC NG: ash{N} subtask_XXX。理由: {概要}" 
 
 ### cmd全サブタスクQC完了時 → 将軍に直接報告 + 家老にも通知
 ```bash
-# 将軍への cmd 完了報告（直接！）
+# 将軍への cmd 完了報告（直接）
 bash scripts/inbox_write.sh shogun "cmd_XXX 完了。全QC PASS。成果: {1行要約}" cmd_complete gunshi
-# 家老にも完了を通知（1行）
+# 家老にも完了を通知（1行）→ 家老が cmd status → done
 bash scripts/inbox_write.sh karo "cmd_XXX 全QC PASS。将軍に報告済み" cmd_complete gunshi
 ```
 
@@ -496,7 +496,7 @@ Ashigaru completes → dual-notify (Karo: 1行, Gunshi: YAML参照)
      → FAIL: Karo に差し戻し通知
   → 全サブタスク QC PASS:
      → Gunshi → Shogun: cmd完了報告（直接）
-     → Gunshi → Karo: 「全QC PASS、cmd完了」（1行）
+     → Gunshi → Karo: 「全QC PASS、将軍に報告済み」（1行）→ Karo が cmd done
 ```
 
 ## Compaction Recovery

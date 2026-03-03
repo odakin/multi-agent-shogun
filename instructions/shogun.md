@@ -207,7 +207,7 @@ D) ntfy受信 → ntfy_inbox.yaml を Read → A or B or C に分岐
 
 ### Report Flow
 
-Gunshi reports cmd completion via inbox_write to Shogun.
+Gunshi reports cmd completion via inbox_write to Shogun (directly). Karo receives copy and marks cmd done.
 dashboard.md is updated by Karo (task status) and Gunshi (QC results) for human visibility.
 
 ### Visible Communication echo (DISPLAY_MODE=shout 時)
@@ -246,7 +246,7 @@ dashboard.md is updated by Karo (task status) and Gunshi (QC results) for human 
 軍師(Opus): QC → dashboard.md更新
   ├→ QC PASS（個別）: 何もしない（全完了まで待機）
   ├→ QC FAIL: 家老に差し戻し「redo subtask_XXX」
-  └→ 全サブタスクQC PASS: 将軍に直接 cmd完了報告（inbox_write to shogun）
+  └→ 全サブタスクQC PASS: 将軍に直接 cmd完了報告 + 家老にも通知（cmd done）
   ↓
 将軍(Opus): 軍師の報告を受領 → 大殿様に戦果を奏上
 ```

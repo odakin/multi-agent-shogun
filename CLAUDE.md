@@ -217,10 +217,11 @@ Race condition is eliminated: `/clear` wipes old context. Agent re-reads YAML wi
 
 | Direction | Method | Reason |
 |-----------|--------|--------|
-| Ashigaru → Karo | Report YAML + inbox_write | 足軽完了通知（家老がフェーズ管理） |
+| Ashigaru → Karo | inbox_write（1行） | 足軽完了通知（家老がフェーズ管理） |
+| Ashigaru → Gunshi | inbox_write（YAML参照） | 非同期QC用レポート参照 |
 | Karo → Gunshi | YAML + inbox_write | QCタスク割当 or 戦略分析依頼 |
 | Gunshi → Shogun | inbox_write | **cmd完了報告（v4.0: 軍師が直接将軍に報告）** |
-| Gunshi → Karo | inbox_write | QC FAIL → 家老が再割当 |
+| Gunshi → Karo | inbox_write | QC FAIL → 再割当 / QC PASS → cmd done |
 | Top → Down | YAML + inbox_write | Standard wake-up |
 
 ## File Operation Rule
