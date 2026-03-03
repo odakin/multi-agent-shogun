@@ -1,0 +1,76 @@
+worker_id: gunshi
+task_id: gunshi_qc_cmd_280_281_282
+parent_cmd: cmd_280, cmd_281, cmd_282
+timestamp: "2026-03-03T14:35:00+09:00"
+status: done
+result:
+  type: quality_check
+  qa_decision: pass
+  commits:
+    - "0596c6b (s280a: グリッド動的列数)"
+    - "d3ccf4b (s281a: チラツキ解消)"
+    - "e7903fc (s282a: karo.md /clearプロトコル)"
+  files_changed:
+    - scripts/battle_monitor.sh
+    - instructions/karo.md
+  changes: "battle_monitor グリッド幅適応+チラツキ解消 + karo.md Phase完了後/clearプロトコル追記"
+  git_push: "commit済み。push実施。"
+  subtasks_reviewed:
+    - task_id: s280a
+      worker: ashigaru4
+      qa_decision: pass
+      notes: "Python側でTERM_Wから動的列数計算(47列→2列,60列+→3列)。CELL_W=max(8,(tw-borders)/ncols)。grid_metaタブ区切りでbashに伝達。AGENTS_FLAT順序でnum_rows動的生成。ASCII +/- 罫線でCJK誤カウント回避。mid-separator行追加。"
+    - task_id: s281a
+      worker: ashigaru5
+      qa_decision: pass
+      notes: "trim_ansi_line を$()サブシェルなしで直接呼び出し→fork排除。/dev/shm tmpfile経由cat一括転送。mktemp fallback付き。(( )) || true でerrexit安全。"
+    - task_id: s282a
+      worker: ashigaru2
+      qa_decision: pass
+      notes: "karo.md /clear Protocolセクション内に Phase完了後/clearプロトコル(案C/I)追記。実行条件3項+手順6ステップ+禁止事項3項。Session Start手順参照で既存Recovery整合。25行追加。"
+  acceptance_criteria_check:
+    cmd_280_ac1_all_9_agents: true
+    cmd_280_ac2_47col_display: true
+    cmd_280_ac3_grid_within_pane: true
+    cmd_280_ac4_header_visible: true
+    cmd_280_ac5_no_flicker: true
+    cmd_281_ac1_flicker_resolved: true
+    cmd_281_ac2_output_within_pane: true
+    cmd_281_ac3_bash_n_pass: true
+    cmd_282_ac1_clear_section_added: true
+    cmd_282_ac2_session_start_consistency: true
+    cmd_282_ac3_conditions_documented: true
+  deliverables_verified: true
+  scope_match: complete
+  issues_found: []
+  detail: |
+    ## cmd_280+281+282 QC結果 — battle_monitorグリッド幅適応+チラツキ解消+karo.md /clearプロトコル
+
+    ### cmd_280 (commit 0596c6b) — グリッド動的列数
+    1. Python: TERM_W渡し→num_cols動的計算(47列→2列, 60列+→3列)
+    2. CELL_W = max(8, (TERM_W - border_chars) // num_cols) → 47列で22幅
+    3. grid_metaタブ区切り行でnum_cols/CELL_WをbashのGRID_NCOLS/GRID_CWに伝達
+    4. AGENTS_FLAT順序→num_rows動的生成(ceildiv)→空セルpadding対応
+    5. ASCII +/- 罫線(CJK幅誤カウント回避)、DIM色でborder表示
+    6. mid-separator行: 行間に区切り線追加
+    7. ヘッダー: 既存「🏯 大殿様の執務室」健在(hpad_n動的計算)
+
+    ### cmd_281 (commit d3ccf4b) — チラツキ解消
+    1. trim_ansi_line: $()サブシェル→直接呼び出し(fork排除)
+    2. /dev/shm/bmon_XXXXXX tmpfile→cat一括転送(単一write近似)
+    3. mktemp fallback(macOS /dev/shm非対応時)
+    4. (( _line_num++ )) || true でerrexit安全
+
+    ### cmd_282 (commit e7903fc) — karo.md Phase完了後/clearプロトコル
+    1. /clear Protocolセクション内「自己/clear」直後に配置
+    2. 実行条件: 全subtask assigned + 未読inbox=0 + 報告待機のみ
+    3. 実行手順6ステップ: 確認→inbox確認→/clear→Session Start復帰→cmd再読→待機
+    4. 禁止事項3項: 配分途中/未読inbox有/発令待ちsubtask有
+    5. cmd_269 s269e推奨に準拠、2,000-7,000t/Phase節約見込み
+
+    ### 構文チェック
+    bash -n battle_monitor.sh: PASS
+
+    ### skill_candidate
+    found: false
+files_modified: ["dashboard.md"]

@@ -1,0 +1,55 @@
+id: cmd_280
+status: done
+timestamp: "2026-03-03T14:15:00+09:00"
+purpose: "battle_monitor稼働状況グリッドをペイン幅に適応させ、全9エージェントを表示する"
+acceptance_criteria:
+  - "全9エージェント（家老・足軽1-7・軍師）がグリッドに表示されること"
+  - "ペイン幅47列以下でも全エージェントが表示されること（列数を自動調整）"
+  - "グリッド罫線（┌┬┐│└┴┘─）がペイン幅内に収まること"
+  - "ヘッダー「🏯 大殿様の執務室」が表示されること（現在消えている）"
+  - "チラツキが発生しないこと（一括出力方式を維持）"
+command: |
+  リポジトリ: /Users/odakin/Claude/multi-agent-shogun
+
+  問題:
+  1. 稼働状況グリッドが3列×3行で設計されているが、ペイン幅47列に収まらず
+     3列目（足軽6, 足軽7, 軍師）が完全に切れている
+  2. ヘッダー「🏯 大殿様の執務室」が表示されていない
+
+  現在のペイン幅: 47列（将軍ウィンドウ右ペイン）
+
+  修正方針:
+  1. グリッドの列数をペイン幅から動的に計算する
+     - 47列以下: 2列（5行で全9エージェント）
+     - 60列以上: 3列（3行で全9エージェント）
+  2. セル幅 = (ペイン幅 - 罫線文字数) / 列数
+  3. 罫線のCJK幅問題に注意（─は1カラム幅のASCII -で代用済み）
+  4. ヘッダーが消えている原因を調査・修正
+
+  対象ファイル:
+  - /Users/odakin/Claude/multi-agent-shogun/scripts/battle_monitor.sh
+project: multi-agent-shogun
+priority: high
+
+phases:
+  - phase: 1
+    mode: sequential
+    subtasks:
+      - id: s280a
+        description: |
+          【目的】稼働状況グリッドをペイン幅適応型にし、全9エージェント表示 + ヘッダー修正
+          【入力】
+            - /Users/odakin/Claude/multi-agent-shogun/scripts/battle_monitor.sh
+            - 現在のペイン幅: 47列
+          【出力】修正済みファイル:
+            1. ペイン幅に応じた動的列数計算
+            2. 全9エージェントの表示
+            3. ヘッダー復活
+            4. チラツキなし（一括出力維持）
+          【完了条件】47列ペインで全9エージェントが表示される。git commit済み
+        target_path: "/Users/odakin/Claude/multi-agent-shogun/scripts/battle_monitor.sh"
+        bloom_level: L3
+        status: done
+  - phase: 2
+    mode: qc
+    qc_for: [s280a]

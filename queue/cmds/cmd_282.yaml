@@ -1,0 +1,57 @@
+id: cmd_282
+status: done
+timestamp: "2026-03-03T14:22:00+09:00"
+purpose: "案C/I実装: 家老がPhase配分完了後に自動/clearしてコンテキストをリセットする"
+acceptance_criteria:
+  - "karo.md に Phase完了後/clearプロトコルが明記されていること"
+  - "実行条件が明確: 当該Phase全subtask=assigned, 未読inbox=0, 報告待機中"
+  - "実行手順が明確: 確認→/clear→Session Start→状態再把握→待機"
+  - "配分中（subtask YAML書き込み中）は実行しない旨が明記されていること"
+  - "health_checker.shのcompact-recovery対応との整合性があること"
+command: |
+  リポジトリ: /Users/odakin/Claude/multi-agent-shogun
+
+  背景:
+  cmd_269の分析結果より、案C/I（Phase完了後/clearプロトコル）が最高スコア25/30。
+  大殿様の裁可済み。即日実装。
+
+  実装内容:
+  instructions/karo.md に「Phase完了後/clearプロトコル」セクションを追加。
+
+  追記内容（cmd_269 s269e の推奨テキストに準拠）:
+  - 実行条件: 当該Phase全subtask=assigned完了, 未読inbox=0, 報告待機状態
+  - 実行手順:
+    1. 全subtaskがassigned済みか確認
+    2. queue/inbox/karo.yaml に read:false がないか確認
+    3. /clear 実行
+    4. Session Start手順（CLAUDE.md）に従い復帰
+    5. queue/cmds/から現在のcmdを再読み込み、Phase状態を把握
+    6. 報告待ちで待機
+  - 禁止: Phase配分の途中（subtask YAML書き込み中）での/clear
+
+  対象ファイル:
+  - /Users/odakin/Claude/multi-agent-shogun/instructions/karo.md
+project: multi-agent-shogun
+priority: critical
+
+phases:
+  - phase: 1
+    mode: sequential
+    subtasks:
+      - id: s282a
+        description: |
+          【目的】karo.md に Phase完了後/clearプロトコルを追記
+          【入力】
+            - /Users/odakin/Claude/multi-agent-shogun/instructions/karo.md
+            - cmd_269 レポート（queue/reports/ashigaru1_report.yaml の s269e セクション）
+          【出力】修正済みファイル:
+            1. Phase完了後/clearの実行条件・手順・禁止事項を明記
+            2. 既存のSession Start / Recovery手順との整合性
+            3. 約15行の追記
+          【完了条件】karo.md に/clearプロトコルが追記済み。git commit済み
+        target_path: "/Users/odakin/Claude/multi-agent-shogun/instructions/karo.md"
+        bloom_level: L2
+        status: done
+  - phase: 2
+    mode: qc
+    qc_for: [s282a]

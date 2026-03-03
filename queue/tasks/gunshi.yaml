@@ -1,0 +1,66 @@
+task:
+  task_id: gunshi_qc_cmd_280_281_282
+  parent_cmd: cmd_280, cmd_281, cmd_282
+  type: quality_check
+  status: done
+  priority: high
+  bloom_level: L3
+  description: |
+    【QC】cmd_280, cmd_281, cmd_282 の品質確認
+
+    【成果物】
+
+    【cmd_280】battle_monitor グリッド幅適応
+    - ashigaru4 による修正: battle_monitor.sh (commit 0596c6b)
+    - 修正内容:
+      (1) 動的列数計算: term_w<60→2列, term_w≥60→3列
+      (2) CELL_W = max(8, (term_w-borders)/num_cols)
+      (3) Python→bash grid_meta行で伝達
+      (4) ASCII +/-罫線でCJK誤カウント回避
+      (5) 全9エージェント表示確認
+      (6) bash -n PASS, push済み
+
+    【cmd_281】battle_monitor チラツキ解消
+    - ashigaru5 による修正: battle_monitor.sh (commit d3ccf4b)
+    - 修正内容:
+      (1) trim_ansi_line subshell fork 排除
+      (2) /dev/shm tmpfile 経由一括出力
+      (3) bash -n 構文チェック PASS
+
+    【cmd_282】karo.md に Phase完了後/clearプロトコル追記
+    - ashigaru2 による修正: instructions/karo.md (commit e7903fc)
+    - 修正内容:
+      (1) Phase完了後/clearプロトコルセクション追記（約15行）
+      (2) cmd_269 推奨テキストに準拠
+      (3) 実行条件・手順・禁止事項を明記
+
+    【Acceptance Criteria】
+
+    【cmd_280】
+    1. 47列ペインで全9エージェントが表示されること
+    2. グリッド罫線がペイン幅内に収まること
+    3. ヘッダー「🏯 大殿様の執務室」が表示されること
+    4. bash -n 構文チェック PASS
+
+    【cmd_281】
+    1. battle_monitor チラツキが解消されていること（目視確認）
+    2. 出力行がペイン幅内に収まっていること
+    3. bash -n 構文チェック PASS
+
+    【cmd_282】
+    1. karo.md に Phase完了後/clear セクションが追記されていること
+    2. 既存 Session Start / Recovery と整合性を保つこと
+    3. 実行条件・手順・禁止事項が明記されていること
+
+    【検証手順】
+    1. git log で各commit確認: 0596c6b (s280a), d3ccf4b (s281a), e7903fc (s282a)
+    2. battle_monitor.sh の /dev/shm 一括出力 + 動的列数実装を確認
+    3. bash -n 構文チェック全て PASS
+    4. karo.md の追記内容確認
+    5. 実機テスト: battle_monitor 目視でチラツキなし + グリッド47列対応確認
+
+  timestamp: '2026-03-03T14:23:00+09:00'
+  ashigaru_report_ids:
+    - ashigaru4_s280a
+    - ashigaru5_s281a
+    - ashigaru2_s282a

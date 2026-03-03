@@ -1,0 +1,53 @@
+id: cmd_281
+status: done
+timestamp: "2026-03-03T14:18:00+09:00"
+purpose: "battle_monitor上部のチラツキを完全解消する"
+acceptance_criteria:
+  - "battle_monitor表示がチラつかないこと（目視確認）"
+  - "カーソルホーム+一括出力方式が正しく動作すること"
+  - "1秒間隔の更新でも画面が安定していること"
+command: |
+  リポジトリ: /Users/odakin/Claude/multi-agent-shogun
+
+  問題:
+  battle_monitor.sh の右ペイン上部がチラつく。
+  現在の実装: \033[H（カーソルホーム）→ 全行バッファ → printf '%b' で一括出力。
+  一括出力にしたが、まだチラツキが残っている。特に上部が顕著。
+
+  原因候補:
+  1. trim_ansi_line が subshell ($(...)) で呼ばれ、行ごとにforkしている
+     → バッファリングされていても fork のオーバーヘッドで出力が分断
+  2. printf '%b' が大きなバッファを分割出力している
+  3. render() 内のデータ取得（Python subprocess）とレンダリングの間にラグがある
+
+  修正方針:
+  1. trim_ansi_line の subshell fork を排除（関数内で直接変数に書く or Pythonで一括処理）
+  2. 最終出力を /dev/shm や tmpfile に書いてから cat で一括転送
+  3. または全レンダリングをPython側に移してbashの制約を回避
+  4. tput civis（カーソル非表示）が効いているか確認
+
+  対象ファイル:
+  - /Users/odakin/Claude/multi-agent-shogun/scripts/battle_monitor.sh
+project: multi-agent-shogun
+priority: high
+
+phases:
+  - phase: 1
+    mode: sequential
+    subtasks:
+      - id: s281a
+        description: |
+          【目的】battle_monitor上部のチラツキを完全解消する
+          【入力】
+            - /Users/odakin/Claude/multi-agent-shogun/scripts/battle_monitor.sh
+          【出力】修正済みファイル:
+            1. チラツキなしの安定表示
+            2. 方針: trim処理のfork排除 or 一時ファイル経由一括出力 or Python統合
+            3. 既存の表示内容・レイアウトは変更しないこと
+          【完了条件】目視でチラツキがないこと。git commit済み
+        target_path: "/Users/odakin/Claude/multi-agent-shogun/scripts/battle_monitor.sh"
+        bloom_level: L3
+        status: done
+  - phase: 2
+    mode: qc
+    qc_for: [s281a]
