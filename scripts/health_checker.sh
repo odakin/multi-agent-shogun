@@ -133,6 +133,11 @@ send_nudge() {
     local pane="$2"
     local message="$3"
 
+    # 将軍への自動ナッジを抑制（多層防御: check_agent のガードの突破防止）
+    if [ "$agent" = "shogun" ]; then
+        return 0
+    fi
+
     # Cooldown check — don't re-nudge same agent within 5 minutes
     if ! is_nudge_cooled_down "$agent"; then
         return 0  # recently nudged, skip
