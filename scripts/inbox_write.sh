@@ -43,7 +43,7 @@ while [ $attempt -lt $max_attempts ]; do
         IW_INBOX="$INBOX" IW_MSG_ID="$MSG_ID" IW_FROM="$FROM" \
         IW_TIMESTAMP="$TIMESTAMP" IW_TYPE="$TYPE" IW_CONTENT="$CONTENT" \
         "$SCRIPT_DIR/.venv/bin/python3" -c "
-import yaml, sys, os
+import yaml, sys, os, tempfile
 
 try:
     inbox = os.environ['IW_INBOX']
@@ -101,7 +101,6 @@ try:
         data['messages'] = unread + read[-30:]
 
     # Atomic write: tmp file + rename (prevents partial reads)
-    import tempfile
     tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(inbox), suffix='.tmp')
     try:
         with os.fdopen(tmp_fd, 'w') as f:
