@@ -922,9 +922,6 @@ declare -A PREV_WIN_DIMS=()          # ウィンドウリサイズ検知用（wi
 dynamic_resize_by_content() {
     local session="$1"
 
-    # agent_is_busy_check が使えなければスキップ
-    type agent_is_busy_check &>/dev/null || return
-
     # 9ペインウィンドウを検索
     local win_id=""
     local wid
@@ -949,11 +946,11 @@ dynamic_resize_by_content() {
 
     # 全ペイン情報を収集
     local pane_list
-    pane_list=$(_tmux list-panes -t "$win_id" -F '#{pane_id} #{@agent_id}' 2>/dev/null)
+    pane_list=$(_tmux list-panes -t "$win_id" -F '#{pane_id}' 2>/dev/null)
     [ -z "$pane_list" ] && return
 
-    local pane_ids=() pane_nums=() deltas_arr=() busy_arr=()
-    while IFS=' ' read -r pid aid; do
+    local pane_ids=() pane_nums=() deltas_arr=()
+    while IFS=' ' read -r pid; do
         pane_ids+=("$pid")
         pane_nums+=("${pid#%}")    # %5 → 5
 
@@ -977,13 +974,6 @@ dynamic_resize_by_content() {
 
         PANE_PREV_TOTAL_LINES[$pid]=$total_lines
         deltas_arr+=("$delta")
-
-        # busy 判定（delta=0時の目標高さ算出に使用）
-        local is_busy=0
-        if [ -n "$aid" ] && [ "$aid" != "..." ]; then
-            agent_is_busy_check "$pid" 2>/dev/null && is_busy=1
-        fi
-        busy_arr+=("$is_busy")
     done <<< "$pane_list"
 
     [ "${#pane_ids[@]}" -ne 9 ] && return
@@ -1007,11 +997,10 @@ dynamic_resize_by_content() {
 
     local heights=()
     for col in 0 1 2; do
-        # 列内3ペインのデルタ・busy状態を取得
-        local col_deltas=() col_busy=()
+        # 列内3ペインのデルタを取得
+        local col_deltas=()
         for row in 0 1 2; do
             col_deltas+=("${deltas_arr[$((col * 3 + row))]}")
-            col_busy+=("${busy_arr[$((col * 3 + row))]}")
         done
 
         # 列内デルタ合計
@@ -1020,38 +1009,13 @@ dynamic_resize_by_content() {
         # 各ペインの目標高さを算出
         local col_desired=()
         if [ "$total_delta" -le 0 ]; then
-            # 今サイクル出力なし
-            # 全ペインidle判定: busy が0件なら全idle → 均等化（1:1:1）
-            local col_all_idle=1
+            # 今サイクル出力なし → 列全体を均等化（1:1:1）
+            # busy判定に依存しない: /clear直後の偽idle（pane空白・tmuxソケット不一致等）で
+            # MIN_PANE_HEIGHTに押し込まれる問題を排除する。
+            # delta==0時は全ペイン等サイズが安全（出力が再開すれば即proportional拡大）
             for row in 0 1 2; do
-                [ "${col_busy[$row]}" -eq 1 ] && col_all_idle=0 && break
+                col_desired+=("$(( usable_h / 3 ))")
             done
-
-            if [ "$col_all_idle" -eq 1 ]; then
-                # 全idle → 均等サイズ（1:1:1）に戻す
-                for row in 0 1 2; do
-                    col_desired+=("$(( usable_h / 3 ))")
-                done
-            else
-                # 一部busy → busy=比例配分（idle分を除いた残りをbusy数で等分）, idle=MIN
-                # 旧: busy=usable_h/3 はrow=1中段busyペインのdesiredが初期等分値と同じになり
-                # 60%収束で変化ゼロ→端数がrow=2に集中→中段が大きくならないバグ（s284a修正）
-                local busy_count_col=0
-                for row in 0 1 2; do
-                    [ "${col_busy[$row]}" -eq 1 ] && busy_count_col=$((busy_count_col + 1))
-                done
-                local idle_count_col=$(( 3 - busy_count_col ))
-                local busy_space=$(( usable_h - idle_count_col * MIN_PANE_HEIGHT ))
-                local busy_per=$(( busy_count_col > 0 ? busy_space / busy_count_col : usable_h / 3 ))
-                [ "$busy_per" -lt $(( usable_h / 3 )) ] && busy_per=$(( usable_h / 3 ))
-                for row in 0 1 2; do
-                    if [ "${col_busy[$row]}" -eq 1 ]; then
-                        col_desired+=("$busy_per")
-                    else
-                        col_desired+=("$MIN_PANE_HEIGHT")
-                    fi
-                done
-            fi
         else
             # 出力行数比例で目標高さを算出
             for row in 0 1 2; do
