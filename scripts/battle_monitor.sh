@@ -73,15 +73,20 @@ trap cleanup_terminal EXIT INT TERM
 # ─── CJK-aware string truncation ───
 # ASCII = width 1, non-ASCII (CJK/emoji) = width 2
 truncate_str() {
-    local str="$1" max="$2" i=0 w=0
+    local str="$1" max="$2" i=0 w=0 last_fit_i=0
     while [[ $i -lt ${#str} ]]; do
         local c="${str:$i:1}"
-        [[ "$c" == [[:ascii:]] ]] && ((w++)) || ((w+=2))
-        if [[ $w -ge $max ]]; then
-            echo "${str:0:$i}…"
+        local cw=1
+        [[ "$c" == [[:ascii:]] ]] || cw=2
+        if (( w + cw > max )); then
+            # Adding this char would overflow; truncate at last safe cut point.
+            echo "${str:0:$last_fit_i}…"
             return
         fi
-        ((i++))
+        (( w += cw ))
+        (( i++ ))
+        # Track largest cut point where str[0:i] + '…' fits within max columns.
+        (( w <= max - 1 )) && last_fit_i=$i
     done
     echo "$str"
 }
@@ -452,13 +457,12 @@ render() {
         done
     fi
 
-    # Output frame — 行末消去付きで出力（残像・前フレーム文字を完全消去）
-    printf '\033[H'
+    # Output frame — 毎サイクル完全消去 + 行末消去で残像ゼロ
+    printf '\033[2J\033[H'
     local _line
     while IFS= read -r _line; do
         printf '%s\033[K\n' "$_line"
     done < <(printf '%b' "$buf")
-    printf '\033[J'
 }
 
 # ─── Main ───
