@@ -2,7 +2,7 @@ task:
   task_id: gunshi_qc_cmd_285
   parent_cmd: cmd_285
   type: quality_check
-  status: assigned
+  status: done
   priority: medium
   bloom_level: L2
   description: |
