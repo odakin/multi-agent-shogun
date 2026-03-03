@@ -289,6 +289,32 @@ except Exception:
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# ペイン内容から実際に稼働中のモデルを検出
+# Claude Code バナー "Sonnet 4.6 · Claude Max" 等をパースする
+# ═══════════════════════════════════════════════════════════════════════════════
+detect_pane_model() {
+    local pane_id="$1"
+    local content
+    content=$(timeout 2 tmux capture-pane -t "$pane_id" -p 2>/dev/null | head -5)
+    if [ -z "$content" ]; then
+        echo ""
+        return
+    fi
+    # Claude Code バナーから "Opus 4.6", "Sonnet 4.6", "Haiku 4.5" 等を検出
+    local model_full
+    model_full=$(echo "$content" | grep -oE '(Opus|Sonnet|Haiku) [0-9]+\.[0-9]+' | head -1)
+    if [ -n "$model_full" ]; then
+        # "Sonnet 4.6" → "Sonnet" (モデルファミリーのみ返す)
+        echo "${model_full%% *}"
+        return
+    fi
+    echo ""
+}
+
+# model reconciliation 用: 送信済みフラグ（エージェントごと）
+declare -A MODEL_RECONCILED 2>/dev/null || true
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # エージェント名に基づくペインスタイル（fg + bg）
 # fg を明示指定しないとライトモードのデフォルト黒文字が暗背景で読めなくなる
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -400,11 +426,31 @@ style_pane() {
         _tmux set-option -p -t "$pane_id" @agent_id "$agent_name" 2>/dev/null
     fi
 
-    # @model_name: settings.yaml の値を正とする（起動時の自己登録より優先）
-    local current_model
-    current_model=$(_tmux show-options -p -t "$pane_id" -v @model_name 2>/dev/null)
-    if [ "$current_model" != "$model" ]; then
-        _tmux set-option -p -t "$pane_id" @model_name "$model" 2>/dev/null
+    # @model_name: ペインから実際のモデルを検出して表示（settings.yaml 上書き廃止）
+    local actual_model
+    actual_model=$(detect_pane_model "$pane_id")
+    if [ -n "$actual_model" ]; then
+        local current_model
+        current_model=$(_tmux show-options -p -t "$pane_id" -v @model_name 2>/dev/null)
+        if [ "$current_model" != "$actual_model" ]; then
+            _tmux set-option -p -t "$pane_id" @model_name "$actual_model" 2>/dev/null
+        fi
+        # Model reconciliation: 設定値と実際が異なれば /model 送信（一度だけ）
+        local config_model="$model"  # get_model_for_agent() の結果（settings.yaml の値）
+        local actual_lower="${actual_model,,}"
+        local config_lower="${config_model,,}"
+        if [ "$actual_lower" != "$config_lower" ] && [ "${MODEL_RECONCILED[$agent_name]:-}" != "$config_lower" ]; then
+            log_info "Model mismatch: ${agent_name} actual=${actual_model} config=${config_model} → sending /model ${config_lower}"
+            bash "$SCRIPT_DIR/scripts/inbox_write.sh" "$agent_name" "/model ${config_lower}" model_switch monitor 2>/dev/null &
+            MODEL_RECONCILED[$agent_name]="$config_lower"
+        fi
+    else
+        # バナー未検出（起動中など）→ settings.yaml の値をフォールバックとして使用
+        local current_model
+        current_model=$(_tmux show-options -p -t "$pane_id" -v @model_name 2>/dev/null)
+        if [ -z "$current_model" ] || [ "$current_model" = "..." ]; then
+            _tmux set-option -p -t "$pane_id" @model_name "$model" 2>/dev/null
+        fi
     fi
 
     # @current_task: task YAML から task_id を読み取り設定（ペイン出力文字列マッチ廃止）
