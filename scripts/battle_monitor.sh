@@ -11,23 +11,18 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# ─── 排他起動: 古い battle_monitor を自動 kill ───
-PIDFILE="$SCRIPT_DIR/.battle_monitor.pid"
-if [ -f "$PIDFILE" ]; then
-    old_pid=$(cat "$PIDFILE" 2>/dev/null)
-    if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
-        kill -9 "$old_pid" 2>/dev/null
-        sleep 0.5
-    fi
+# ─── 排他起動: flock で1インスタンスのみ許可 ───
+LOCKFILE="$SCRIPT_DIR/.battle_monitor.lock"
+exec 9>"$LOCKFILE"
+if ! flock -n 9; then
+    echo "battle_monitor is already running. Killing old instance..." >&2
+    # ロック保持者のPIDを取得して kill
+    old_pid=$(cat "$LOCKFILE" 2>/dev/null)
+    [ -n "$old_pid" ] && kill "$old_pid" 2>/dev/null
+    sleep 1
+    flock -n 9 || { echo "Cannot acquire lock. Exiting." >&2; exit 1; }
 fi
-# 自分自身以外の battle_monitor も掃除（kill失敗時はSIGTERMでリトライ）
-for _sig in 9 15 9; do
-    pgrep -f "battle_monitor.sh" | grep -v $$ | xargs kill -"$_sig" 2>/dev/null || true
-    sleep 0.3
-    pgrep -f "battle_monitor.sh" | grep -v $$ | head -1 | read -r _remain 2>/dev/null || break
-done
-echo $$ > "$PIDFILE"
-trap 'rm -f "$PIDFILE"' EXIT
+echo $$ > "$LOCKFILE"
 PYTHON="$SCRIPT_DIR/.venv/bin/python3"
 
 INTERVAL=1
