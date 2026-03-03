@@ -1069,12 +1069,41 @@ YAML
     echo "$output" | grep -q "rc1=1 rc2=1"  # 1=not-throttled, 1=not-throttled (60s cooldown expired)
 }
 
-# --- T-SHOOK-002: Claude Code count change bypasses throttle (post PR#75: standard behavior) ---
+# --- T-SHOOK-002: Claude Code throttle is time-based (count change no longer bypasses) ---
+# FIX-1: throttle changed to time-based only to prevent SC-1 bypass attack where
+# rapid consecutive inbox_write calls increment count and bypass throttle.
 
-@test "T-SHOOK-002: Claude Code count change bypasses throttle (stop-hook-supplementary)" {
+@test "T-SHOOK-002: Claude Code throttle is time-based (count change does NOT bypass)" {
     run bash -c '
         source "'"$TEST_HARNESS"'"
         CLI_TYPE="claude"
+        LAST_NUDGE_TS=0
+        LAST_NUDGE_COUNT=""
+
+        # First call: should pass through (no previous nudge)
+        should_throttle_nudge 1
+        rc1=$?
+
+        # Simulate 30s elapsed, count changed from 1 to 2 (within 60s cooldown)
+        LAST_NUDGE_TS=$(($(date +%s) - 30))
+
+        # FIX-1: time-based throttle — count change (1→2) no longer bypasses.
+        # 30s < 60s cooldown → throttled regardless of count change.
+        should_throttle_nudge 2
+        rc2=$?
+
+        echo "rc1=$rc1 rc2=$rc2"
+    '
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -q "rc1=1 rc2=0"  # rc1=not-throttled, rc2=throttled (time-based)
+}
+
+# --- T-SHOOK-003: Non-Claude CLIs also use time-based throttle ---
+
+@test "T-SHOOK-003: Non-Claude CLIs also use time-based throttle (count change does NOT bypass)" {
+    run bash -c '
+        source "'"$TEST_HARNESS"'"
+        CLI_TYPE="copilot"
         LAST_NUDGE_TS=0
         LAST_NUDGE_COUNT=""
 
@@ -1082,44 +1111,17 @@ YAML
         should_throttle_nudge 1
         rc1=$?
 
-        # Simulate 30s elapsed, count changed from 1 to 2
+        # Simulate 30s elapsed, count changed from 1 to 2 (within 60s cooldown)
         LAST_NUDGE_TS=$(($(date +%s) - 30))
 
-        # Post PR#75: Claude uses standard throttle logic.
-        # Count change (1→2) bypasses throttle for ALL CLIs including claude.
+        # FIX-1: time-based throttle — count change no longer bypasses.
         should_throttle_nudge 2
         rc2=$?
 
         echo "rc1=$rc1 rc2=$rc2"
     '
     [ "$status" -eq 0 ]
-    echo "$output" | grep -q "rc1=1 rc2=1"  # Both: 1=not-throttled (count change bypasses)
-}
-
-# --- T-SHOOK-003: Non-Claude CLIs bypass throttle on count change ---
-
-@test "T-SHOOK-003: Non-Claude CLIs still bypass throttle on count change" {
-    run bash -c '
-        source "'"$TEST_HARNESS"'"
-        CLI_TYPE="copilot"
-        LAST_NUDGE_TS=0
-        LAST_NUDGE_COUNT=""
-
-        # First call
-        should_throttle_nudge 1
-        rc1=$?
-
-        # Simulate 30s elapsed, count changed from 1 to 2
-        LAST_NUDGE_TS=$(($(date +%s) - 30))
-
-        # For copilot, count change (1→2) SHOULD bypass throttle
-        should_throttle_nudge 2
-        rc2=$?
-
-        echo "rc1=$rc1 rc2=$rc2"
-    '
-    [ "$status" -eq 0 ]
-    echo "$output" | grep -q "rc1=1 rc2=1"  # Both pass through (count changed)
+    echo "$output" | grep -q "rc1=1 rc2=0"  # rc1=not-throttled, rc2=throttled (time-based)
 }
 
 # --- T-CRESET-001: send_context_reset suppresses /clear for karo ---
