@@ -2,19 +2,9 @@
 # ═══════════════════════════════════════════════════════════════
 # battle_monitor.sh — 「大殿様の執務室」リアルタイム戦況モニター
 # ═══════════════════════════════════════════════════════════════
-# 設計思想: 大殿様が2秒で状況を把握できること
-#   アクション必要 → 画面が叫ぶ（🚨裁可待ちセクション）
-#   アクション不要 → 画面は静か
-#   情報は4階層: 要アクション → 指令状況 → 稼働状況 → 履歴
+# 4セクション: 🚨裁可待ち / 📋指令 / ⚔稼働状況 / 📜直近
 #
-# 4セクション構成:
-#   1. 🚨 裁可待ち  — lord_pending.yaml (awaiting_lord)
-#   2. 📋 指令      — queue/cmds/ + archive (直近8件)
-#   3. ⚔  稼働状況  — 3列グリッド (モニタ配置準拠)
-#   4. 📜 直近      — 最新イベント5行
-#
-# Usage:
-#   bash scripts/battle_monitor.sh [--interval N] [--compact]
+# Usage: bash scripts/battle_monitor.sh [--interval N] [--compact]
 # ═══════════════════════════════════════════════════════════════
 
 set -uo pipefail
@@ -22,7 +12,6 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON="$SCRIPT_DIR/.venv/bin/python3"
 
-# ─── Args ───
 INTERVAL=1
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -33,7 +22,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# ─── Colors ───
 C_RESET=$'\033[0m'
 C_BOLD=$'\033[1m'
 C_DIM=$'\033[2m'
@@ -41,22 +29,12 @@ C_GREEN=$'\033[32m'
 C_YELLOW=$'\033[33m'
 C_CYAN=$'\033[36m'
 
-# ─── 3-Column grid layout (row-major order) ───
-#   左列:  karo,      ashigaru1, ashigaru2
-#   中列:  ashigaru3, ashigaru4, ashigaru5
-#   右列:  ashigaru6, ashigaru7, gunshi
-GRID=(
-    karo      ashigaru3 ashigaru6
-    ashigaru1 ashigaru4 ashigaru7
-    ashigaru2 ashigaru5 gunshi
-)
+CELL_W=20  # Grid column visual width
 
-# ─── Activity feed ring buffer ───
 declare -a ACTIVITY_LOG=()
 declare -A PREV_MSG_COUNT=()
 MAX_ACTIVITY=100
 
-# ─── Terminal setup / cleanup ───
 setup_terminal() {
     tput smcup 2>/dev/null
     tput civis 2>/dev/null
@@ -70,41 +48,8 @@ cleanup_terminal() {
 
 trap cleanup_terminal EXIT INT TERM
 
-# ─── CJK-aware string truncation ───
-# ASCII = width 1, non-ASCII (CJK/emoji) = width 2
-truncate_str() {
-    local str="$1" max="$2" i=0 w=0 last_fit_i=0
-    while [[ $i -lt ${#str} ]]; do
-        local c="${str:$i:1}"
-        local cw=1
-        [[ "$c" == [[:ascii:]] ]] || cw=2
-        if (( w + cw > max )); then
-            # Adding this char would overflow; truncate at last safe cut point.
-            echo "${str:0:$last_fit_i}…"
-            return
-        fi
-        (( w += cw ))
-        (( i++ ))
-        # Track largest cut point where str[0:i] + '…' fits within max columns.
-        (( w <= max - 1 )) && last_fit_i=$i
-    done
-    echo "$str"
-}
-
-# ─── Agent status check ───
-is_active() {
-    case "$1" in assigned|in_progress) return 0 ;; *) return 1 ;; esac
-}
-
-# ─── Single Python data fetch (all sections in one subprocess) ───
-# Output format (tab-separated):
-#   lord\tcmd_id\ttitle\tsummary\tage
-#   cmd\tcmd_id\temoji\tpurpose\tarchived(0|1)
-#   agent\tname\ttask_id\tstatus
-#   event\tcontent
-#   count\tagent\tN
+# ─── Single Python data fetch (all sections) ───
 fetch_all_data() {
-    # Build PREV_MSG_COUNT as Python dict literal
     local prev_counts_py="{}"
     if [[ ${#PREV_MSG_COUNT[@]} -gt 0 ]]; then
         local pairs=""
@@ -115,16 +60,36 @@ fetch_all_data() {
     fi
 
     "$PYTHON" - <<PYEOF 2>/dev/null || true
-import yaml, os, glob
+import yaml, glob, unicodedata
 from datetime import datetime, timezone
 
 root = '$SCRIPT_DIR'
 prev_counts = ${prev_counts_py}
+CELL_W = ${CELL_W}
+
 agents = ['karo','ashigaru1','ashigaru2','ashigaru3','ashigaru4',
           'ashigaru5','ashigaru6','ashigaru7','gunshi']
 all_targets = agents + ['shogun']
 
-# ── Section 1: Lord pending ──
+def vw(s):
+    return sum(2 if unicodedata.east_asian_width(c) in ('W','F') else 1 for c in str(s))
+
+def pad_to(s, w):
+    s = str(s)
+    cur = vw(s)
+    if cur <= w:
+        return s + ' ' * (w - cur)
+    out, ow = '', 0
+    for c in s:
+        cw = 2 if unicodedata.east_asian_width(c) in ('W','F') else 1
+        if ow + cw > w - 1:
+            out += '…'
+            break
+        out += c
+        ow += cw
+    return out + ' ' * max(0, w - vw(out))
+
+# ── 1. Lord pending ──
 try:
     with open(f'{root}/queue/lord_pending.yaml') as f:
         lp = yaml.safe_load(f) or {}
@@ -142,92 +107,128 @@ try:
             age = f'{h}時間前' if h < 24 else f'{h//24}日前'
         except:
             pass
-        cmd_id  = str(item.get('cmd_id',  '?')).replace('\t', ' ')
-        title   = str(item.get('title',   '?')).replace('\t', ' ')
-        summary = str(item.get('summary', '')).replace('\t', ' ')
-        print(f'lord\t{cmd_id}\t{title}\t{summary}\t{age}')
+        T = lambda x: str(x).replace('\t', ' ')
+        print(f"lord\t{T(item.get('cmd_id','?'))}\t{T(item.get('title','?'))}\t{T(item.get('summary',''))}\t{age}")
 except:
     pass
 
-# ── Section 2: Commands (newest first, active before archived, max 8) ──
+# ── 2. Commands ──
 EMOJI = {
     'pending': '⏳', 'in_progress': '🔄', 'done': '✅',
     'qc_pass': '✅', 'failed': '❌', 'deferred': '⏸', 'qc_fail': '❌',
 }
 try:
     entries = []
-    for pattern, is_arch in [
-        (f'{root}/queue/cmds/*.yaml', False),
-        (f'{root}/queue/archive/cmd_*.yaml', True),
+    for pat, arch in [
+        (f'{root}/queue/cmds/*.yaml', 0),
+        (f'{root}/queue/archive/cmd_*.yaml', 1),
     ]:
-        for cf in sorted(glob.glob(pattern)):
+        for cf in sorted(glob.glob(pat)):
             try:
                 with open(cf) as f:
                     c = yaml.safe_load(f) or {}
                 if not isinstance(c, dict):
                     continue
-                cid     = str(c.get('id') or '?')
-                purpose = str(c.get('purpose') or c.get('description', '') or '').strip()[:38]
+                cid = str(c.get('id') or '?')
+                purpose = str(c.get('purpose') or c.get('description', '') or '').strip()
                 purpose = purpose.replace('\t', ' ').replace('\n', ' ')
-                status  = str(c.get('status', '?') or '?')
+                status = str(c.get('status', '?') or '?')
                 try:
                     num = int(cid.replace('cmd_', ''))
                 except:
                     num = 0
-                entries.append((num, cid, EMOJI.get(status, status), purpose, '1' if is_arch else '0'))
+                entries.append((num, cid.replace('cmd_', ''), EMOJI.get(status, status), purpose, str(arch)))
             except:
                 pass
     entries.sort(key=lambda x: x[0], reverse=True)
-    for _, cid, emoji, purpose, arch in entries[:8]:
-        print(f'cmd\t{cid}\t{emoji}\t{purpose}\t{arch}')
+    for _, num_s, emoji, purpose, is_arch in entries[:8]:
+        print(f'cmd\t{num_s}\t{emoji}\t{purpose}\t{is_arch}')
 except:
     pass
 
-# ── Section 3: Agent task states ──
-for agent in agents:
-    task_id, task_status = '---', '---'
+# ── 3. Agent grid ──
+GRID = [
+    ['karo',      'ashigaru3', 'ashigaru6'],
+    ['ashigaru1', 'ashigaru4', 'ashigaru7'],
+    ['ashigaru2', 'ashigaru5', 'gunshi'],
+]
+FIXED_ICONS = {
+    'karo':   ('🏯', '家老', 'karo'),
+    'gunshi': ('🧠', '軍師', 'gunshi'),
+}
+ASHIGARU_NAMES = {
+    'ashigaru1': '足軽１', 'ashigaru2': '足軽２', 'ashigaru3': '足軽３',
+    'ashigaru4': '足軽４', 'ashigaru5': '足軽５', 'ashigaru6': '足軽６',
+    'ashigaru7': '足軽７',
+}
+
+agent_states = {}
+active_c = idle_c = 0
+for ag in agents:
+    tid, tstat = '---', '---'
     try:
-        with open(f'{root}/queue/tasks/{agent}.yaml') as f:
+        with open(f'{root}/queue/tasks/{ag}.yaml') as f:
             t = (yaml.safe_load(f) or {}).get('task', {}) or {}
-            task_id     = str(t.get('task_id',  '---') or '---')
-            task_status = str(t.get('status',   '---') or '---')
+            tid   = str(t.get('task_id', '---') or '---')
+            tstat = str(t.get('status',  '---') or '---')
     except:
         pass
-    print(f'agent\t{agent}\t{task_id}\t{task_status}')
+    agent_states[ag] = (tid, tstat)
+    if ag.startswith('ashigaru'):
+        if tstat in ('assigned', 'in_progress'):
+            active_c += 1
+        else:
+            idle_c += 1
 
-# ── Section 4: Activity events ──
-new_events = []
+print(f'summary\t{active_c}\t{idle_c}')
+
+for ri, row in enumerate(GRID):
+    for ci, ag in enumerate(row):
+        tid, tstat = agent_states.get(ag, ('---', '---'))
+        active = tstat in ('assigned', 'in_progress')
+        if ag in FIXED_ICONS:
+            icon, name, role = FIXED_ICONS[ag]
+        else:
+            name = ASHIGARU_NAMES.get(ag, ag)
+            icon = '⚔' if active else '💤'
+            role = 'ashigaru'
+        content = f'{icon}{name} {tid}' if active else f'{icon}{name} ---'
+        cell = pad_to(content, CELL_W)
+        print(f'cell\t{ri}\t{ci}\t{cell}\t{"active" if active else "idle"}\t{role}')
+
+# ── 4. Events + unread ──
+new_events, all_seed = [], []
 msg_counts = {}
-first_run  = not bool(prev_counts)
-all_seed   = []
+unread_total = 0
+first_run = not bool(prev_counts)
 
-for target in all_targets:
+for tgt in all_targets:
     try:
-        with open(f'{root}/queue/inbox/{target}.yaml') as f:
-            msgs = (yaml.safe_load(f) or {}).get('messages', []) or []
+        with open(f'{root}/queue/inbox/{tgt}.yaml') as f:
+            data = yaml.safe_load(f) or {}
+            msgs = data.get('messages', []) or []
     except:
         msgs = []
-    msg_counts[target] = len(msgs)
-    prev = prev_counts.get(target, 0)
+    msg_counts[tgt] = len(msgs)
+    unread_total += sum(1 for m in msgs if not m.get('read', True))
+    prev = prev_counts.get(tgt, 0)
+    def fmt(m):
+        ts = str(m.get('timestamp', ''))
+        ts_s = ts[11:16] if len(ts) > 16 else ts[-5:]
+        cont = str(m.get('content', ''))[:50].replace('\n', ' ').replace('\t', ' ')
+        return f"[{ts_s}] {m.get('from','?')}: {cont}"
     if first_run:
         for m in msgs[-3:]:
-            ts   = str(m.get('timestamp', ''))
-            ts_s = ts[11:16] if len(ts) > 16 else ts[-5:]
-            frm  = str(m.get('from', '?'))
-            cont = str(m.get('content', ''))[:50].replace('\n', ' ').replace('\t', ' ')
-            all_seed.append((ts, f'[{ts_s}] {frm}: {cont}'))
+            all_seed.append((str(m.get('timestamp', '')), fmt(m)))
     elif len(msgs) > prev:
         for m in msgs[prev:]:
-            ts   = str(m.get('timestamp', ''))
-            ts_s = ts[11:16] if len(ts) > 16 else ts[-5:]
-            frm  = str(m.get('from', '?'))
-            cont = str(m.get('content', ''))[:50].replace('\n', ' ').replace('\t', ' ')
-            new_events.append(f'[{ts_s}] {frm}: {cont}')
+            new_events.append(fmt(m))
 
 if first_run:
     all_seed.sort(key=lambda x: x[0])
     new_events = [m[1] for m in all_seed[-10:]]
 
+print(f'unread\t{unread_total}')
 for e in new_events:
     print(f'event\t{e}')
 for k, v in msg_counts.items():
@@ -235,234 +236,159 @@ for k, v in msg_counts.items():
 PYEOF
 }
 
-# ─── Main render function ───
+# ─── Main render ───
 render() {
-    # Terminal dimensions — stty size 優先、失敗時は tput、最終フォールバック 40x80
     local term_h term_w
     if read -r term_h term_w < <(stty size 2>/dev/null) && [[ -n "$term_w" && "$term_w" -gt 0 ]]; then
-        :  # stty size 成功
+        :
     else
         term_w=$(tput cols 2>/dev/null || echo 80)
         term_h=$(tput lines 2>/dev/null || echo 40)
     fi
 
-    # Fetch all data (single Python call)
     local raw
     raw=$(fetch_all_data)
 
-    # Fetch model names from tmux @model_name pane option
-    declare -A AGENT_MODEL=()
-    while IFS=' ' read -r ag_id ag_model; do
-        [[ -n "$ag_id" && -n "$ag_model" ]] && AGENT_MODEL["$ag_id"]="${ag_model,,}"
-    done < <(tmux list-panes -a -F '#{@agent_id} #{@model_name}' 2>/dev/null)
-
-    # Parse output
     declare -a LORD_ITEMS=() CMD_ITEMS=()
-    declare -A AGENT_TASK_ID=() AGENT_TASK_STATUS=()
+    declare -A GRID_CELLS=() GRID_STATUS=() GRID_ROLE=()
+    local active_count=0 idle_count=0 unread_count=0
 
-    while IFS=$'\t' read -r key v1 v2 v3 v4; do
+    while IFS=$'\t' read -r key v1 v2 v3 v4 v5; do
         case "$key" in
-            lord)  LORD_ITEMS+=("${v1}	${v2}	${v3}	${v4}") ;;
-            cmd)   CMD_ITEMS+=("${v1}	${v2}	${v3}	${v4}") ;;
-            agent)
-                AGENT_TASK_ID["$v1"]="$v2"
-                AGENT_TASK_STATUS["$v1"]="$v3"
+            lord)    LORD_ITEMS+=("${v1}	${v2}	${v3}	${v4}") ;;
+            cmd)     CMD_ITEMS+=("${v1}	${v2}	${v3}	${v4}") ;;
+            summary) active_count="${v1:-0}"; idle_count="${v2:-0}" ;;
+            cell)
+                GRID_CELLS["${v1},${v2}"]="$v3"
+                GRID_STATUS["${v1},${v2}"]="${v4:-idle}"
+                GRID_ROLE["${v1},${v2}"]="${v5:-ashigaru}"
                 ;;
-            event) [[ -n "$v1" ]] && ACTIVITY_LOG+=("$v1") ;;
-            count) [[ -n "$v1" && -n "$v2" ]] && PREV_MSG_COUNT["$v1"]="$v2" ;;
+            unread)  unread_count="${v1:-0}" ;;
+            event)   [[ -n "$v1" ]] && ACTIVITY_LOG+=("$v1") ;;
+            count)   [[ -n "$v1" && -n "$v2" ]] && PREV_MSG_COUNT["$v1"]="$v2" ;;
         esac
     done <<< "$raw"
 
-    # Trim activity log
     while [[ ${#ACTIVITY_LOG[@]} -gt $MAX_ACTIVITY ]]; do
         ACTIVITY_LOG=("${ACTIVITY_LOG[@]:1}")
-    done
-
-    # Count active / idle ashigaru
-    local active_count=0 idle_count=0
-    local ag
-    for ag in ashigaru1 ashigaru2 ashigaru3 ashigaru4 ashigaru5 ashigaru6 ashigaru7; do
-        is_active "${AGENT_TASK_STATUS[$ag]:----}" && ((active_count++)) || ((idle_count++))
     done
 
     local lord_count=${#LORD_ITEMS[@]}
     local now
     now=$(date '+%H:%M:%S')
 
-    # Separators
+    # Separators (full terminal width)
     local sep thin
-    sep=$(printf  '═%.0s' $(seq 1 "$term_w") 2>/dev/null || printf '=%.0s' $(seq 1 "$term_w"))
+    sep=$(printf '═%.0s' $(seq 1 "$term_w") 2>/dev/null || printf '=%.0s' $(seq 1 "$term_w"))
     thin=$(printf '─%.0s' $(seq 1 "$term_w") 2>/dev/null || printf '-%.0s' $(seq 1 "$term_w"))
 
     local buf=""
 
-    # ════════════════════════════════════════════
-    # HEADER
-    # ════════════════════════════════════════════
-    local lord_badge=""
-    [[ $lord_count -gt 0 ]] && lord_badge="  ${C_YELLOW}${C_BOLD}🚨裁可待ち${lord_count}件${C_RESET}"
-    buf+="${C_BOLD}${C_CYAN} 🏯 大殿様の執務室${C_RESET}${lord_badge}  ${C_DIM}${now}${C_RESET}\n"
-    buf+=" ${C_GREEN}⚔稼働${active_count}${C_RESET}  ${C_DIM}💤待機${idle_count}${C_RESET}\n"
+    # ════ Header ════
+    # " 🏯 大殿様の執務室" vw=18: " "(1)+"🏯"(2)+" "(1)+"大殿様の執務室"(14)
+    # "HH:MM:SS" vw=8
+    local hpad_n=$(( term_w - 18 - 8 ))
+    [[ $hpad_n -lt 0 ]] && hpad_n=0
+    local hpad
+    hpad=$(printf '%*s' "$hpad_n" '')
+    buf+=" ${C_BOLD}${C_CYAN}🏯 大殿様の執務室${C_RESET}${hpad}${C_DIM}${now}${C_RESET}\n"
+    buf+=" ${C_GREEN}⚔稼働${active_count}${C_RESET}  ${C_DIM}💤待機${idle_count}${C_RESET}  ${C_DIM}📭未読${unread_count}${C_RESET}\n"
     buf+="${C_DIM}${sep}${C_RESET}\n"
 
-    # ════════════════════════════════════════════
-    # SECTION 1: 🚨 裁可待ち
-    # ════════════════════════════════════════════
+    # ════ Section 1: 🚨 裁可待ち ════
+    buf+="\n"
     if [[ $lord_count -gt 0 ]]; then
-        buf+="${C_YELLOW}${C_BOLD} 🚨 裁可待ち — ご決裁をお待ちしております${C_RESET}\n"
-        local lord_item
-        for lord_item in "${LORD_ITEMS[@]}"; do
-            IFS=$'\t' read -r lcmd ltitle lsummary lage <<< "$lord_item"
+        buf+="${C_YELLOW}${C_BOLD} 🚨 裁可待ち${C_RESET}\n"
+        local li
+        for li in "${LORD_ITEMS[@]}"; do
+            IFS=$'\t' read -r lcmd ltitle lsummary lage <<< "$li"
             local age_str=""
-            [[ -n "$lage" ]] && age_str="${C_DIM}  (${lage})${C_RESET}"
-            local line
-            line=$(truncate_str "   📋 ${lcmd}  ${ltitle}" $((term_w - 24)))
-            buf+="${C_YELLOW}${C_BOLD}${line}${C_RESET}${age_str}\n"
-            if [[ -n "$lsummary" ]]; then
-                local sline
-                sline=$(truncate_str "      └ ${lsummary}" $((term_w - 4)))
-                buf+="  ${C_DIM}${sline}${C_RESET}\n"
-            fi
+            [[ -n "$lage" ]] && age_str=" ${C_DIM}(${lage})${C_RESET}"
+            buf+="${C_YELLOW}${C_BOLD} 📋 ${lcmd}  ${ltitle}${C_RESET}${age_str}\n"
+            [[ -n "$lsummary" ]] && buf+=" ${C_DIM}  └ ${lsummary}${C_RESET}\n"
         done
     else
-        buf+=" ${C_DIM}🚨 裁可待ち: （なし）${C_RESET}\n"
+        buf+=" ${C_DIM}🚨 裁可待ち${C_RESET}\n"
+        buf+=" ${C_DIM}（なし）${C_RESET}\n"
     fi
-    buf+="${C_DIM}${thin}${C_RESET}\n"
+    buf+="\n${C_DIM}${thin}${C_RESET}\n"
 
-    # ════════════════════════════════════════════
-    # SECTION 2: 📋 指令
-    # ════════════════════════════════════════════
+    # ════ Section 2: 📋 指令 ════
+    buf+="\n"
     buf+="${C_BOLD} 📋 指令${C_RESET}\n"
     if [[ ${#CMD_ITEMS[@]} -eq 0 ]]; then
-        buf+="  ${C_DIM}（指令なし）${C_RESET}\n"
+        buf+=" ${C_DIM}（指令なし）${C_RESET}\n"
     else
-        local cmd_item
-        for cmd_item in "${CMD_ITEMS[@]}"; do
-            IFS=$'\t' read -r cid cemoji cpurpose carch <<< "$cmd_item"
-            local dim_style=""
-            [[ "$carch" == "1" ]] && dim_style="${C_DIM}"
-            local cline
-            cline=$(truncate_str "  ${cid} ${cemoji}  ${cpurpose}" $((term_w - 2)))
-            buf+="${dim_style}${cline}${C_RESET}\n"
+        local ci
+        for ci in "${CMD_ITEMS[@]}"; do
+            IFS=$'\t' read -r cnum cemoji cpurpose carch <<< "$ci"
+            if [[ "$carch" == "1" ]]; then
+                buf+="${C_DIM} ${cemoji} ${cnum} ${cpurpose}${C_RESET}\n"
+            else
+                buf+=" ${cemoji} ${cnum} ${cpurpose}\n"
+            fi
         done
     fi
-    buf+="${C_DIM}${thin}${C_RESET}\n"
+    buf+="\n${C_DIM}${thin}${C_RESET}\n"
 
-    # ════════════════════════════════════════════
-    # SECTION 3: ⚔ 稼働状況 (3列グリッド)
-    # ════════════════════════════════════════════
-    buf+="${C_BOLD} ⚔  稼働状況${C_RESET}\n"
-    local col_w=$(( (term_w - 6) / 3 ))
-    [[ $col_w -lt 20 ]] && col_w=20
-
-    local grid_row grid_col
-    for grid_row in 0 1 2; do
-        local row_str=""
-        for grid_col in 0 1 2; do
-            local idx=$(( grid_row * 3 + grid_col ))
-            local g_agent="${GRID[$idx]}"
-            local g_tid="${AGENT_TASK_ID[$g_agent]:----}"
-            local g_tstat="${AGENT_TASK_STATUS[$g_agent]:----}"
-            local g_active=false
-            is_active "$g_tstat" && g_active=true
-
-            # Icon + display name
-            local g_icon g_name
-            case "$g_agent" in
-                karo)      g_icon="🏯"; g_name="家老" ;;
-                gunshi)    g_icon="🧠"; g_name="軍師" ;;
-                ashigaru1) [[ "${AGENT_MODEL[ashigaru1]:-}" == opus* ]] && { $g_active && g_icon="⚡" || g_icon="💤"; } || { $g_active && g_icon="⚔" || g_icon="💤"; }; g_name="足軽１" ;;
-                ashigaru2) [[ "${AGENT_MODEL[ashigaru2]:-}" == opus* ]] && { $g_active && g_icon="⚡" || g_icon="💤"; } || { $g_active && g_icon="⚔" || g_icon="💤"; }; g_name="足軽２" ;;
-                ashigaru3) [[ "${AGENT_MODEL[ashigaru3]:-}" == opus* ]] && { $g_active && g_icon="⚡" || g_icon="💤"; } || { $g_active && g_icon="⚔" || g_icon="💤"; }; g_name="足軽３" ;;
-                ashigaru4) [[ "${AGENT_MODEL[ashigaru4]:-}" == opus* ]] && { $g_active && g_icon="⚡" || g_icon="💤"; } || { $g_active && g_icon="⚔" || g_icon="💤"; }; g_name="足軽４" ;;
-                ashigaru5) [[ "${AGENT_MODEL[ashigaru5]:-}" == opus* ]] && { $g_active && g_icon="⚡" || g_icon="💤"; } || { $g_active && g_icon="⚔" || g_icon="💤"; }; g_name="足軽５" ;;
-                ashigaru6) [[ "${AGENT_MODEL[ashigaru6]:-}" == opus* ]] && { $g_active && g_icon="⚡" || g_icon="💤"; } || { $g_active && g_icon="⚔" || g_icon="💤"; }; g_name="足軽６" ;;
-                ashigaru7) [[ "${AGENT_MODEL[ashigaru7]:-}" == opus* ]] && { $g_active && g_icon="⚡" || g_icon="💤"; } || { $g_active && g_icon="⚔" || g_icon="💤"; }; g_name="足軽７" ;;
-                *)         g_icon="?";  g_name="$g_agent" ;;
-            esac
-
-            # Cell plain text
-            local g_plain
-            if $g_active; then
-                g_plain="${g_icon}${g_name} ${g_tid}"
+    # ════ Section 3: ⚔ 稼働状況 (3-column Box Drawing grid) ════
+    buf+="\n"
+    buf+="${C_BOLD} ⚔ 稼働状況${C_RESET}\n"
+    local cw=$CELL_W
+    local dashes
+    dashes=$(printf '─%.0s' $(seq 1 "$cw"))
+    buf+="┌${dashes}┬${dashes}┬${dashes}┐\n"
+    local row col
+    for row in 0 1 2; do
+        local rline="│"
+        for col in 0 1 2; do
+            local gk="${row},${col}"
+            local gcell="${GRID_CELLS[$gk]:-}"
+            [[ -z "$gcell" ]] && gcell=$(printf "%-${cw}s" '---')
+            local gstat="${GRID_STATUS[$gk]:-idle}"
+            local grole="${GRID_ROLE[$gk]:-ashigaru}"
+            local gcolored
+            if [[ "$grole" == "karo" ]]; then
+                [[ "$gstat" == "active" ]] \
+                    && gcolored="${C_GREEN}${C_BOLD}${gcell}${C_RESET}" \
+                    || gcolored="${C_DIM}${gcell}${C_RESET}"
+            elif [[ "$grole" == "gunshi" ]]; then
+                [[ "$gstat" == "active" ]] \
+                    && gcolored="${C_CYAN}${C_BOLD}${gcell}${C_RESET}" \
+                    || gcolored="${C_DIM}${gcell}${C_RESET}"
             else
-                g_plain="${g_icon}${g_name}"
+                [[ "$gstat" == "active" ]] \
+                    && gcolored="${C_GREEN}${gcell}${C_RESET}" \
+                    || gcolored="${C_DIM}${gcell}${C_RESET}"
             fi
-
-            # Truncate to fit column
-            local g_display
-            g_display=$(truncate_str "$g_plain" $(( col_w - 2 )))
-
-            # Compute visual width for padding
-            local g_vw=0 g_i=0
-            while [[ $g_i -lt ${#g_display} ]]; do
-                [[ "${g_display:$g_i:1}" == [[:ascii:]] ]] && ((g_vw++)) || ((g_vw+=2))
-                ((g_i++))
-            done
-            local g_pad=$(( col_w - 1 - g_vw ))
-            [[ $g_pad -lt 0 ]] && g_pad=0
-
-            # Apply color
-            local g_colored
-            if [[ "$g_agent" == "karo" ]]; then
-                $g_active \
-                    && g_colored="${C_GREEN}${C_BOLD}${g_display}${C_RESET}" \
-                    || g_colored="${C_DIM}${g_display}${C_RESET}"
-            elif [[ "$g_agent" == "gunshi" ]]; then
-                $g_active \
-                    && g_colored="${C_CYAN}${C_BOLD}${g_display}${C_RESET}" \
-                    || g_colored="${C_DIM}${g_display}${C_RESET}"
-            else
-                if $g_active; then
-                    if [[ "${AGENT_MODEL[$g_agent]:-}" == opus* ]]; then
-                        g_colored="${C_YELLOW}${C_BOLD}${g_display}${C_RESET}"
-                    else
-                        g_colored="${C_GREEN}${g_display}${C_RESET}"
-                    fi
-                else
-                    g_colored="${C_DIM}${g_display}${C_RESET}"
-                fi
-            fi
-
-            row_str+=" ${g_colored}"
-            local p
-            for ((p = 0; p < g_pad; p++)); do row_str+=" "; done
-            [[ $grid_col -lt 2 ]] && row_str+="${C_DIM}│${C_RESET}"
+            rline+="${gcolored}│"
         done
-        buf+="${row_str}\n"
+        buf+="${rline}\n"
     done
+    buf+="└${dashes}┴${dashes}┴${dashes}┘\n"
+    buf+="\n${C_DIM}${thin}${C_RESET}\n"
 
-    # Grid summary line
-    local karo_icon="🏯待機"
-    is_active "${AGENT_TASK_STATUS[karo]:----}" && karo_icon="🏯稼働"
-    local gunshi_icon="🧠待機"
-    is_active "${AGENT_TASK_STATUS[gunshi]:----}" && gunshi_icon="🧠稼働"
-    buf+="  ${C_DIM}${karo_icon}  ⚔${active_count}  💤${idle_count}  ${gunshi_icon}${C_RESET}\n"
-    buf+="${C_DIM}${thin}${C_RESET}\n"
-
-    # ════════════════════════════════════════════
-    # SECTION 4: 📜 直近
-    # ════════════════════════════════════════════
+    # ════ Section 4: 📜 直近 ════
+    buf+="\n"
     buf+="${C_BOLD} 📜 直近${C_RESET}\n"
-    local log_count=${#ACTIVITY_LOG[@]}
-    if [[ $log_count -eq 0 ]]; then
-        buf+="  ${C_DIM}（通信記録なし）${C_RESET}\n"
+    local lc=${#ACTIVITY_LOG[@]}
+    if [[ $lc -eq 0 ]]; then
+        buf+=" ${C_DIM}（通信記録なし）${C_RESET}\n"
     else
-        local shown=0 i
-        for ((i = log_count - 1; i >= 0 && shown < 5; i--)); do
-            local e_short
-            e_short=$(truncate_str "${ACTIVITY_LOG[$i]}" $((term_w - 4)))
-            buf+="  ${C_DIM}${e_short}${C_RESET}\n"
+        local shown=0 ai
+        for ((ai = lc - 1; ai >= 0 && shown < 5; ai--)); do
+            buf+=" ${C_DIM}${ACTIVITY_LOG[$ai]}${C_RESET}\n"
             ((shown++))
         done
     fi
 
-    # Output frame — 毎サイクル完全消去 + 行末消去で残像ゼロ
-    printf '\033[2J\033[H'
-    local _line
-    while IFS= read -r _line; do
-        printf '%s\033[K\n' "$_line"
+    # Output — cursor to top, clear each line to prevent residual chars
+    printf '\033[H'
+    local _ln
+    while IFS= read -r _ln; do
+        printf '%s\033[K\n' "$_ln"
     done < <(printf '%b' "$buf")
+    printf '\033[J'
 }
 
 # ─── Main ───
