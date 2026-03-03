@@ -826,6 +826,11 @@ send_wakeup() {
         sleep 0.3
         timeout 5 tmux send-keys -t "$PANE_TARGET" C-u 2>/dev/null || true
         sleep 0.3
+    else
+        # FIX-2: Clear stale input before nudge to prevent "Press up to edit queued
+        # messages" when a previous nudge was queued during agent processing (SC-1/SC-2/SC-3).
+        timeout 2 tmux send-keys -t "$PANE_TARGET" C-u 2>/dev/null || true
+        sleep 0.1
     fi
 
     if timeout 5 tmux send-keys -t "$PANE_TARGET" "$nudge" 2>/dev/null; then
