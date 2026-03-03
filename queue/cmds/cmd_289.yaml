@@ -1,0 +1,65 @@
+id: cmd_289
+status: done
+timestamp: "2026-03-03T15:10:00+09:00"
+purpose: "battle_monitor系QCに実機検証ステップを追加し、目視確認なしでPASS判定しない仕組みを作る"
+acceptance_criteria:
+  - "gunshi.md に battle_monitor 実機検証プロトコルが明記されていること"
+  - "検証手順: battle_monitor.sh を実際に起動し、tmux capture-pane で出力をキャプチャすること"
+  - "検証項目: チラツキ有無（複数フレーム差分）、レイアウト崩れ（行幅超過）、全セクション表示を含むこと"
+  - "コードレビューのみでPASSとしない旨が明記されていること"
+  - "battle_monitor以外の通常QC（コードレビュー+bash -n）には影響しないこと"
+command: |
+  リポジトリ: /Users/odakin/Claude/multi-agent-shogun
+
+  背景:
+  cmd_280（グリッド幅適応）、cmd_281（チラツキ解消）が軍師QCでPASS判定されたが、
+  実際には直っていなかった。原因: 軍師のQCがコードレビュー+bash -nのみで、
+  battle_monitorを実際に起動して目視確認していなかった。
+
+  大御所様の指示: 実機検証を入れよ。
+
+  実装内容:
+  instructions/gunshi.md に「battle_monitor実機検証プロトコル」を追加。
+
+  検証手順案:
+  1. battle_monitor.sh をバックグラウンドで起動（tmpペインまたはsubshell）
+  2. 3秒待機（2-3フレーム分の描画）
+  3. tmux capture-pane で出力をキャプチャ
+  4. 検証チェック:
+     a. 全セクションヘッダーが存在するか（稼働状況、裁可待ち等）
+     b. 行がペイン幅を超えていないか（各行の表示幅チェック）
+     c. 2回キャプチャの差分でチラツキ判定（同一内容なら安定）
+  5. battle_monitor.sh を停止
+  6. 結果をレポートに記載
+
+  適用条件:
+  - target_path に battle_monitor.sh を含むsubtaskのQC時のみ実施
+  - 通常のコードQC（bash -n + コードレビュー）は全タスクで従来通り実施
+
+  対象ファイル:
+  - /Users/odakin/Claude/multi-agent-shogun/instructions/gunshi.md
+project: multi-agent-shogun
+priority: high
+
+phases:
+  - phase: 1
+    mode: sequential
+    subtasks:
+      - id: s289a
+        description: |
+          【目的】gunshi.md に battle_monitor 実機検証プロトコルを追記
+          【入力】
+            - /Users/odakin/Claude/multi-agent-shogun/instructions/gunshi.md
+          【出力】修正済みファイル:
+            1. 実機検証の実行条件（battle_monitor.sh関連QC時のみ）
+            2. 検証手順（起動→キャプチャ→チェック→停止）
+            3. 検証項目（全セクション存在・行幅・チラツキ判定）
+            4. コードレビューのみでのPASS禁止ルール
+            5. 約20-30行の追記
+          【完了条件】gunshi.md に実機検証プロトコルが追記済み。git commit済み
+        target_path: "/Users/odakin/Claude/multi-agent-shogun/instructions/gunshi.md"
+        bloom_level: L2
+        status: done
+  - phase: 2
+    mode: qc
+    qc_for: [s289a]

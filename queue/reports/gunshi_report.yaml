@@ -1,111 +1,64 @@
 worker_id: gunshi
-task_id: gunshi_qc_cmd_286_287_288
-parent_cmd: [cmd_286, cmd_287, cmd_288]
-timestamp: "2026-03-03T15:35:00+09:00"
+task_id: gunshi_qc_cmd_289
+parent_cmd: cmd_289
+timestamp: "2026-03-03T15:40:00+09:00"
 status: done
 result:
   type: quality_check
+  qa_decision: pass
+  commit: "8dc4ff4"
+  files_changed:
+    - instructions/gunshi.md
+  changes: "battle_monitor実機検証プロトコル追記 (50行)"
+  subtasks_reviewed:
+    - task_id: s289a
+      worker: ashigaru1
+      qa_decision: pass
+      notes: |
+        検証手順7ステップ:
+        1. バックグラウンド起動 (--interval 2, flock競合回避)
+        2. 3秒待機 (2-3フレーム描画)
+        3. 1回目capture-pane (monitorペイン or fallback)
+        4. 1秒待機
+        5. 2回目capture-pane (チラツキ差分用)
+        6. kill+wait で停止
+        7. tmpファイルcleanup
 
-  # ── cmd_286 (s286a) ──────────────────────────────
-  cmd_286:
-    qa_decision: pass
-    commit: "3701270"
-    files_changed:
-      - scripts/battle_monitor.sh
-    changes: "cat→bash組み込み$(<file)+printf '%s'で1回write(2)。毎フレームカーソル非表示保証。"
-    subtasks_reviewed:
-      - task_id: s286a
-        worker: ashigaru2
-        qa_decision: pass
-        notes: |
-          チラツキ根本原因: catが複数write(2)を発行→端末が分割フレームを受信。
-          修正: bash組み込み$(< "$_tmpf")で1回read + printf '%s'で1回write(2)。
-          追加: 毎フレーム先頭に\033[?25lでカーソル非表示を再設定。
-    acceptance_criteria_check:
-      ac1_no_flicker: true
-      ac2_stable_update: true
-      ac3_layout_preserved: true
-      ac4_bash_n_pass: true
-    scope_match: complete
-    issues_found: []
+        検証項目4つ (テーブル形式):
+        - セクションヘッダー存在 (🚨📋⚔📜)
+        - 行幅超過チェック (tput cols以内)
+        - チラツキ差分 (frame1 vs frame2)
+        - 起動エラー (stderr確認)
 
-  # ── cmd_287 (s287a) ──────────────────────────────
-  cmd_287:
-    qa_decision: pass
-    commit: "aa676c9"
-    files_changed:
-      - scripts/inbox_write.sh
-    changes: "inbox_write.sh _send_nudge()に将軍ペイン除外ガード追加"
-    subtasks_reviewed:
-      - task_id: s287a
-        worker: ashigaru1
-        qa_decision: pass
-        notes: |
-          _send_nudge() 冒頭に [ "$TARGET" = "shogun" ] && return 0。
-          全5送信源を特定（他4箇所は既存ガード済み）。YAML書き込みは維持。
-    acceptance_criteria_check:
-      ac1_no_inbox1_to_shogun: true
-      ac2_source_identified: true
-      ac3_yaml_write_preserved: true
-      ac4_bash_n_pass: true
-    scope_match: complete
-    issues_found: []
-
-  # ── cmd_288 (s288a/b/c) ──────────────────────────
-  cmd_288:
-    qa_decision: pass
-    commits: ["2b1b9d9", "a9ddf9d", "8b48aa8"]
-    files_changed:
-      - "instructions/ (18ファイル, 35件)"
-      - "scripts/ (4ファイル, 7件)"
-      - "queue/cmds/cmd_288.yaml (subtask status更新)"
-    changes: "全システム「大殿様」→「大御所様」統一置換"
-    subtasks_reviewed:
-      - task_id: s288a
-        worker: ashigaru3
-        qa_decision: pass
-        notes: "instructions/ + CLAUDE.md: 35件置換, 18ファイル。上様残存ゼロ。"
-      - task_id: s288b
-        worker: ashigaru4
-        qa_decision: pass
-        notes: "scripts/ 4ファイル7件置換。bash -n全PASS。vw=18→20幅修正。上様残存なし。"
-      - task_id: s288c
-        worker: ashigaru5
-        qa_decision: pass
-        notes: "queue/cmds/ 置換。上様はcmd_288タスク説明内メタ参照のみ。"
-    acceptance_criteria_check:
-      ac1_all_replaced: true  # 割当スコープ内は完了
-      ac2_ueSama_reported: true
-      ac3_ueSama_replaced: true  # README.mdの上様は意図的ロール名
-      ac4_all_file_types: true
-      ac5_no_syntax_error: true
-      ac6_git_commit_push: true
-    scope_match: complete
-    issues_found:
-      - "scripts/inbox_write.sh:128 — s287a(concurrent commit)が「大殿様」コメントを再導入。s288bの30秒後。"
-      - "AGENTS.md:222 — ルートファイルがどのsubtaskにも割当なし。「大殿様」1件残存。"
-    followup_needed:
-      - "inbox_write.sh:128のコメント「大殿様」→「大御所様」に修正"
-      - "AGENTS.md:222「大殿様」→「大御所様」に修正"
-      - "READMEの「上様」は意図的使用のため変更不要"
-
-  overall_decision: pass
+        ルール: コードレビューのみPASS禁止。実行不可時はFAIL+原因記載。
+        通常QCへの影響なし (target_pathにbattle_monitor.sh含む場合のみ)。
+  acceptance_criteria_check:
+    ac1_protocol_documented: true
+    ac2_verification_steps: true
+    ac3_check_items: true
+    ac4_code_review_only_ban: true
+    ac5_no_impact_normal_qc: true
+    ac6_syntax: true  # markdown文書のためbash -n対象外
+  deliverables_verified: true
+  scope_match: complete
+  issues_found: []
   detail: |
-    ## cmd_286/287/288 QC結果
+    ## cmd_289 QC結果 — battle_monitor実機検証プロトコル
 
-    ### cmd_286 — battle_monitorチラツキ完全解消: PASS
-    commit 3701270: cat→bash $(<file)+printf '%s'で1回write(2)方式。
-    catが複数write(2)を発行し端末が分割フレームを受信する根本原因を解消。
-    毎フレーム\033[?25lでカーソル非表示を保証。bash -n PASS。
+    ### 修正内容 (commit 8dc4ff4)
+    instructions/gunshi.md に50行追加。
+    battle_monitor.sh関連QC時の実機検証手順を標準化。
 
-    ### cmd_287 — 将軍ナッジ遮断: PASS
-    commit aa676c9: inbox_write.sh _send_nudge()にshogunガード。
-    全5送信源を特定・確認済み。
+    ### 背景
+    cmd_280/281がコードレビュー+bash -nのみでPASS→実際は直っていなかった。
+    大御所様の直接指示で実機検証を義務化。
 
-    ### cmd_288 — 大御所様全置換: PASS
-    3 commits (2b1b9d9, a9ddf9d, 8b48aa8): 合計42件以上置換。
-    微残存2件(inbox_write.shコメント+AGENTS.md)はスコープ外/競合によるもの。要フォローアップ。
-    上様: README.mdでロール名として意図的使用。変更不要。
+    ### 品質評価
+    - 手順が明確で再現可能 (bash code block)
+    - capture-pane fallback (monitor pane or current pane)
+    - テーブル形式の合否基準で判定が客観的
+    - 実行不可時のエスケープハッチ (FAIL+原因報告)
+    - 通常QCへの影響を明確に限定 (battle_monitor.sh含むタスクのみ)
 
   skill_candidate:
     found: false
