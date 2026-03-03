@@ -29,6 +29,20 @@ POLL_INTERVAL=3
 LAYOUT_APPLIED=false
 BORDER_APPLIED=false
 
+# pane-border-lines スタイル: heavy は tmux 3.2+ 必須。バージョン検出して自動選択。
+_detect_border_line_style() {
+    local ver major minor
+    ver=$(tmux -V 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1)
+    major="${ver%%.*}"
+    minor="${ver##*.}"
+    if [ -n "$major" ] && { [ "$major" -gt 3 ] || { [ "$major" -eq 3 ] && [ "${minor:-0}" -ge 2 ]; }; }; then
+        echo "heavy"
+    else
+        echo "single"
+    fi
+}
+BORDER_LINE_STYLE=$(_detect_border_line_style)
+
 # /clear recovery settings
 UNRESPONSIVE_THRESHOLD=240   # 4分間無反応で /clear 送信
 CLEAR_COOLDOWN=300           # /clear は5分に1回まで
@@ -62,6 +76,14 @@ _tmux() {
 # Source shared library for busy/idle detection (used by dynamic_resize_by_content)
 if [ -f "$SCRIPT_DIR/lib/agent_status.sh" ]; then
     source "$SCRIPT_DIR/lib/agent_status.sh"
+fi
+
+# Source Japanese name conversion library
+if [ -f "$SCRIPT_DIR/scripts/agent_name_ja.sh" ]; then
+    source "$SCRIPT_DIR/scripts/agent_name_ja.sh"
+else
+    # フォールバック: ライブラリ未存在時は変換なし
+    to_ja() { echo "$1"; }
 fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -426,6 +448,9 @@ style_pane() {
         _tmux set-option -p -t "$pane_id" @agent_id "$agent_name" 2>/dev/null
     fi
 
+    # @agent_name_ja: 日本語表示名（表示専用。routing には使わない）
+    _tmux set-option -p -t "$pane_id" @agent_name_ja "$(to_ja "$agent_name")" 2>/dev/null
+
     # @model_name: ペインから実際のモデルを検出して表示（settings.yaml 上書き廃止）
     local actual_model
     actual_model=$(detect_pane_model "$pane_id")
@@ -484,10 +509,11 @@ apply_border_format() {
         _tmux set-option -w -t "$win" pane-border-status top 2>/dev/null
         _tmux set-option -w -t "$win" pane-border-style "fg=colour240" 2>/dev/null
         _tmux set-option -w -t "$win" pane-active-border-style "fg=colour33,bold" 2>/dev/null
-        # heavy: 太線で9ペイン密集時の境界が明確。フォントにより崩れる場合は "single" に変更。
-        _tmux set-option -w -t "$win" pane-border-lines "heavy" 2>/dev/null
+        # heavy: 太線で9ペイン密集時の境界が明確。tmux 3.2+ のみ対応。
+        # 起動時にバージョン検出済み（BORDER_LINE_STYLE）→ フォント非対応なら "single" を使用。
+        _tmux set-option -w -t "$win" pane-border-lines "$BORDER_LINE_STYLE" 2>/dev/null
         _tmux set-option -w -t "$win" pane-border-format \
-            '#{?pane_active,#[fg=colour33,bold],#[fg=colour240]}#{@agent_id}#[default] #[dim](#{@model_name})#[default] #{@current_task}' \
+            '#{?pane_active,#[fg=colour33,bold],#[fg=colour240]}#{@agent_name_ja}#[default] #[dim](#{@model_name})#[default] #{@current_task}' \
             2>/dev/null
     done
 }
@@ -1141,6 +1167,7 @@ while true; do
         else
             # 未検出でも空のデフォルトをセット（border表示のため）
             _tmux set-option -p -t "$pane_id" @agent_id "..." 2>/dev/null
+            _tmux set-option -p -t "$pane_id" @agent_name_ja "..." 2>/dev/null
             _tmux set-option -p -t "$pane_id" @model_name "..." 2>/dev/null
             _tmux set-option -p -t "$pane_id" @current_task "" 2>/dev/null
         fi

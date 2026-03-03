@@ -115,6 +115,10 @@ LAST_CLEAR_TS=${LAST_CLEAR_TS:-0}
 ESCALATE_PHASE1=${ESCALATE_PHASE1:-120}
 ESCALATE_PHASE2=${ESCALATE_PHASE2:-240}
 ESCALATE_COOLDOWN=${ESCALATE_COOLDOWN:-300}
+# BUSY_SINCE: tracks when non-claude agent entered continuous busy state.
+# Used to detect permanently-stuck codex/copilot/kimi agents (ISSUE-3 fix).
+# Reset to 0 when agent becomes idle.
+BUSY_SINCE=${BUSY_SINCE:-0}
 
 # ─── Nudge throttle ───
 # Avoid spamming the same "inboxN" into the pane every timeout tick.
@@ -207,8 +211,10 @@ should_throttle_nudge() {
         cooldown_sec="${NUDGE_COOLDOWN_SEC_CLAUDE:-60}"
     fi
 
-    # Standard throttle: skip if same count within cooldown window.
-    if [ "${LAST_NUDGE_COUNT:-}" = "$unread_count" ] && [ "${LAST_NUDGE_TS:-0}" -gt 0 ]; then
+    # Standard throttle: skip if ANY nudge was sent within cooldown window.
+    # FIX-1: time-based (count-independent) to prevent SC-1 throttle bypass
+    # when inbox count increments on each consecutive inbox_write call.
+    if [ "${LAST_NUDGE_TS:-0}" -gt 0 ]; then
         local age=$((now - LAST_NUDGE_TS))
         if [ "$age" -lt "${cooldown_sec}" ]; then
             echo "[$(date)] [SKIP] Throttling nudge for $AGENT_ID: inbox${unread_count} (${age}s < ${cooldown_sec}s, cli=$effective_cli)" >&2
@@ -665,6 +671,11 @@ send_context_reset() {
         fi
         echo "[$(date)] [CONTEXT-RESET] $AGENT_ID still busy after ${attempt}×5s — retrying" >&2
     done
+    # Re-trigger boot grace period: CLAUDE.md/instructions reload takes several
+    # seconds after /clear completes. BOOT_TS grace treats agent as busy during
+    # reload, preventing nudge from arriving before the agent is ready to process it.
+    # (Fixes ISSUE-2: send_context_reset + nudge timing race)
+    BOOT_TS=$(date +%s)
     # Clear /clear cooldown — agent is ready (or we gave up waiting).
     # Without this, the main loop's nudge is blocked by the 30s cooldown
     # and the agent sits at an empty prompt forever.
@@ -672,7 +683,7 @@ send_context_reset() {
 }
 
 # ─── Agent self-watch detection ───
-# Check if the agent has an active inotifywait on its inbox.
+# Check if the agent has an active file-watcher on its inbox.
 # If yes, the agent will self-wake — no nudge needed.
 agent_has_self_watch() {
     # Codex/Copilot/Kimi CLIs cannot run self-watch. Only Claude Code agents can.
@@ -681,19 +692,26 @@ agent_has_self_watch() {
     if [[ "$effective_cli" != "claude" ]]; then
         return 1  # non-Claude CLIs never have self-watch
     fi
-    # For Claude Code agents: check if an inotifywait exists that is NOT
+    # For Claude Code agents: check if a file-watcher exists that is NOT
     # a child of this inbox_watcher process (exclude our own watcher).
+    # Use backend-appropriate process name: fswatch (macOS) or inotifywait (Linux).
     local my_pgid
     my_pgid=$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ')
+    local watch_pattern
+    if [ "${WATCH_BACKEND:-inotifywait}" = "fswatch" ]; then
+        watch_pattern="fswatch.*inbox/${AGENT_ID}.yaml"
+    else
+        watch_pattern="inotifywait.*inbox/${AGENT_ID}.yaml"
+    fi
     local found=1  # default: not found
     while IFS= read -r pid; do
         local pid_pgid
         pid_pgid=$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')
         if [[ "$pid_pgid" != "$my_pgid" ]]; then
-            found=0  # found an inotifywait NOT from our process group
+            found=0  # found a watcher NOT from our process group
             break
         fi
-    done < <(pgrep -f "inotifywait.*inbox/${AGENT_ID}.yaml" 2>/dev/null)
+    done < <(pgrep -f "$watch_pattern" 2>/dev/null)
     return $found
 }
 
@@ -1015,12 +1033,24 @@ for s in data.get('specials', []):
                 # Don't reset FIRST_UNREAD_SEEN so idle-nudge works if hook misses.
                 echo "[$(date)] $normal_count unread for $AGENT_ID but agent is busy (claude) — Stop hook will deliver" >&2
             else
-                # Codex/Copilot/Kimi: No Stop hook. Pause escalation timer while busy.
-                FIRST_UNREAD_SEEN=$now
-                echo "[$(date)] $normal_count unread for $AGENT_ID but agent is busy ($busy_cli) — pausing escalation timer" >&2
+                # Codex/Copilot/Kimi: No Stop hook. Pause escalation timer while busy,
+                # but allow escalation after ESCALATE_PHASE2 of continuous busy to detect
+                # permanently-stuck agents (crash, infinite loop, etc.).
+                # (Fixes ISSUE-3: resetting to $now every cycle prevented Phase3 from firing)
+                if [ "$BUSY_SINCE" -eq 0 ]; then
+                    BUSY_SINCE=$now
+                fi
+                local busy_duration=$((now - BUSY_SINCE))
+                if [ "$busy_duration" -lt "$ESCALATE_PHASE2" ]; then
+                    FIRST_UNREAD_SEEN=$now  # Pause timer for legitimate busy agents
+                fi
+                # If busy_duration >= ESCALATE_PHASE2: stop pausing → escalation can fire
+                echo "[$(date)] $normal_count unread for $AGENT_ID but agent is busy ($busy_cli) — busy_duration=${busy_duration}s" >&2
             fi
             return 0
         fi
+        # Agent is idle: reset continuous-busy tracker
+        BUSY_SINCE=0
 
         # ─── Context reset before new task ───
         # Send /new or /clear once when task_assigned is first detected,
