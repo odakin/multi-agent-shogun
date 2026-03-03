@@ -61,7 +61,7 @@ while true; do
     PANE_BASE=$(get_pane_base)
     ASHIGARU_COUNT=$(get_ashigaru_count)
 
-    start_watcher_if_missing "shogun" "shogun:main.0" "logs/inbox_watcher_shogun.log"
+    # shogun: watcher不要（大殿様が直接操作。inbox は将軍が自分のタイミングで読む）
     start_watcher_if_missing "karo" "multiagent:agents.$((PANE_BASE + 0))" "logs/inbox_watcher_karo.log"
 
     for i in $(seq 1 "$ASHIGARU_COUNT"); do
