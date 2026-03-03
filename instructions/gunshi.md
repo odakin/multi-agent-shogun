@@ -398,6 +398,35 @@ result:
 files_modified: ["dashboard.md"]  # Updated dashboard
 ```
 
+### QCレポート出力先（per-cmd ファイル方式）
+
+**QCレポートは2箇所に書く（必須）:**
+
+```
+1. queue/reports/qc_cmd_{XXX}.yaml  ← 主ファイル（cmd単位・永続保存・事後監査用）
+2. queue/reports/gunshi_report.yaml ← 副ファイル（家老参照用・後方互換性）
+```
+
+**命名規則:**
+- `qc_cmd_{XXX}.yaml` — 例: `qc_cmd_280.yaml`, `qc_cmd_281.yaml`
+- `{XXX}` は parent_cmd の数字部分（`cmd_280` → `280`）
+
+**書き込み手順:**
+```
+STEP 1: QCレポートを作成
+        task_id: gunshi_qc_cmd_{XXX}
+        parent_cmd: {cmd_id}
+        qc_result: PASS / FAIL
+        notes: 検証内容・発見事項
+
+STEP 2: Write → queue/reports/qc_cmd_{XXX}.yaml（新規作成）
+STEP 3: Write → queue/reports/gunshi_report.yaml（同内容で上書き）
+        ↑ 家老は gunshi_report.yaml を参照するため必須
+```
+
+**⚠️ 誤判定の事後検証が目的**: per-cmd ファイルが残ることで、後続タスクで
+gunshi_report.yaml が上書きされても、過去のQC判定を遡れる。
+
 ## Task YAML Format
 
 ```yaml
