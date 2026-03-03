@@ -201,6 +201,33 @@ if first_run:
 result['_new_events'] = new_events
 result['_msg_counts'] = msg_counts
 
+# Lord pending decisions (awaiting_lord only) — P1: awk廃止しPythonで堅牢パース
+lord_pending = []
+try:
+    from datetime import datetime, timezone
+    with open(f'{root}/queue/lord_pending.yaml') as f:
+        lp_data = yaml.safe_load(f) or {}
+    now_dt = datetime.now(timezone.utc)
+    for item in (lp_data.get('pending_decisions') or []):
+        if item.get('status') == 'awaiting_lord':
+            reported_at = str(item.get('reported_at', ''))
+            age = ''
+            try:
+                dt = datetime.fromisoformat(reported_at.replace('Z', '+00:00'))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                hours = int((now_dt - dt).total_seconds() // 3600)
+                age = f'{hours}時間前' if hours < 24 else f'{hours // 24}日前'
+            except: pass
+            lord_pending.append({
+                'cmd_id': str(item.get('cmd_id', '?')),
+                'title': str(item.get('title', '?')),
+                'summary': str(item.get('summary', '')),
+                'age': age,
+            })
+except: pass
+result['_lord_pending'] = lord_pending
+
 json.dump(result, sys.stdout, ensure_ascii=False)
 " 2>/dev/null || echo '{}'
 }
@@ -275,16 +302,21 @@ for e in data.get('_new_events', []):
 # Message counts (agent\tcount)
 for k, v in data.get('_msg_counts', {}).items():
     print(f'_count\t{k}\t{v}')
+# Lord pending items
+for item in data.get('_lord_pending', []):
+    print(f\"_lord\t{item['cmd_id']}\t{item['title']}\t{item['summary']}\t{item['age']}\")
 " <<< "$yaml_json" 2>/dev/null)
 
     # Parse into arrays
     declare -A TASK_ID TASK_STATUS UNREAD
+    declare -a LORD_ITEMS=()
     local CMD_LINE=""
-    while IFS=$'\t' read -r key v1 v2 v3; do
+    while IFS=$'\t' read -r key v1 v2 v3 v4; do
         case "$key" in
             _cmd)   CMD_LINE="$v1" ;;
             _event) [[ -n "$v1" ]] && ACTIVITY_LOG+=("$v1") ;;
             _count) [[ -n "$v1" && -n "$v2" ]] && PREV_MSG_COUNT["$v1"]="$v2" ;;
+            _lord)  [[ -n "$v1" ]] && LORD_ITEMS+=("${v1}	${v2}	${v3}	${v4}") ;;
             *)
                 TASK_ID["$key"]="$v1"
                 TASK_STATUS["$key"]="$v2"
@@ -292,6 +324,7 @@ for k, v in data.get('_msg_counts', {}).items():
                 ;;
         esac
     done <<< "$parsed"
+    local lord_count=${#LORD_ITEMS[@]}
 
     # Trim activity log to max
     while [[ ${#ACTIVITY_LOG[@]} -gt $MAX_ACTIVITY ]]; do
@@ -340,24 +373,28 @@ for k, v in data.get('_msg_counts', {}).items():
     local cmd_short
     cmd_short=$(truncate_str "$CMD_LINE" $((term_width - 30)))
     buf+="${C_BOLD}${C_CYAN} 🏯 ${cmd_short}${C_RESET}\n"
-    buf+=" ${C_GREEN}稼働${busy_count}${C_RESET} │ ${C_DIM}待機${idle_count}${C_RESET} │ 未読$(( $(for a in "${AGENTS[@]}"; do echo "${UNREAD[$a]:-0}"; done | paste -sd+ | bc 2>/dev/null || echo 0) ))  ${C_DIM}${now}${C_RESET}\n"
+    local lord_badge=""
+    [[ ${lord_count:-0} -gt 0 ]] && lord_badge=" │ ${C_YELLOW}${C_BOLD}🚨裁可待ち${lord_count}${C_RESET}"
+    buf+=" ${C_GREEN}稼働${busy_count}${C_RESET} │ ${C_DIM}待機${idle_count}${C_RESET} │ 未読$(( $(for a in "${AGENTS[@]}"; do echo "${UNREAD[$a]:-0}"; done | paste -sd+ | bc 2>/dev/null || echo 0) ))${lord_badge}  ${C_DIM}${now}${C_RESET}\n"
     buf+="${C_DIM}${sep_line}${C_RESET}\n"
 
-    # Lord pending (裁可待ち) section
-    local lord_items=""
-    if [ -f "$SCRIPT_DIR/queue/lord_pending.yaml" ]; then
-        lord_items=$(awk '
-            /cmd_id:/  { cmd = $2 }
-            /title:/   { title = $0; sub(/^.*title:[[:space:]]*"?/, "", title); sub(/"?[[:space:]]*$/, "", title) }
-            /status:.*awaiting_lord/ { print "📋 " cmd " " title }
-        ' "$SCRIPT_DIR/queue/lord_pending.yaml" 2>/dev/null)
-    fi
-    if [ -n "$lord_items" ]; then
-        buf+="${C_YELLOW}${C_BOLD}═══ 裁可待ち ═══${C_RESET}\n"
-        while IFS= read -r item; do
-            buf+=" ${C_WHITE}${item}${C_RESET}\n"
-        done <<< "$lord_items"
-        buf+="${C_DIM}${thin_sep}${C_RESET}\n"
+    # Lord pending (裁可待ち) section — P1:awk廃止 P2:視認性強化 P4:経過時間 P5:summary表示 P6:幅制限
+    if [[ ${lord_count:-0} -gt 0 ]]; then
+        buf+="${C_YELLOW}${C_BOLD}▶▶ 🚨 裁可待ち ${lord_count}件 — ご決裁をお待ちしております ◀◀${C_RESET}\n"
+        for lord_item in "${LORD_ITEMS[@]}"; do
+            IFS=$'\t' read -r lcmd ltitle lsummary lage <<< "$lord_item"
+            local age_str=""
+            [[ -n "$lage" ]] && age_str=" (${lage})"
+            local item_line
+            item_line=$(truncate_str "  📋 ${lcmd}  ${ltitle}${age_str}" $((term_width - 2)))
+            buf+="${C_YELLOW}${C_BOLD}${item_line}${C_RESET}\n"
+            if [[ -n "$lsummary" ]]; then
+                local sum_short
+                sum_short=$(truncate_str "     └ ${lsummary}" $((term_width - 2)))
+                buf+="  ${C_DIM}${sum_short}${C_RESET}\n"
+            fi
+        done
+        buf+="${C_YELLOW}${C_DIM}${thin_sep}${C_RESET}\n"
     fi
 
     # Busy agents (expanded)
