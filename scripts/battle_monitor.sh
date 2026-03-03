@@ -331,8 +331,8 @@ render() {
 
     # Separators (full terminal width)
     local sep thin
-    sep=$(printf '═%.0s' $(seq 1 "$term_w") 2>/dev/null || printf '=%.0s' $(seq 1 "$term_w"))
-    thin=$(printf '─%.0s' $(seq 1 "$term_w") 2>/dev/null || printf '-%.0s' $(seq 1 "$term_w"))
+    sep=$(printf '%*s' "$term_w" '' | tr ' ' '=')
+    thin=$(printf '%*s' "$term_w" '' | tr ' ' '-')
 
     local buf=""
 
@@ -434,11 +434,19 @@ render() {
     fi
 
     # Output — 全消去 + カーソルをホームへ。ANSI-aware trim でペイン幅超え折り返しゼロ
-    printf '\033[2J\033[H'
+    printf '\033[H'
     local _ln
+    local _line_num=0
     while IFS= read -r _ln; do
         trim_ansi_line "$_ln" "$term_w"
+        printf '\033[K'  # 行末の残像をクリア
+        (( _line_num++ ))
     done < <(printf '%b' "$buf")
+    # 残りの行をクリア（前回より行数が減った場合の残像除去）
+    while [ "$_line_num" -lt "$term_h" ]; do
+        printf '\033[K\n'
+        (( _line_num++ ))
+    done
 }
 
 # ─── Main ───
