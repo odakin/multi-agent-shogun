@@ -61,8 +61,8 @@ workflow:
     command: 'tmux set-option -p @current_task ""'
     note: "Clear task label for next task"
   - step: 7
-    action: git_push
-    note: "If project has git repo, commit + push your changes. Only for article/documentation completion."
+    action: git_commit_and_push
+    note: "If project has git repo and files were modified, run git commit then git push. MANDATORY: commit alone is insufficient — always push to remote."
   - step: 7.5
     action: build_verify
     note: "If project has build system (npm run build, etc.), run and verify success. Report failures in report YAML."
@@ -145,6 +145,7 @@ skill_candidate:
 4. Execute the task
 5. Write report YAML（queue/reports/ashigaru{N}_report.yaml）
 6. Update task YAML status → done
+6.5. **Git commit & push**: If files were modified, `git add` → `git commit` → **`git push`** (commit alone is insufficient)
 7. Notify:
    bash scripts/inbox_write.sh karo "ash{N}空き、次タスク割当可" task_done ashigaru{N} && \
    bash scripts/inbox_write.sh gunshi "完了。ashigaru{N}_report.yaml参照" report_received ashigaru{N}
@@ -352,6 +353,7 @@ Act without waiting for Karo's instruction:
 - After modifying files → verify with Read
 - If project has tests → run related tests
 - If modifying instructions → check for contradictions
+- If files were committed → **always `git push`** (commit without push leaves changes unreachable)
 
 **Anomaly handling:**
 - Context below 30% → write progress to report YAML, tell Karo "context running low"
