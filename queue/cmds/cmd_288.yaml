@@ -1,0 +1,78 @@
+id: cmd_288
+status: in_progress
+timestamp: "2026-03-03T15:00:00+09:00"
+purpose: "全システムで「大御所様」→「大御所様」に統一変更。「上様」残存も調査・報告"
+acceptance_criteria:
+  - "全ファイルで「大御所様」が「大御所様」に置換されていること"
+  - "「上様」が残存していた場合、その箇所が報告されていること"
+  - "「上様」が残存していた場合、適切に「大御所様」に置換されていること"
+  - "YAML/md/sh/py 等すべてのファイル種別が対象であること"
+  - "置換後にスクリプトの構文エラーがないこと（bash -n等で確認）"
+command: |
+  リポジトリ: /Users/odakin/Claude/multi-agent-shogun
+
+  大御所様のご命令:
+  「大御所様」→「大御所様」に全システムで変更。
+  「上様」が残っていたら報告すること。
+
+  対象: リポジトリ内の全ファイル（instructions/, scripts/, config/, queue/, CLAUDE.md等）
+  除外: .git/, node_modules/, logs/, queue/archive/
+
+  手順:
+  1. grep -r で「大御所様」「上様」の全出現箇所を列挙
+  2. 「大御所様」→「大御所様」に置換
+  3. 「上様」があれば報告し、適切に「大御所様」に置換
+  4. bash -n で構文チェック
+  5. git commit
+project: multi-agent-shogun
+priority: high
+
+phases:
+  - phase: 1
+    mode: parallel
+    subtasks:
+      - id: s288a
+        description: |
+          【目的】instructions/ と CLAUDE.md 内の「大御所様」→「大御所様」置換 + 「上様」調査
+          【入力】
+            - /Users/odakin/Claude/multi-agent-shogun/instructions/*.md
+            - /Users/odakin/Claude/multi-agent-shogun/CLAUDE.md
+          【出力】
+            1. 全「大御所様」を「大御所様」に置換済み
+            2. 「上様」残存箇所のリスト（あれば置換も実施）
+          【完了条件】grep -r で「大御所様」「上様」がゼロ。git commit済み
+        target_path: "/Users/odakin/Claude/multi-agent-shogun/instructions/"
+        bloom_level: L2
+        status: done
+      - id: s288b
+        description: |
+          【目的】scripts/ 内の「大御所様」→「大御所様」置換 + 「上様」調査
+          【入力】
+            - /Users/odakin/Claude/multi-agent-shogun/scripts/*.sh
+            - /Users/odakin/Claude/multi-agent-shogun/scripts/*.py（あれば）
+          【出力】
+            1. 全「大御所様」を「大御所様」に置換済み
+            2. 「上様」残存箇所のリスト（あれば置換も実施）
+            3. bash -n で構文チェックPASS
+          【完了条件】grep -r で「大御所様」「上様」がゼロ。構文エラーなし。git commit済み
+        target_path: "/Users/odakin/Claude/multi-agent-shogun/scripts/"
+        bloom_level: L2
+        status: assigned
+      - id: s288c
+        description: |
+          【目的】config/, queue/, その他全ファイルの「大御所様」→「大御所様」置換 + 「上様」調査
+          【入力】
+            - /Users/odakin/Claude/multi-agent-shogun/config/
+            - /Users/odakin/Claude/multi-agent-shogun/queue/ (archive/除外)
+            - /Users/odakin/Claude/multi-agent-shogun/ 直下のその他ファイル
+          【出力】
+            1. 全「大御所様」を「大御所様」に置換済み
+            2. 「上様」残存箇所のリスト（あれば置換も実施）
+          【完了条件】リポジトリ全体でgrep -r「大御所様」「上様」がゼロ。git commit済み
+          【注意】queue/archive/ は除外。RACE-001: s288a/s288bと同一ファイルを触らないこと
+        target_path: "/Users/odakin/Claude/multi-agent-shogun/config/"
+        bloom_level: L2
+        status: assigned
+  - phase: 2
+    mode: qc
+    qc_for: [s288a, s288b, s288c]

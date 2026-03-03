@@ -125,6 +125,11 @@ except Exception as e:
         # This ensures delivery even when inbox_watcher is dead.
         # inbox_watcher serves as escalation backup (re-nudge if still unread).
         _send_nudge() {
+            # 将軍への send-keys nudge は抑制（大殿様は自分のタイミングでinboxを読む。
+            # tmux send-keys でナッジを送るとプロンプトに "inbox1" が挿入されて邪魔になる。
+            # YAML書き込み（inbox_write.sh の主目的）は上のロック内で既に完了している。）
+            [ "$TARGET" = "shogun" ] && return 0
+
             # Find target pane by @agent_id tmux user variable
             local target_pane=""
             while IFS= read -r _line; do

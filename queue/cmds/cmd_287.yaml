@@ -1,0 +1,54 @@
+id: cmd_287
+status: in_progress
+timestamp: "2026-03-03T14:55:00+09:00"
+purpose: "将軍ペインへのinbox1ナッジ送信源を完全特定し遮断する"
+acceptance_criteria:
+  - "将軍ペインにinbox1が一切表示されないこと"
+  - "ナッジ送信源が特定されていること"
+  - "将軍のinbox書き込み自体は維持されること（inbox_writeは正常動作）"
+command: |
+  リポジトリ: /Users/odakin/Claude/multi-agent-shogun
+
+  問題:
+  将軍ペインにinbox1ナッジがまだ来ている。大御所様が再三指摘。
+
+  これまでの対策（全て実施済み、効果なし）:
+  1. cmd_277: inbox_watcher.sh のsend_wakeup() / send_wakeup_with_escape() に将軍除外追加
+  2. stop_hook_inbox.sh にshogun除外追加（exit 0）
+  3. watcher_supervisor.sh からshogun watcher起動を削除
+  4. shogun inbox_watcherプロセス自体は存在しない（ps確認済み）
+
+  にもかかわらずinbox1が来るということは、上記3箇所以外にtmux send-keys送信源がある。
+
+  調査方針:
+  1. scripts/ 配下の全ファイルで "send-keys" を含む箇所をgrep
+  2. 特にshogunペインをターゲットにしうるsend-keys呼び出しを全列挙
+  3. health_checker, battle_monitor, 他のスクリプトを確認
+  4. 将軍ペインのtmux target名を特定し、そのtargetにsend-keysする箇所を全遮断
+
+  対象ファイル:
+  - /Users/odakin/Claude/multi-agent-shogun/scripts/ 配下の全shファイル
+project: multi-agent-shogun
+priority: critical
+
+phases:
+  - phase: 1
+    mode: sequential
+    subtasks:
+      - id: s287a
+        description: |
+          【目的】将軍ペインへのinbox1送信源を完全特定し遮断する
+          【入力】
+            - /Users/odakin/Claude/multi-agent-shogun/scripts/ 配下全shファイル
+            - 将軍ペインのtmux target: shogun:main（またはshogun:main.0）
+          【出力】
+            1. 将軍ペインにsend-keysする全箇所のリスト
+            2. 修正済みファイル（将軍ペインへのsend-keysを全て遮断）
+            3. inbox_write.sh によるYAML書き込みは維持（ナッジのみ遮断）
+          【完了条件】将軍ペインにinbox1が一切来ないこと。git commit済み
+        target_path: "/Users/odakin/Claude/multi-agent-shogun/scripts/"
+        bloom_level: L3
+        status: done
+  - phase: 2
+    mode: qc
+    qc_for: [s287a]

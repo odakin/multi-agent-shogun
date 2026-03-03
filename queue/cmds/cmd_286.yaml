@@ -1,0 +1,58 @@
+id: cmd_286
+status: in_progress
+timestamp: "2026-03-03T14:50:00+09:00"
+purpose: "battle_monitorのチラツキを完全解消する（cmd_281では直らなかった）"
+acceptance_criteria:
+  - "右ペインに一瞬何かが表示されて消える現象が発生しないこと"
+  - "1秒間隔の更新で画面が安定していること（目視確認）"
+  - "既存の表示内容・レイアウトを壊さないこと"
+command: |
+  リポジトリ: /Users/odakin/Claude/multi-agent-shogun
+
+  問題:
+  cmd_281でチラツキ対策を行ったが、大御所様の目視確認で直っていない。
+  症状: 「一瞬何かが表示されて消される」
+
+  これまでの対策履歴:
+  1. \033[2J（画面クリア）を除去し \033[H（カーソルホーム）のみに → 不十分
+  2. バッファに全行を溜めて printf '%b' で一括出力 → 不十分
+  3. cmd_281（trim_ansi_lineのfork排除等）→ まだ直らない
+
+  考えうる原因:
+  1. render関数内のPython subshellやコマンド置換が出力の途中で割り込んでいる
+  2. printf '%b' の出力が大きすぎて複数回のwrite(2)に分割されている
+  3. 一時ファイルに書いてcatで転送する方式が必要
+  4. tput civis（カーソル非表示）が効いていない
+  5. render()の実行時間が1秒を超えて次のサイクルと重複している
+
+  推奨アプローチ:
+  - 全出力を一時ファイル（/tmp等）に書き出し、最後にcatで一括転送
+  - または: printf '%b' の代わりにwrite(1)を1回で完了する方法を使う
+  - render間隔の排他制御（前回renderが終わるまで次を開始しない）
+
+  対象ファイル:
+  - /Users/odakin/Claude/multi-agent-shogun/scripts/battle_monitor.sh
+project: multi-agent-shogun
+priority: high
+
+phases:
+  - phase: 1
+    mode: sequential
+    subtasks:
+      - id: s286a
+        description: |
+          【目的】battle_monitorの「一瞬何かが表示されて消される」チラツキを完全解消
+          【入力】
+            - /Users/odakin/Claude/multi-agent-shogun/scripts/battle_monitor.sh
+          【出力】修正済みファイル:
+            1. チラツキなしの安定表示
+            2. 方針: tmpfileへ全出力→cat一括転送、またはprintf分割防止
+            3. render間隔の排他制御
+            4. 既存レイアウト維持
+          【完了条件】1秒更新で一瞬の表示→消滅が発生しないこと。git commit済み
+        target_path: "/Users/odakin/Claude/multi-agent-shogun/scripts/battle_monitor.sh"
+        bloom_level: L3
+        status: done
+  - phase: 2
+    mode: qc
+    qc_for: [s286a]
