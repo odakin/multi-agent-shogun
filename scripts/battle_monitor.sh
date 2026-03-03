@@ -40,7 +40,8 @@ C_GREEN=$'\033[32m'
 C_YELLOW=$'\033[33m'
 C_CYAN=$'\033[36m'
 
-CELL_W=20  # Grid column visual width
+CELL_W=20  # Grid column visual width (overridden dynamically in render)
+NCOLS=3    # Grid column count (overridden dynamically in render)
 
 declare -a ACTIVITY_LOG=()
 declare -A PREV_MSG_COUNT=()
@@ -83,7 +84,12 @@ trim_ansi_line() {
             continue
         fi
         local cw=1
-        [[ "$c" == [[:ascii:]] ]] || cw=2
+        if [[ "$c" != [[:ascii:]] ]]; then
+            case "$c" in
+                ─|┌|┬|┐|│|└|┴|┘) cw=1 ;;  # 罫線: 端末では1幅
+                *) cw=2 ;;                   # CJK/絵文字: 2幅
+            esac
+        fi
         if (( w + cw > max )); then
             printf '%s\033[0m\033[K\n' "$result"
             return
@@ -362,7 +368,7 @@ render() {
             IFS=$'\t' read -r lcmd ltitle lsummary lage <<< "$li"
             local age_str=""
             [[ -n "$lage" ]] && age_str=" ${C_DIM}(${lage})${C_RESET}"
-            buf+="${C_YELLOW}${C_BOLD} → ${lcmd} ${ltitle}${C_RESET}${age_str}\n"
+            buf+=" → ${lcmd} ${ltitle}${age_str}\n"
         done
     else
         buf+=" ${C_DIM}🚨 裁可待ち${C_RESET}\n"
