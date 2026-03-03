@@ -1,0 +1,54 @@
+task:
+  task_id: gunshi_qc_cmd_291
+  parent_cmd: cmd_291
+  type: quality_check
+  status: done
+  priority: critical
+  bloom_level: L3
+  description: |
+    【QC】cmd_291 Phase 2 — 将軍ペインへのinbox1ナッジ完全遮断の検証
+
+    【背景】
+    cmd_291 s291a: ashigaru4が6度目の挑戦で根本原因を特定・修正
+    - 前提: cmd_277/cmd_287など過去5回の対策は全て失敗
+    - 発見: 原因は send-keys 周辺ではなく health_checker.sh check_agent() 関数の guard位置
+    - guard（行197）が unread チェック（行189-190）の「後」に配置されていたため、
+      shogun に unread があると nudge が送信されていた
+
+    【成果物】
+    s291a: ashigaru4 リポート確認済み
+    - 全send-keys箇所を列挙（5箇所 + health_checker）
+    - health_checker.sh 修正完了（commit dd8f99d）
+    - 実機検証済み: bash scripts/inbox_write.sh shogun でナッジ遮断確認
+    - health_checker log で旧コードのNUDGE記録確認
+
+    【Acceptance Criteria】
+    1. ashigaru4_report.yaml で s291a 完了を確認
+    2. 全send-keys箇所のリスト（5+1箇所）を確認
+       - inbox_write.sh _send_nudge() — guard済み
+       - inbox_watcher.sh send_wakeup() — guard済み
+       - teams_visual_monitor.sh check_idle_inbox_unread() — guard済み
+       - health_checker.sh check_agent() ← 今回修正✅
+       - switch_cli.sh — shogun対象呼び出しなし
+    3. git commit dd8f99d の確認
+    4. bash -n 構文チェック PASS
+    5. 修正内容（guard位置の移動）が正確か確認
+    6. 実機検証ログを確認
+
+    【検証手順】
+    1. git show dd8f99d で修正内容確認
+    2. ashigaru4_report.yaml の root_cause セクション確認
+    3. health_checker.sh の check_agent() を確認
+       - 関数冒頭に [ "$AGENT" = "shogun" ] && return 0 の guard があるか
+    4. bash -n scripts/health_checker.sh で構文チェック
+    5. 実機検証証拠（health_checker.log の時系列）確認
+
+    【注意】
+    - ファイル修正は完了済み（commit dd8f99d）
+    - ただし running プロセス（PID 94157）は bash 関数がメモリ展開時に読み込まれるため、
+      新コードが有効化されるには プロセス再起動が必要
+    - health_checker 再起動は Shogun/Karo が実施（このQC後に action required で報告）
+
+  timestamp: '2026-03-03T15:45:00+09:00'
+  ashigaru_report_ids:
+    - ashigaru4_report

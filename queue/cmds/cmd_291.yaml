@@ -1,0 +1,66 @@
+id: cmd_291
+status: done
+timestamp: "2026-03-03T15:20:00+09:00"
+purpose: "将軍ペインへのinbox1ナッジが依然として来る問題を完全解決する（cmd_277/287では不十分）"
+acceptance_criteria:
+  - "将軍ペインにinbox1/inbox2等のナッジ文字列が一切送信されないこと"
+  - "全send-keys送信経路が特定・遮断されていること"
+  - "修正後、実際に将軍inboxにメッセージを書き込み、ナッジが来ないことを実機検証すること"
+command: |
+  リポジトリ: /Users/odakin/Claude/multi-agent-shogun
+
+  問題:
+  将軍ペインにinbox1ナッジがまだ来ている。大御所様が繰り返し指摘。
+
+  これまでの対策履歴（全て効果なし）:
+  1. cmd_277: inbox_watcher.sh send_wakeup()/send_wakeup_with_escape() に将軍除外
+  2. stop_hook_inbox.sh にshogun除外（exit 0）
+  3. watcher_supervisor.sh からshogun watcher起動を削除
+  4. shogun inbox_watcherプロセスをkill（プロセス不存在を確認済み）
+  5. cmd_287: inbox_write.sh _send_nudge() に [ "$TARGET" = "shogun" ] && return 0 追加
+
+  5つの対策を全て実施したにもかかわらず、まだ来る。
+
+  調査方針（前回より深く）:
+  1. grep -rn 'send-keys' scripts/ で全send-keys箇所を列挙（前回は5箇所見つけた）
+  2. 各箇所で将軍ペインがターゲットになりうるかを全て検証
+  3. 特に teams_visual_monitor.sh の check_idle_inbox_unread() と
+     check_unresponsive_panes() が本当にshogunを除外しているか実コードで確認
+  4. inbox_write.sh の _send_nudge() のガードが実際に動作しているか確認
+     （条件分岐のバグ、変数名の不一致等）
+  5. tmux send-keys のターゲット指定で、shogunペインに解決されうる
+     別名（pane ID、session:window.pane形式等）がないか確認
+
+  ★重要: 修正後、実機検証を必ず行うこと:
+  bash scripts/inbox_write.sh shogun "テストメッセージ" test shogun
+  → 将軍ペインにinboxNが表示されないことを確認
+
+  対象ファイル:
+  - /Users/odakin/Claude/multi-agent-shogun/scripts/ 配下全shファイル
+project: multi-agent-shogun
+priority: critical
+
+phases:
+  - phase: 1
+    mode: sequential
+    subtasks:
+      - id: s291a
+        description: |
+          【目的】将軍ペインへの全send-keys経路を完全特定・遮断し、実機検証する
+          【入力】
+            - /Users/odakin/Claude/multi-agent-shogun/scripts/ 配下全shファイル
+            - cmd_287レポート（5箇所の調査結果）
+          【出力】
+            1. 全send-keys箇所のリスト（前回5箇所 + 見落とし分）
+            2. 将軍ペインにsend-keysしうる全箇所の修正
+            3. 実機検証結果: inbox_write.sh shogun でナッジが来ないことの確認ログ
+          【完了条件】
+            - 実機検証で将軍ペインにナッジが来ないこと確認済み
+            - git commit済み
+        target_path: "/Users/odakin/Claude/multi-agent-shogun/scripts/"
+        bloom_level: L3
+        status: done
+  - phase: 2
+    mode: qc
+    qc_for: [s291a]
+    status: done

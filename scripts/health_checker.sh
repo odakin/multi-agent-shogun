@@ -169,6 +169,11 @@ check_agent() {
     local agent="$1"
     local pane="$2"
 
+    # 将軍は人間が直接操作するため、全自動ナッジを抑制（inbox nudge・compact-recovery含む）
+    if [ "$agent" = "shogun" ]; then
+        return 0
+    fi
+
     # 1. Stuck detection (feedback prompts, session end dialogs, etc.)
     if type agent_stuck_check &>/dev/null; then
         if agent_stuck_check "$pane" "$agent"; then

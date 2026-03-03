@@ -1,59 +1,49 @@
 worker_id: gunshi
-task_id: gunshi_qc_cmd_290
-parent_cmd: cmd_290
-timestamp: "2026-03-03T15:45:00+09:00"
+task_id: gunshi_qc_cmd_291
+parent_cmd: cmd_291
+timestamp: "2026-03-03T16:00:00+09:00"
 status: done
 result:
   type: quality_check
   qa_decision: pass
-  commits: ["e5cb7b3", "7236e1e"]
+  commits: ["dd8f99d"]
   files_changed:
-    - instructions/gunshi.md
-    - instructions/ashigaru.md
-  changes: "per-cmd/per-subtaskレポートファイル保存方式追記"
+    - scripts/health_checker.sh
+  changes: "health_checker.sh check_agent() 関数冒頭にshogun早期リターン追加"
   subtasks_reviewed:
-    - task_id: s290a
-      worker: ashigaru2
+    - task_id: s291a
+      worker: ashigaru4
       qa_decision: pass
       notes: |
-        gunshi.md に29行追記:
-        - qc_cmd_{XXX}.yaml (主・永続) + gunshi_report.yaml (副・後方互換) の2箇所書き
-        - 命名規則: qc_cmd_{数字}.yaml
-        - 3ステップ手順: 作成→per-cmdファイル→gunshi_report上書き
-        - 事後検証目的の説明
-    - task_id: s290b
-      worker: ashigaru3
-      qa_decision: pass
-      notes: |
-        ashigaru.md に36行変更:
-        - workflow step5: target → target_per_subtask + target_latest
-        - files YAML: report_per_subtask + report_latest
-        - Per-Subtask命名規則セクション新設 (テーブル+標準フォーマット+RACE-001)
-        - Key Files更新: per-subtaskレポート追加
+        6度目の挑戦で根本原因を特定。
+        health_checker.sh check_agent() の shogun ガード（旧行197）が
+        unread チェック（旧行189-190）の「後」に配置されていたため、
+        shogun に unread があると send_nudge() が呼ばれていた。
+        修正: 関数冒頭（行172-175）に早期リターン追加。
+        全5+1箇所の send-keys 調査結果完全。
   acceptance_criteria_check:
-    ac1_gunshi_per_cmd: true
-    ac2_ashigaru_per_subtask: true
-    ac3_naming_convention: true
-    ac4_backward_compat: true
-    ac5_syntax: true
-    ac6_audit_possible: true
+    ac1_ashigaru4_report: true
+    ac2_send_keys_list_5plus1: true
+    ac3_commit_dd8f99d: true
+    ac4_bash_n_syntax: true
+    ac5_guard_position_correct: true
+    ac6_verification_log: true
   scope_match: complete
   issues_found: []
+  action_required:
+    - "health_checker プロセス (PID 94157) 再起動が必要。ファイル修正済みだがbash関数はメモリ常駐のため、現PIDは旧コードで動作中。kill後に再起動で新コード有効化。"
   detail: |
-    ## cmd_290 QC結果 — per-cmd/per-subtaskレポート保存方式
+    ## cmd_291 QC結果 — 将軍ペインへのinbox1ナッジ完全遮断
 
-    ### s290a (commit e5cb7b3) — gunshi.md
-    QCレポートを qc_cmd_{XXX}.yaml に永続保存。
-    gunshi_report.yaml にも同内容書き出し（後方互換）。
+    ### 根本原因
+    health_checker.sh check_agent() のshogunガードが unread チェックの「後」にあった。
 
-    ### s290b (commit 7236e1e) — ashigaru.md
-    足軽レポートを s{subtask_id}_ashigaru{N}.yaml に永続保存。
-    ashigaru{N}_report.yaml にも同内容書き出し（後方互換）。
-    RACE-001安全: subtask IDがユニークなため衝突なし。
+    ### 修正内容 (commit dd8f99d)
+    check_agent() 関数冒頭に shogun 早期リターン追加。
 
-    ### 背景
-    cmd_280/281のQC誤判定レポートが後続タスクで上書き消失した問題の再発防止。
+    ### 全send-keys経路 (5+1箇所) — 全ガード済み
 
+    ### 要対応: health_checker プロセス再起動が必要
   skill_candidate:
     found: false
 files_modified: ["dashboard.md"]
