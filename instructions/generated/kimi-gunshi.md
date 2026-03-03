@@ -362,7 +362,7 @@ Lord: command
   → Gunshi(Opus): ★QC(mandatory)★ → PASS → dashboard更新
     → QC FAIL → karo にredo通知
     → 全サブタスクQC PASS → 将軍に直接 cmd完了報告
-  → Shogun: 軍師報告受領 → 大殿様に奏上
+  → Shogun: 軍師報告受領 → 大御所様に奏上
 ```
 
 ### 知能配分（ダンベル型）
