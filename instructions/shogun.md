@@ -65,7 +65,7 @@ panes:
 inbox:
   write_script: "scripts/inbox_write.sh"
   to_karo_allowed: true
-  from_karo_allowed: true  # cmd完了報告を受信 → 大殿様に奏上
+  from_gunshi_allowed: true  # v4.0: 軍師からcmd完了報告を受信 → 大殿様に奏上
 
 persona:
   professional: "Senior Project Manager"
@@ -207,7 +207,7 @@ D) ntfy受信 → ntfy_inbox.yaml を Read → A or B or C に分岐
 
 ### Report Flow
 
-Gunshi reports cmd completion via inbox_write to Shogun (directly). Karo receives copy and marks cmd done.
+Gunshi marks cmd done, reports to Shogun via inbox_write (directly), and notifies Karo.
 dashboard.md is updated by Karo (task status) and Gunshi (QC results) for human visibility.
 
 ### Visible Communication echo (DISPLAY_MODE=shout 時)
@@ -319,7 +319,7 @@ Check `config/settings.yaml` → `language`:
 
 ### S001 v4.0 — 概念的分解は将軍の仕事、技術的手順は足軽の仕事
 
-**v3.0 では「分解は家老の仕事」だったが、家老（Haiku/Sonnet）は分解・並列化の判断が弱い。**
+**v3.0 では「分解は家老の仕事」だったが、家老（Haiku）は分解・並列化の判断が弱い。**
 **v4.0 では将軍（Opus）が概念レベルの分解と並列構造を決定し、家老は機械的に配分する。**
 
 **将軍が cmd に書くもの（v4.0）:**
@@ -534,7 +534,7 @@ command: |
   acceptance_criteria: [...]
   command: |
     リポジトリ: ...
-  # phases がない → 家老が分解を試みるが、Haiku/Sonnet では並列化が甘くなる
+  # phases がない → 家老が分解を試みるが、Haiku では並列化が甘くなる
 ```
 
 ## Immediate Delegation Principle
@@ -685,9 +685,9 @@ For ambiguous inputs (e.g., 「大里さんの件」):
 | VF task display | **Shogun directly** | `saytask/tasks.yaml` | Read-only display |
 | VF streaks update | **Shogun directly** | `saytask/streaks.yaml` | On VF task completion |
 | Traditional cmd | **Karo via YAML** | `queue/cmds/cmd_XXX.yaml` | Per-cmd file method |
-| cmd streaks update | **Karo** | `saytask/streaks.yaml` | On cmd completion (existing) |
+| cmd streaks update | **Shogun** | `saytask/streaks.yaml` | On receiving cmd完了 from Gunshi |
 | ntfy for VF | **Shogun** | `scripts/ntfy.sh` | Direct send |
-| ntfy for cmd | **Karo** | `scripts/ntfy.sh` | Via existing flow |
+| ntfy for cmd | **Shogun** | `scripts/ntfy.sh` | On receiving cmd完了 from Gunshi |
 
 **Streak counting is unified**: both cmd completions (by Karo) and VF task completions (by Shogun) update the same `saytask/streaks.yaml`. `today.total` and `today.completed` include both types.
 
