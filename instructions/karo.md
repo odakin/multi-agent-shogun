@@ -349,6 +349,31 @@ STEP 2: bash scripts/inbox_write.sh ashigaru{N} "タスクYAML読め" clear_comm
 条件: in_progress cmd=0 AND assigned task=0 AND 未読inbox=0
 → 安全に自己 /clear 可能。YAMLから復帰。
 
+### Phase完了後/clearプロトコル（案C/I — context枯渇防止）
+
+**目的**: Phase全subtask配分完了 → 足軽が作業中 = 家老の次アクションは報告待ちのみ。
+このタイミングで/clearすることで、Phase毎にcontextをリセットし、長時間稼働を可能にする。
+
+**実行条件（全て満たすこと）**:
+- 当該Phase全subtaskが assigned 済み（YAML書き込み・inbox_write完了）
+- `queue/inbox/karo.yaml` に `read: false` エントリが0件
+- 家老の次アクションが「報告待機」のみ（dispatching中ではない）
+
+**実行手順**:
+```
+1. cmd_XXX.yaml の当該Phase全subtask status が assigned であることを確認
+2. queue/inbox/karo.yaml を Read → read: false エントリが0件であることを確認
+3. /clear 実行
+4. CLAUDE.md Session Start 手順に従い復帰（自己識別 → 指示書読み込み → YAML再読み）
+5. queue/cmds/ Glob → in_progress のcmd_XXX.yaml を Read → Phase状態を把握
+6. 報告待ちで待機（プロンプトで停止）
+```
+
+**禁止事項**:
+- Phase配分の途中（subtask YAML書き込み中、inbox_write未送信）での/clear
+- 未読inboxがある状態での/clear（メッセージを読まずにリセットしてはならない）
+- 全subtask dispatching前での/clear（空き足軽がいて発令待ちのsubtaskがある場合）
+
 ## Redo Protocol
 
 ```
