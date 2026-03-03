@@ -324,6 +324,49 @@ STEP 2: clear_command で送信（task_assigned ではない）
 STEP 3: 2回redo後も改善なし → dashboard 🚨 に escalate
 ```
 
+### Redo タスク YAML テンプレート
+
+```yaml
+task:
+  task_id: subtask_097d2          # 末尾に連番を付与
+  parent_cmd: cmd_097
+  bloom_level: L3
+  redo_of: subtask_097d           # 元のtask_idを記録
+  redo_reason: "QC FAIL: {失敗理由を簡潔に}"
+  description: |
+    【作業開始前に必ず実行】
+    git reset --soft HEAD~1
+    （前回の不良コミットを取り消す。変更はステージングに保持されたまま commit だけ取り消す）
+
+    【目的】{元のdescriptionをそのまま転記}
+    ...
+  target_path: "..."
+  status: assigned
+  timestamp: "..."
+```
+
+### git reset --soft の説明
+
+- `git reset --soft HEAD~1` は**非破壊**操作: ファイルの変更内容はステージングエリアに残る
+- コミットの記録だけを取り消すため、修正→再コミットが容易
+- `git reset --hard` は使用禁止（D004違反 — 変更が消える）
+
+### Redo 時の足軽 Workflow
+
+```
+足軽が redo タスクを受信
+  ↓
+git reset --soft HEAD~1  ← 必須。スキップ禁止
+  ↓
+前回の失敗原因を確認（QC FAILレポート参照）
+  ↓
+修正実施
+  ↓
+git commit（新コミット）
+  ↓
+完了報告
+```
+
 ## Gunshi Dispatch
 
 ```
