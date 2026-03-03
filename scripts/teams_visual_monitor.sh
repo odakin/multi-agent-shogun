@@ -29,7 +29,7 @@ POLL_INTERVAL=3
 LAYOUT_APPLIED=false
 BORDER_APPLIED=false
 # pane-border-format の目標値（差分更新用）。先頭スペースで罫線と文字の間にパディング挿入。
-TARGET_BORDER_FORMAT=' #{?pane_active,#[fg=colour255,bold],#[fg=colour240]}#{?#{@agent_name_ja},#{@agent_name_ja},#{@agent_id}}#[default] #[dim](#{@model_name})#[default]#{?#{==:Opus,#{@model_name}}, #[fg=colour63,bold]★#[default],} #{@current_task}'
+TARGET_BORDER_FORMAT=' #[bold]#{@agent_name_ja}#[nobold] (#{@model_name})#{?#{==:Opus,#{@model_name}}, ★,} #{@current_task}'
 
 # pane-border-lines スタイル: heavy は tmux 3.2+ 必須。バージョン検出して自動選択。
 _detect_border_line_style() {
