@@ -232,9 +232,14 @@ PYEOF
 
 # ─── Main render function ───
 render() {
-    # Terminal dimensions
+    # Terminal dimensions — stty size 優先、失敗時は tput、最終フォールバック 40x80
     local term_h term_w
-    read -r term_h term_w < <(stty size 2>/dev/null || echo "40 120")
+    if read -r term_h term_w < <(stty size 2>/dev/null) && [[ -n "$term_w" && "$term_w" -gt 0 ]]; then
+        :  # stty size 成功
+    else
+        term_w=$(tput cols 2>/dev/null || echo 80)
+        term_h=$(tput lines 2>/dev/null || echo 40)
+    fi
 
     # Fetch all data (single Python call)
     local raw
@@ -435,10 +440,13 @@ render() {
         done
     fi
 
-    # Output frame
-    tput home 2>/dev/null
-    printf '%b' "$buf"
-    tput ed 2>/dev/null
+    # Output frame — 行末消去付きで出力（残像・前フレーム文字を完全消去）
+    printf '\033[H'
+    local _line
+    while IFS= read -r _line; do
+        printf '%s\033[K\n' "$_line"
+    done < <(printf '%b' "$buf")
+    printf '\033[J'
 }
 
 # ─── Main ───
