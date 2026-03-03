@@ -1,64 +1,58 @@
 worker_id: gunshi
-task_id: gunshi_qc_cmd_289
-parent_cmd: cmd_289
-timestamp: "2026-03-03T15:40:00+09:00"
+task_id: gunshi_qc_cmd_290
+parent_cmd: cmd_290
+timestamp: "2026-03-03T15:45:00+09:00"
 status: done
 result:
   type: quality_check
   qa_decision: pass
-  commit: "8dc4ff4"
+  commits: ["e5cb7b3", "7236e1e"]
   files_changed:
     - instructions/gunshi.md
-  changes: "battle_monitor実機検証プロトコル追記 (50行)"
+    - instructions/ashigaru.md
+  changes: "per-cmd/per-subtaskレポートファイル保存方式追記"
   subtasks_reviewed:
-    - task_id: s289a
-      worker: ashigaru1
+    - task_id: s290a
+      worker: ashigaru2
       qa_decision: pass
       notes: |
-        検証手順7ステップ:
-        1. バックグラウンド起動 (--interval 2, flock競合回避)
-        2. 3秒待機 (2-3フレーム描画)
-        3. 1回目capture-pane (monitorペイン or fallback)
-        4. 1秒待機
-        5. 2回目capture-pane (チラツキ差分用)
-        6. kill+wait で停止
-        7. tmpファイルcleanup
-
-        検証項目4つ (テーブル形式):
-        - セクションヘッダー存在 (🚨📋⚔📜)
-        - 行幅超過チェック (tput cols以内)
-        - チラツキ差分 (frame1 vs frame2)
-        - 起動エラー (stderr確認)
-
-        ルール: コードレビューのみPASS禁止。実行不可時はFAIL+原因記載。
-        通常QCへの影響なし (target_pathにbattle_monitor.sh含む場合のみ)。
+        gunshi.md に29行追記:
+        - qc_cmd_{XXX}.yaml (主・永続) + gunshi_report.yaml (副・後方互換) の2箇所書き
+        - 命名規則: qc_cmd_{数字}.yaml
+        - 3ステップ手順: 作成→per-cmdファイル→gunshi_report上書き
+        - 事後検証目的の説明
+    - task_id: s290b
+      worker: ashigaru3
+      qa_decision: pass
+      notes: |
+        ashigaru.md に36行変更:
+        - workflow step5: target → target_per_subtask + target_latest
+        - files YAML: report_per_subtask + report_latest
+        - Per-Subtask命名規則セクション新設 (テーブル+標準フォーマット+RACE-001)
+        - Key Files更新: per-subtaskレポート追加
   acceptance_criteria_check:
-    ac1_protocol_documented: true
-    ac2_verification_steps: true
-    ac3_check_items: true
-    ac4_code_review_only_ban: true
-    ac5_no_impact_normal_qc: true
-    ac6_syntax: true  # markdown文書のためbash -n対象外
-  deliverables_verified: true
+    ac1_gunshi_per_cmd: true
+    ac2_ashigaru_per_subtask: true
+    ac3_naming_convention: true
+    ac4_backward_compat: true
+    ac5_syntax: true
+    ac6_audit_possible: true
   scope_match: complete
   issues_found: []
   detail: |
-    ## cmd_289 QC結果 — battle_monitor実機検証プロトコル
+    ## cmd_290 QC結果 — per-cmd/per-subtaskレポート保存方式
 
-    ### 修正内容 (commit 8dc4ff4)
-    instructions/gunshi.md に50行追加。
-    battle_monitor.sh関連QC時の実機検証手順を標準化。
+    ### s290a (commit e5cb7b3) — gunshi.md
+    QCレポートを qc_cmd_{XXX}.yaml に永続保存。
+    gunshi_report.yaml にも同内容書き出し（後方互換）。
+
+    ### s290b (commit 7236e1e) — ashigaru.md
+    足軽レポートを s{subtask_id}_ashigaru{N}.yaml に永続保存。
+    ashigaru{N}_report.yaml にも同内容書き出し（後方互換）。
+    RACE-001安全: subtask IDがユニークなため衝突なし。
 
     ### 背景
-    cmd_280/281がコードレビュー+bash -nのみでPASS→実際は直っていなかった。
-    大御所様の直接指示で実機検証を義務化。
-
-    ### 品質評価
-    - 手順が明確で再現可能 (bash code block)
-    - capture-pane fallback (monitor pane or current pane)
-    - テーブル形式の合否基準で判定が客観的
-    - 実行不可時のエスケープハッチ (FAIL+原因報告)
-    - 通常QCへの影響を明確に限定 (battle_monitor.sh含むタスクのみ)
+    cmd_280/281のQC誤判定レポートが後続タスクで上書き消失した問題の再発防止。
 
   skill_candidate:
     found: false

@@ -1,0 +1,68 @@
+id: cmd_290
+status: done
+timestamp: "2026-03-03T15:15:00+09:00"
+purpose: "QCレポートをcmd単位で別ファイルに保存し、上書き消失を防ぐ"
+acceptance_criteria:
+  - "軍師のQCレポートが queue/reports/qc_cmd_{XXX}.yaml の形式で保存されること"
+  - "既存の gunshi_report.yaml は最新レポートのコピーとして維持（後方互換）"
+  - "gunshi.md にQCレポートのファイル命名規則と保存手順が明記されていること"
+  - "足軽レポート（ashigaru{N}_report.yaml）も同様にタスク単位で残す方式を検討すること"
+command: |
+  リポジトリ: /Users/odakin/Claude/multi-agent-shogun
+
+  背景:
+  cmd_280/281のQC判定が誤りだったが、後続タスクのレポートで上書きされ検証不能だった。
+  QCレポートをcmd単位で別ファイルに残せば、事後検証・監査が可能になる。
+
+  実装内容:
+  1. gunshi.md のQCレポート出力手順を修正:
+     - レポートを queue/reports/qc_cmd_{XXX}.yaml に書き出す
+     - gunshi_report.yaml にも同内容を書く（後方互換、家老が参照するため）
+  2. 足軽レポートも同様:
+     - queue/reports/s{XXX}{a}_ashigaru{N}.yaml の形式で保存
+     - ashigaru{N}_report.yaml にも同内容を書く（後方互換）
+
+  命名規則案:
+  - QC: queue/reports/qc_cmd_{XXX}.yaml
+  - 足軽: queue/reports/s{subtask_id}_ashigaru{N}.yaml
+  - 既存ファイル（gunshi_report.yaml, ashigaru{N}_report.yaml）は最新のコピーとして維持
+
+  対象ファイル:
+  - /Users/odakin/Claude/multi-agent-shogun/instructions/gunshi.md
+  - /Users/odakin/Claude/multi-agent-shogun/instructions/ashigaru.md
+project: multi-agent-shogun
+priority: high
+
+phases:
+  - phase: 1
+    mode: parallel
+    subtasks:
+      - id: s290a
+        description: |
+          【目的】gunshi.md のQCレポート保存方式を per-cmd ファイル方式に変更
+          【入力】
+            - /Users/odakin/Claude/multi-agent-shogun/instructions/gunshi.md
+          【出力】修正済みファイル:
+            1. QCレポート出力先: queue/reports/qc_cmd_{XXX}.yaml
+            2. gunshi_report.yaml にも同内容を書く（後方互換）
+            3. 命名規則の明記
+          【完了条件】gunshi.md にper-cmdレポート保存手順が明記済み。git commit済み
+        target_path: "/Users/odakin/Claude/multi-agent-shogun/instructions/gunshi.md"
+        bloom_level: L2
+        status: done
+      - id: s290b
+        description: |
+          【目的】ashigaru.md のレポート保存方式を per-subtask ファイル方式に変更
+          【入力】
+            - /Users/odakin/Claude/multi-agent-shogun/instructions/ashigaru.md
+          【出力】修正済みファイル:
+            1. レポート出力先: queue/reports/s{subtask_id}_ashigaru{N}.yaml
+            2. ashigaru{N}_report.yaml にも同内容を書く（後方互換）
+            3. 命名規則の明記
+          【完了条件】ashigaru.md にper-subtaskレポート保存手順が明記済み。git commit済み
+        target_path: "/Users/odakin/Claude/multi-agent-shogun/instructions/ashigaru.md"
+        bloom_level: L2
+        status: done
+  - phase: 2
+    mode: qc
+    qc_for: [s290a, s290b]
