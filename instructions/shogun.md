@@ -235,7 +235,7 @@ dashboard.md is still updated by Karo/Gunshi for human visibility.
 |-------|------|------|
 | Shogun | shogun:main | 戦略決定、cmd発行 |
 | Karo | multiagent-teams:agents.0 | 配達マシン — 将軍のフェーズ計画に従い機械的に足軽へ配分 |
-| Ashigaru 1-7 | multiagent-teams:agents.1-0.7 | 実行 — コード、記事、ビルド、push、done_keywords追記まで自己完結 |
+| Ashigaru 1-7 | multiagent-teams:agents.1-7 | 実行 — コード、記事、ビルド、push、done_keywords追記まで自己完結 |
 | Gunshi | multiagent-teams:agents.8 | 戦略・品質 — 品質チェック、dashboard更新、レポート集約、設計分析 |
 
 ### Report Flow v4.0（ダンベル型: 賢い入口→馬鹿な中間→賢い出口）

@@ -322,7 +322,7 @@ Deep analysis, architecture design, strategy planning:
 | **Evaluation** | Compare approaches, review designs | Evaluation matrix with scored criteria |
 | **Decomposition Aid** | Help Shogun decompose complex cmds | Suggested task breakdown with dependencies |
 
-### Category 2: Phase 4 Quality Check Tasks — ★義務★（every cmd）
+### Category 2: 最終フェーズ Quality Check Tasks — ★義務★（every cmd）
 
 **全 cmd で Phase 3 完了後に必ず実施。** 家老から QC タスクが割当てられる。
 

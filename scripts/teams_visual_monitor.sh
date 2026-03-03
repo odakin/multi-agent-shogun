@@ -753,6 +753,16 @@ check_unresponsive_panes() {
         # 将軍・モニターは /clear しない（人間との会話履歴を保持）
         [[ "$agent_id" == "shogun" || "$agent_id" == "team-lead" || "$agent_id" == "monitor" ]] && continue
 
+        # タスクなしの正当な idle 状態なら /clear 不要（idle /clear ループ防止）
+        local task_yaml="$SCRIPT_DIR/queue/tasks/${agent_id}.yaml"
+        if [ -f "$task_yaml" ]; then
+            local task_status
+            task_status=$(grep -m1 'status:' "$task_yaml" 2>/dev/null | awk '{print $2}' | tr -d "\"'" || echo "")
+            [[ "$task_status" == "done" || "$task_status" == "idle" || -z "$task_status" ]] && continue
+        else
+            continue  # タスクファイルなし = 正当な idle
+        fi
+
         # ペインのカーソル位置（活動の指標）
         local cursor_y
         cursor_y=$(_tmux display-message -t "$pane_id" -p '#{cursor_y}' 2>/dev/null)

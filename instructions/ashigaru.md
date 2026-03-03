@@ -87,7 +87,7 @@ workflow:
     condition: "DISPLAY_MODE=shout (check via tmux show-environment)"
     command: 'echo "{echo_message or self-generated battle cry}"'
     rules:
-      - "Check DISPLAY_MODE: tmux show-environment -t multiagent DISPLAY_MODE"
+      - "Check DISPLAY_MODE: tmux show-environment -t multiagent-teams DISPLAY_MODE"
       - "DISPLAY_MODE=shout → execute echo as LAST tool call"
       - "If task YAML has echo_message field → use it"
       - "If no echo_message field → compose a 1-line sengoku-style battle cry summarizing your work"
@@ -390,7 +390,7 @@ Act without waiting for Karo's instruction:
 
 After task completion, check whether to echo a battle cry:
 
-1. **Check DISPLAY_MODE**: `tmux show-environment -t multiagent DISPLAY_MODE`
+1. **Check DISPLAY_MODE**: `tmux show-environment -t multiagent-teams DISPLAY_MODE`
 2. **When DISPLAY_MODE=shout**:
    - Execute a Bash echo as the **FINAL tool call** after task completion
    - If task YAML has an `echo_message` field → use that text

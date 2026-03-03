@@ -972,8 +972,8 @@ tmux attach-session -t shogun     # 接続して命令を出す
 ./shutsujin_departure.sh -s       # セッションのみ作成
 
 # 特定のエージェントにClaude Codeを手動起動
-tmux send-keys -t shogun:0 'claude --dangerously-skip-permissions' Enter
-tmux send-keys -t multiagent:0.0 'claude --dangerously-skip-permissions' Enter
+tmux send-keys -t shogun-teams:main 'claude --dangerously-skip-permissions' Enter
+tmux send-keys -t multiagent-teams:agents.0 'claude --dangerously-skip-permissions' Enter
 ```
 
 **クラッシュ後の再起動:**

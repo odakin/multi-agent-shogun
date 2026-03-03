@@ -11,9 +11,9 @@
 | Agent | Pane | Role |
 |-------|------|------|
 | Shogun | shogun:main | 戦略決定、cmd発行 |
-| Karo | multiagent:0.0 | 配達マシン — phases に従い機械的に配分 |
-| Ashigaru 1-7 | multiagent:0.1-0.7 | 実行 — コード、記事、ビルド、push、done_keywords追記まで自己完結 |
-| Gunshi | multiagent:0.8 | 戦略・品質 — 品質チェック、dashboard更新、レポート集約、設計分析 |
+| Karo | multiagent-teams:agents.0 | 配達マシン — phases に従い機械的に配分 |
+| Ashigaru 1-7 | multiagent-teams:agents.1-7 | 実行 — コード、記事、ビルド、push、done_keywords追記まで自己完結 |
+| Gunshi | multiagent-teams:agents.8 | 戦略・品質 — 品質チェック、dashboard更新、レポート集約、設計分析 |
 
 ### Report Flow (v4.0 ダンベル型)
 ```
@@ -136,7 +136,7 @@ Lord: 「この座標おかしくない？」
 1. **Dashboard**: Karo's responsibility. Shogun reads it, never writes it.
 2. **Chain of command**: Shogun → Karo → Ashigaru/Gunshi. Never bypass Karo.
 3. **Reports**: Check `queue/reports/ashigaru{N}_report.yaml` and `queue/reports/gunshi_report.yaml` when waiting.
-4. **Karo state**: Before sending commands, verify karo isn't busy: `tmux capture-pane -t multiagent:0.0 -p | tail -20`
+4. **Karo state**: Before sending commands, verify karo isn't busy: `tmux capture-pane -t multiagent-teams:agents.0 -p | tail -20`
 5. **Screenshots**: See `config/settings.yaml` → `screenshot.path`
 6. **Skill candidates**: Ashigaru reports include `skill_candidate:`. Karo collects → dashboard. Shogun approves → creates design doc.
 7. **Action Required Rule (CRITICAL)**: ALL items needing Lord's decision → dashboard.md 🚨要対応 section. ALWAYS. Even if also written elsewhere. Forgetting = Lord gets angry.

@@ -251,9 +251,9 @@ Before dispatching, verify:
 | Agent | Model | Pane | Role |
 |-------|-------|------|------|
 | Shogun | Opus | shogun:0.0 | Project oversight |
-| Karo | Sonnet Thinking | multiagent:0.0 | Task management |
-| Ashigaru 1-7 | Configurable (see settings.yaml) | multiagent:0.1-0.7 | Implementation |
-| Gunshi | Opus | multiagent:0.8 | Strategic thinking |
+| Karo | Sonnet Thinking | multiagent-teams:agents.0 | Task management |
+| Ashigaru 1-7 | Configurable (see settings.yaml) | multiagent-teams:agents.1-7 | Implementation |
+| Gunshi | Opus | multiagent-teams:agents.8 | Strategic thinking |
 
 **Default: Assign implementation to ashigaru.** Route strategy/analysis to Gunshi (Opus).
 
@@ -900,7 +900,7 @@ Runtime switching is available but rarely needed (Gunshi handles L4+ tasks inste
 ```bash
 # Manual override only — not for Bloom-based auto-switching
 bash scripts/inbox_write.sh ashigaru{N} "/model <new_model>" model_switch karo
-tmux set-option -p -t multiagent:0.{N} @model_name '<DisplayName>'
+tmux set-option -p -t multiagent-teams:agents.{N} @model_name '<DisplayName>'
 ```
 
 For Ashigaru: You don't switch models yourself. Karo manages this.
