@@ -917,6 +917,7 @@ PREV_RESIZE_STATE=""
 RESIZE_DEBUG_COUNTER=0
 declare -A PANE_PREV_TOTAL_LINES=()  # 前サイクルの cursor_y + history_size
 declare -A PANE_TARGET_HEIGHT=()     # 前サイクルに適用した高さ（60%収束の基準）
+declare -A PREV_WIN_DIMS=()          # ウィンドウリサイズ検知用（win_id → "WxH"）
 
 dynamic_resize_by_content() {
     local session="$1"
@@ -987,6 +988,17 @@ dynamic_resize_by_content() {
 
     [ "${#pane_ids[@]}" -ne 9 ] && return
 
+    # ウィンドウリサイズ検知: サイズ変化時は PANE_TARGET_HEIGHT をリセットして即追従
+    local cur_dims="${win_width}x${win_height}"
+    local prev_dims="${PREV_WIN_DIMS[$win_id]:-}"
+    if [ -n "$prev_dims" ] && [ "$prev_dims" != "$cur_dims" ]; then
+        log "Window resize: $prev_dims → $cur_dims, resetting pane height cache"
+        for pid in "${pane_ids[@]}"; do
+            unset "PANE_TARGET_HEIGHT[$pid]"
+        done
+    fi
+    PREV_WIN_DIMS[$win_id]="$cur_dims"
+
     # 高さ計算（列ごと独立）
     # 各ペインに MIN_PANE_HEIGHT を確保後、残りをデルタ比例で配分
     local usable_h=$(( win_height - 2 ))
@@ -1008,14 +1020,28 @@ dynamic_resize_by_content() {
         # 各ペインの目標高さを算出
         local col_desired=()
         if [ "$total_delta" -le 0 ]; then
-            # 今サイクル出力なし → busy=average, idle=MIN
+            # 今サイクル出力なし
+            # 全ペインidle判定: busy が0件なら全idle → 均等化（1:1:1）
+            local col_all_idle=1
             for row in 0 1 2; do
-                if [ "${col_busy[$row]}" -eq 1 ]; then
-                    col_desired+=("$(( usable_h / 3 ))")
-                else
-                    col_desired+=("$MIN_PANE_HEIGHT")
-                fi
+                [ "${col_busy[$row]}" -eq 1 ] && col_all_idle=0 && break
             done
+
+            if [ "$col_all_idle" -eq 1 ]; then
+                # 全idle → 均等サイズ（1:1:1）に戻す
+                for row in 0 1 2; do
+                    col_desired+=("$(( usable_h / 3 ))")
+                done
+            else
+                # 一部busy → busy=average, idle=MIN（従来通り）
+                for row in 0 1 2; do
+                    if [ "${col_busy[$row]}" -eq 1 ]; then
+                        col_desired+=("$(( usable_h / 3 ))")
+                    else
+                        col_desired+=("$MIN_PANE_HEIGHT")
+                    fi
+                done
+            fi
         else
             # 出力行数比例で目標高さを算出
             for row in 0 1 2; do
