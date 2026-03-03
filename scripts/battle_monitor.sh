@@ -10,6 +10,20 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# ─── 排他起動: 古い battle_monitor を自動 kill ───
+PIDFILE="$SCRIPT_DIR/.battle_monitor.pid"
+if [ -f "$PIDFILE" ]; then
+    old_pid=$(cat "$PIDFILE" 2>/dev/null)
+    if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+        kill -9 "$old_pid" 2>/dev/null
+        sleep 0.5
+    fi
+fi
+# 自分自身以外の battle_monitor も掃除
+pgrep -f "battle_monitor.sh" | grep -v $$ | xargs kill -9 2>/dev/null || true
+echo $$ > "$PIDFILE"
+trap 'rm -f "$PIDFILE"' EXIT
 PYTHON="$SCRIPT_DIR/.venv/bin/python3"
 
 INTERVAL=1
