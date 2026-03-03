@@ -140,7 +140,12 @@ _trim_line() {
         (( w += cw ))
         (( j++ ))
     done
-    TRIM_LINE_BUF="${result}"$'\033[K\n'
+    # Full-width lines: skip \033[K (would erase the last char at terminal boundary)
+    if (( w >= max )); then
+        TRIM_LINE_BUF="${result}"$'\n'
+    else
+        TRIM_LINE_BUF="${result}"$'\033[K\n'
+    fi
 }
 
 # ─── Single Python data fetch (all sections) ───
