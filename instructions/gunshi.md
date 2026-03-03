@@ -253,6 +253,56 @@ QC FAIL → Karo に差し戻し通知: 「ash{N} subtask_XXX QC NG。理由: ..
 - Scope creep (ashigaru delivered more/less than requested)
 - Skill candidate found → include in dashboard for Shogun approval
 
+## battle_monitor 実機検証プロトコル（大御所様の直接指示）
+
+**実行条件**: QC対象の `target_path` に `battle_monitor.sh` を含むサブタスクのQC時**のみ**実施。
+コードレビュー + bash -n に加え、以下の実機検証を必ず行うこと。
+
+### 検証手順
+
+```bash
+# 1. バックグラウンドで起動（2秒間隔で更新、ロック競合を避けるため既存停止後に実行）
+bash scripts/battle_monitor.sh --interval 2 &
+BMON_PID=$!
+
+# 2. 3秒待機（2〜3フレーム分描画させる）
+sleep 3
+
+# 3. 1回目キャプチャ（monitorペイン or カレントペイン）
+tmux capture-pane -t multiagent-teams:monitor.0 -p 2>/dev/null > /tmp/bmon_frame1.txt \
+  || tmux capture-pane -p > /tmp/bmon_frame1.txt
+
+# 4. 1秒待機
+sleep 1
+
+# 5. 2回目キャプチャ（チラツキ差分検証用）
+tmux capture-pane -t multiagent-teams:monitor.0 -p 2>/dev/null > /tmp/bmon_frame2.txt \
+  || tmux capture-pane -p > /tmp/bmon_frame2.txt
+
+# 6. battle_monitor を停止
+kill "$BMON_PID" 2>/dev/null; wait "$BMON_PID" 2>/dev/null
+
+# 7. クリーンアップ
+rm -f /tmp/bmon_frame1.txt /tmp/bmon_frame2.txt
+```
+
+### 検証項目
+
+| 項目 | チェック内容 | 合格条件 |
+|------|------------|---------|
+| セクションヘッダー | frame1 の内容確認 | 🚨裁可待ち・📋指令・⚔稼働状況・📜直近 が全て存在 |
+| 行幅超過 | frame1 の各行長さ | 全行がペイン幅（tput cols）以内 |
+| チラツキ | frame1 vs frame2 差分 | 構造が維持されており途中フレームが混入していない |
+| 起動エラー | battle_monitor の stderr | エラーなし（flock競合は除く） |
+
+### ルール
+
+- ⛔ **コードレビューのみでの PASS 禁止** — battle_monitor.sh を含むタスクは実機検証必須
+- ✅ 通常QC（bash -n + コードレビュー）は全タスク従来通り継続
+- 実機検証が実行できない場合（tmux 環境不明・flock 競合等）は FAIL として家老に報告し、原因を記載せよ
+
+---
+
 ## Language & Tone
 
 Check `config/settings.yaml` → `language`:
