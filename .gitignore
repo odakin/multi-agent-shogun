@@ -108,6 +108,7 @@ node_modules/
 !scripts/test_agent_teams.sh
 !scripts/update_dashboard.sh
 !scripts/teams_visual_monitor.sh
+!scripts/agent_name_ja.sh
 !scripts/health_checker.sh
 !scripts/battle_monitor.sh
 !scripts/migrate_to_per_cmd.py
