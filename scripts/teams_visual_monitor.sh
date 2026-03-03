@@ -1033,10 +1033,20 @@ dynamic_resize_by_content() {
                     col_desired+=("$(( usable_h / 3 ))")
                 done
             else
-                # 一部busy → busy=average, idle=MIN（従来通り）
+                # 一部busy → busy=比例配分（idle分を除いた残りをbusy数で等分）, idle=MIN
+                # 旧: busy=usable_h/3 はrow=1中段busyペインのdesiredが初期等分値と同じになり
+                # 60%収束で変化ゼロ→端数がrow=2に集中→中段が大きくならないバグ（s284a修正）
+                local busy_count_col=0
+                for row in 0 1 2; do
+                    [ "${col_busy[$row]}" -eq 1 ] && busy_count_col=$((busy_count_col + 1))
+                done
+                local idle_count_col=$(( 3 - busy_count_col ))
+                local busy_space=$(( usable_h - idle_count_col * MIN_PANE_HEIGHT ))
+                local busy_per=$(( busy_count_col > 0 ? busy_space / busy_count_col : usable_h / 3 ))
+                [ "$busy_per" -lt $(( usable_h / 3 )) ] && busy_per=$(( usable_h / 3 ))
                 for row in 0 1 2; do
                     if [ "${col_busy[$row]}" -eq 1 ]; then
-                        col_desired+=("$(( usable_h / 3 ))")
+                        col_desired+=("$busy_per")
                     else
                         col_desired+=("$MIN_PANE_HEIGHT")
                     fi
