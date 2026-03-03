@@ -467,13 +467,15 @@ render() {
         done
     fi
 
-    # Output — 一時ファイル経由一括出力（subshell fork排除・チラツキ防止）
-    # $() サブシェルなしで trim_ansi_line を直接呼び出し → 行ごとの fork ゼロ
-    # /dev/shm（メモリ上）優先で書き込み → cat で端末に一括転送
-    local _tmpf
+    # Output — 全フレーム一括出力（チラツキ完全防止）
+    # 1. 全行を /dev/shm 一時ファイルに書き出す（trim_ansi_line fork ゼロ）
+    # 2. bash 組み込み "$(<file)" でファイルを1回 read → cat プロセス生成なし
+    # 3. printf '%s' 1回 write(2) で端末へ転送 → 分割フレームが端末に届かない
+    # ★ 先頭に \033[?25l でカーソル非表示を毎フレーム保証（setup_terminal補強）
+    local _tmpf _frame
     _tmpf=$(mktemp /dev/shm/bmon_XXXXXX 2>/dev/null || mktemp)
     {
-        printf '\033[H'
+        printf '\033[?25l\033[H'  # カーソル非表示 + 左上へ
         local _line_num=0
         while IFS= read -r _ln; do
             trim_ansi_line "$_ln" "$term_w"
@@ -484,8 +486,9 @@ render() {
             (( _line_num++ )) || true
         done
     } > "$_tmpf"
-    cat "$_tmpf"
+    _frame=$(< "$_tmpf")   # bash組み込み read: fork なし、末尾改行のみ除去
     rm -f "$_tmpf"
+    printf '%s' "$_frame"  # 1回 write(2): 端末が分割フレームを受け取らない
 }
 
 # ─── Main ───
