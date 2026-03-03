@@ -1,49 +1,74 @@
 worker_id: gunshi
-task_id: gunshi_qc_cmd_285
-parent_cmd: cmd_285
-timestamp: "2026-03-03T14:50:00+09:00"
+task_id: gunshi_qc_cmd_286_287
+parent_cmd: [cmd_286, cmd_287]
+timestamp: "2026-03-03T15:25:00+09:00"
 status: done
 result:
   type: quality_check
-  qa_decision: pass
-  commit: "0019cba"
-  files_changed:
-    - scripts/battle_monitor.sh
-  changes: "裁可待ちセクション色分け改善 + trim_ansi_line罫線幅修正"
-  git_push: "commit済み。push実施。"
-  subtasks_reviewed:
-    - task_id: s285a
-      worker: ashigaru6
-      qa_decision: pass
-      notes: "裁可待ち各項目行からC_YELLOW+C_BOLD除去→デフォルト色。見出し行はC_YELLOW+C_BOLD維持。0件時C_DIM影響なし。一括出力方式維持。追加: trim_ansi_lineに罫線文字(─┌┬┐│└┴┘)の1幅判定追加。"
-  acceptance_criteria_check:
-    ac1_heading_yellow_bold: true
-    ac2_items_default_color: true
-    ac3_zero_items_no_impact: true
-    ac4_no_flicker: true
-  deliverables_verified: true
-  scope_match: complete
-  issues_found: []
+
+  # ── cmd_287 (s287a) ──────────────────────────────
+  cmd_287:
+    qa_decision: pass
+    commit: "aa676c9"
+    files_changed:
+      - scripts/inbox_write.sh
+    changes: "inbox_write.sh _send_nudge()に将軍ペイン除外ガード追加"
+    subtasks_reviewed:
+      - task_id: s287a
+        worker: ashigaru1
+        qa_decision: pass
+        notes: |
+          _send_nudge() 冒頭に [ "$TARGET" = "shogun" ] && return 0 を追加。
+          YAML書き込み（inbox/shogun.yaml）は維持。send-keys nudgeのみ抑制。
+          commit messageに全5送信源の調査結果を記載:
+          - inbox_write.sh _send_nudge() → 今回修正
+          - teams_visual_monitor.sh check_idle_inbox_unread() → 既存ガード済
+          - teams_visual_monitor.sh check_unresponsive_panes() → 既存ガード済
+          - inbox_watcher.sh (shogunインスタンス) → 既存ガード済
+          - ratelimit_check.sh → send-keysなし（読取のみ）
+    acceptance_criteria_check:
+      ac1_no_inbox1_to_shogun: true
+      ac2_source_identified: true
+      ac3_yaml_write_preserved: true
+      ac4_bash_n_pass: true
+    scope_match: complete
+    issues_found: []
+
+  # ── cmd_286 (s286a) ──────────────────────────────
+  cmd_286:
+    qa_decision: incomplete
+    commit: null
+    files_changed: []
+    changes: "ashigaru2がauto_closedされコミットなし。battle_monitor.shに変更なし。"
+    subtasks_reviewed:
+      - task_id: s286a
+        worker: ashigaru2
+        qa_decision: incomplete
+        notes: "auto_closed_by: health_checker (Agent idle after 3 recovery nudges)。コミットなし、レポートなし。別足軽に再割当必要。"
+    acceptance_criteria_check:
+      ac1_no_flicker: false
+      ac2_stable_update: false
+      ac3_layout_preserved: false
+      ac4_bash_n_pass: false
+    scope_match: none
+    issues_found:
+      - "ashigaru2 auto_closed。作業未着手のまま。再割当必要。"
+
+  overall_decision: partial
   detail: |
-    ## cmd_285 QC結果 — 裁可待ちセクション色分け改善
+    ## cmd_286/287 QC結果
 
-    ### 修正内容 (commit 0019cba)
-    1. 裁可待ち見出し行: C_YELLOW+C_BOLD 維持 (L365)
-    2. 各項目行: C_YELLOW+C_BOLD を除去、C_RESET不要に (L371)
-       変更前: `${C_YELLOW}${C_BOLD} → ${lcmd} ${ltitle}${C_RESET}${age_str}`
-       変更後: ` → ${lcmd} ${ltitle}${age_str}`
-    3. 0件時: C_DIM表示のまま → 影響なし (L374)
-    4. 一括出力(tmpfile+cat): 変更なし → チラツキなし
+    ### cmd_287 — 将軍ペインへのinbox1送信源遮断: PASS
+    commit aa676c9: inbox_write.sh _send_nudge()にshogunガード追加。
+    全5箇所のsend-keys送信源を調査・特定済み。
+    YAML書き込みは維持、send-keys nudgeのみ抑制。
+    bash -n: PASS。
 
-    ### 追加修正（scope内）
-    trim_ansi_line の非ASCII幅判定を改善:
-    - 罫線文字(─┌┬┐│└┴┘) → cw=1（端末では1カラム幅）
-    - それ以外の非ASCII → cw=2（CJK/絵文字）
-    グリッド表示の幅計算精度が向上。
+    ### cmd_286 — battle_monitorチラツキ完全解消: INCOMPLETE
+    ashigaru2がhealth_checkerによりauto_closed。
+    コミットなし、レポートなし、battle_monitor.shに変更なし。
+    別足軽に再割当が必要。
 
-    ### 構文チェック
-    bash -n: PASS (前QCで確認済み)
-
-    ### skill_candidate
+  skill_candidate:
     found: false
 files_modified: ["dashboard.md"]

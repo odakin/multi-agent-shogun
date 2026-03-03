@@ -1,5 +1,5 @@
 id: cmd_287
-status: in_progress
+status: done
 timestamp: "2026-03-03T14:55:00+09:00"
 purpose: "将軍ペインへのinbox1ナッジ送信源を完全特定し遮断する"
 acceptance_criteria:
@@ -48,7 +48,7 @@ phases:
           【完了条件】将軍ペインにinbox1が一切来ないこと。git commit済み
         target_path: "/Users/odakin/Claude/multi-agent-shogun/scripts/"
         bloom_level: L3
-        status: done
+        status: done  # ashigaru1 confirmed s287a complete with commits aa676c9 (inbox_write.sh guard)
   - phase: 2
     mode: qc
     qc_for: [s287a]
