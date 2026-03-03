@@ -810,8 +810,12 @@ send_wakeup() {
         return 0
     fi
 
-    # Shogun: deliver nudge via send-keys like other agents.
-    # ntfy messages must reach Claude Code directly.
+    # Shogunペインは大殿様（人間）が直接操作するため、ナッジ送信を除外
+    # （inbox_write.sh によるファイル書き込みは継続 — 将軍は自分のタイミングで読む）
+    if [ "$AGENT_ID" = "shogun" ]; then
+        echo "[$(date)] [SKIP] Shogun pane: suppressing nudge (Lord operates directly)" >&2
+        return 0
+    fi
 
     # 優先度3: tmux send-keys（テキストとEnterを分離 — Codex TUI対策）
     echo "[$(date)] [SEND-KEYS] Sending nudge to $PANE_TARGET for $AGENT_ID" >&2
@@ -854,10 +858,9 @@ send_wakeup_with_escape() {
     effective_cli=$(get_effective_cli_type)
     local c_ctrl_state="skipped"
 
-    # Safety: never send Escape escalation to shogun. It can wipe the Lord's input.
+    # Shogunペインは大殿様（人間）が直接操作するため、全ナッジ（通常・エスカレーション）を除外
     if [ "$AGENT_ID" = "shogun" ]; then
-        echo "[$(date)] [SKIP] shogun: suppressing Escape escalation; sending plain nudge" >&2
-        send_wakeup "$unread_count"
+        echo "[$(date)] [SKIP] shogun: suppressing all nudges (Lord operates directly)" >&2
         return 0
     fi
 
