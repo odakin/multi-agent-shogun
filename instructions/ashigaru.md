@@ -52,7 +52,9 @@ workflow:
     action: execute_task
   - step: 5
     action: write_report
-    target: "queue/reports/ashigaru{N}_report.yaml"
+    target_per_subtask: "queue/reports/s{subtask_id}_ashigaru{N}.yaml"
+    target_latest: "queue/reports/ashigaru{N}_report.yaml"
+    note: "両方に同内容を書く。per-subtask は事後監査用、latest は家老・軍師参照用（後方互換）"
   - step: 6
     action: update_status
     value: done
@@ -99,7 +101,8 @@ workflow:
 
 files:
   task: "queue/tasks/ashigaru{N}.yaml"
-  report: "queue/reports/ashigaru{N}_report.yaml"
+  report_per_subtask: "queue/reports/s{subtask_id}_ashigaru{N}.yaml"  # 事後監査・検証用
+  report_latest: "queue/reports/ashigaru{N}_report.yaml"  # 後方互換性（家老・軍師参照用）
 
 panes:
   karo: multiagent-teams:agents.0
@@ -143,7 +146,7 @@ skill_candidate:
 2. Read queue/tasks/ashigaru{N}.yaml
 3. Update status → in_progress
 4. Execute the task
-5. Write report YAML（queue/reports/ashigaru{N}_report.yaml）
+5. Write report YAML（**2ファイルに書く** — 下記「Per-Subtask レポート命名規則」参照）
 6. Update task YAML status → done
 6.5. **Git commit only**: If files were modified, `git add` → `git commit`. **Do NOT push** — push is performed by Gunshi after QC PASS. (足軽は push 禁止)
 7. Notify:
@@ -162,9 +165,38 @@ compaction recovery 時は `tmux display-message -t "$TMUX_PANE" -p '#{@agent_id
 ### Key Files
 
 - `queue/tasks/ashigaru{N}.yaml` — source of truth
-- `queue/reports/ashigaru{N}_report.yaml` — 永続レポート記録
+- `queue/reports/s{subtask_id}_ashigaru{N}.yaml` — per-subtask レポート（事後監査用）
+- `queue/reports/ashigaru{N}_report.yaml` — 最新レポートのコピー（家老・軍師参照用）
 - `queue/inbox/ashigaru{N}.yaml` — 受信箱
 - `scripts/inbox_write.sh` — エージェント間メッセージ送信
+
+### Per-Subtask レポート命名規則
+
+レポートは **2ファイルに同内容を書く**:
+
+| ファイル | 用途 | 例 |
+|---------|------|-----|
+| `queue/reports/s{subtask_id}_ashigaru{N}.yaml` | 事後監査・検証（削除しない） | `s288a_ashigaru3.yaml` |
+| `queue/reports/ashigaru{N}_report.yaml` | 後方互換（家老・軍師参照用） | `ashigaru3_report.yaml` |
+
+**レポート標準フォーマット（両ファイル共通）:**
+
+```yaml
+task_id: s288a           # subtask ID
+parent_cmd: cmd_288      # 親コマンド
+agent: ashigaru3
+timestamp: "2026-03-03T15:00:00+09:00"
+completion_status: done  # done | incomplete | blocked
+commits:
+  - "abc1234"            # 変更があった場合のコミットハッシュ
+notes: |
+  作業内容・発見事項を記載
+skill_candidate:
+  found: false
+```
+
+**RACE-001**: per-subtask ファイルはサブタスクIDがユニークなため複数足軽の衝突なし。
+`ashigaru{N}_report.yaml` は各自の番号が異なるため同様に衝突なし。
 
 ### Visible Communication (DISPLAY_MODE=shout 時)
 
