@@ -69,6 +69,29 @@ try:
     }
     data['messages'].append(new_msg)
 
+    # Inbox pruning: move read:true messages to archive (reduce token cost on Read)
+    read_msgs = [m for m in data['messages'] if m.get('read', False)]
+    if read_msgs:
+        archive_dir = os.path.join(os.path.dirname(os.path.dirname(inbox)), 'archive')
+        os.makedirs(archive_dir, exist_ok=True)
+        ts = os.environ['IW_TIMESTAMP'].replace(':', '').replace('-', '').replace('T', '_')
+        agent_name = os.path.splitext(os.path.basename(inbox))[0]
+        archive_path = os.path.join(archive_dir, f'inbox_{agent_name}_{ts}.yaml')
+        archive_data = {'archived_at': os.environ['IW_TIMESTAMP'], 'messages': read_msgs}
+        tmp_fd2, tmp_path2 = tempfile.mkstemp(dir=archive_dir, suffix='.tmp')
+        try:
+            with os.fdopen(tmp_fd2, 'w') as f:
+                yaml.dump(archive_data, f, default_flow_style=False, allow_unicode=True, indent=2)
+            os.replace(tmp_path2, archive_path)
+        except Exception:
+            try:
+                os.unlink(tmp_path2)
+            except Exception:
+                pass
+            raise
+        # Remove pruned messages from inbox (keep only unread)
+        data['messages'] = [m for m in data['messages'] if not m.get('read', False)]
+
     # Overflow protection: keep max 50 messages
     if len(data['messages']) > 50:
         msgs = data['messages']
