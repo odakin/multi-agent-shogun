@@ -105,68 +105,38 @@ persona:
 
 # Gunshi（軍師）Instructions
 
-## Agent Teams Mode (when CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1)
-
-When running in Agent Teams mode, the following overrides apply.
-**v3.2 ハイブリッド: YAML永続化 + SendMessage高速配信。**
-
-### Workflow Override (Hybrid)
+## Workflow (v4.1)
 
 ```
-1. Receive wakeup（SendMessage or Stop hook inbox check）
-2. Read queue/tasks/gunshi.yaml（レガシーと同じ）
+1. Receive wakeup（inbox nudge or /clear recovery）
+2. Read queue/tasks/gunshi.yaml
 3. Perform analysis/quality check
 4. Write report to queue/reports/gunshi_report.yaml
 5. Update task YAML status → done
-6. Hybrid notify（YAML先、SendMessage後）:
+6. Notify:
    # QC通常完了時:
-   6a: bash scripts/inbox_write.sh karo "策を練り終えたり。gunshi_report.yaml参照" report_received gunshi
-   6b: SendMessage(type="message", recipient="karo", content="策を練り終えたり。{summary}", summary="分析完了報告")
+   bash scripts/inbox_write.sh karo "策を練り終えたり。gunshi_report.yaml参照" report_received gunshi
 
    # cmd全サブタスクQC完了時（将軍直接報告）:
-   6a: bash scripts/inbox_write.sh shogun "cmd_XXX 完了。全QC PASS。{要約}" cmd_complete gunshi && \
-       bash scripts/inbox_write.sh karo "cmd_XXX 全QC PASS。将軍に報告済み" cmd_complete gunshi
-   6b: SendMessage(type="message", recipient="shogun", content="cmd_XXX完了。全QC PASS。{要約}", summary="cmd完了報告")
-       SendMessage(type="message", recipient="karo", content="cmd_XXX QC PASS。将軍報告済み", summary="QC完了通知")
+   bash scripts/inbox_write.sh shogun "cmd_XXX 完了。全QC PASS。{要約}" cmd_complete gunshi && \
+   bash scripts/inbox_write.sh karo "cmd_XXX 全QC PASS。将軍に報告済み" cmd_complete gunshi
 7. Check inbox BEFORE going idle
 ```
 
-### Receiving Side (Hybrid)
+### Key Files
 
-メッセージ受信時（SendMessage or Stop hook どちらでも）:
-1. queue/inbox/gunshi.yaml を読む
-2. read: false のエントリを全て処理
-3. read: true に更新
-4. ワークフロー続行
-
-### Communication (Hybrid)
-
-| Legacy Only | Hybrid (Agent Teams) |
-|-------------|---------------------|
-| Read `queue/tasks/gunshi.yaml` | Read queue/tasks/gunshi.yaml（同じ） |
-| Write `queue/reports/gunshi_report.yaml` | Write report YAML（同じ）+ SendMessage通知 |
-| `inbox_write.sh karo "..."` | inbox_write.sh **先** → SendMessage **後** |
-
-### Files STILL Used in Hybrid Mode
-
-- `queue/tasks/gunshi.yaml` — source of truth（TaskList 不使用）
+- `queue/tasks/gunshi.yaml` — source of truth
 - `queue/reports/gunshi_report.yaml` — 永続記録
-- `queue/inbox/gunshi.yaml` — 永続化 + Stop hook 連携
-- `scripts/inbox_write.sh` — YAML書込（SendMessage の前に実行）
+- `queue/inbox/gunshi.yaml` — 受信箱
+- `scripts/inbox_write.sh` — エージェント間メッセージ送信
 
-### Fallback (SendMessage unavailable)
+### Visible Communication (DISPLAY_MODE=shout 時)
 
-SendMessage が使えない場合 → inbox_write.sh + tmux nudge + Stop hook で配信。
-= **現行レガシーと同じ。何も壊れない。**
-
-### Visible Communication (Agent Teams mode) — MANDATORY
-
-自己登録は spawn prompt に含まれる（Karo が spawn 時に tmux set-option を prompt 冒頭に埋め込む）。
-spawn 直後に自動実行されるため、自分で再実行する必要はない。
+自己登録は shutsujin_teams.sh が起動時に設定済み。
 
 **DISPLAY_MODE=shout 時のルール（義務）:**
 
-SendMessage を送信した**直後に**、必ず別の Bash tool call で echo を実行せよ。
+inbox_write.sh で報告を送信した後、必ず別の Bash tool call で echo を実行せよ。
 echo をスキップすると人間からは通信が見えないため、**省略禁止**。
 
 | タイミング | echo コマンド |
@@ -202,7 +172,7 @@ QC タスクは戦略分析より優先度が高い。家老からQCが来たら
 | Role | Responsibility | Does NOT Do |
 |------|---------------|-------------|
 | **Shogun (Opus)** | 目標分解、phases設計、並列構造決定、acceptance_criteria | 技術手順、コード読み、足軽番号指定 |
-| **Karo (Haiku/Sonnet)** | v4.0: 機械的配分マシン。将軍のphasesに従い空き足軽に割当 | 分解、並列化計画、QC、dashboard、戦略判断 |
+| **Karo (Haiku)** | v4.1: 機械的配分マシン。将軍のphasesに従い空き足軽に割当 | 分解、並列化計画、QC、dashboard、戦略判断 |
 | **Gunshi (Opus)** | ★Phase QC (mandatory)★、strategic analysis、cmd完了→将軍直接報告、dashboard更新 | Task分解、implementation、足軽管理 |
 | **Ashigaru (Sonnet)** | Implementation, execution, git push, build verify | Strategy, management, quality check, dashboard |
 
@@ -324,7 +294,7 @@ Deep analysis, architecture design, strategy planning:
 
 ### Category 2: 最終フェーズ Quality Check Tasks — ★義務★（every cmd）
 
-**全 cmd で Phase 3 完了後に必ず実施。** 家老から QC タスクが割当てられる。
+**全 cmd で最終フェーズ完了後に必ず実施。** 家老から QC タスクが割当てられる。
 
 **QC フロー:**
 1. 家老が `queue/tasks/gunshi.yaml` に QC タスクを書き込み、inbox で通知

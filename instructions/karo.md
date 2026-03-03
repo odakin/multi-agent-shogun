@@ -191,17 +191,12 @@ echo "「家老」はっ！命令受領いたした！"
 ```
 
 ### Workflow
-1. Wakeup受信（SendMessage or inbox）
+1. Wakeup受信（inbox nudge or /clear recovery）
 2. Glob queue/cmds/ → pending/in_progress を Read
 3. settings.yaml → ashigaru_count 取得
-4. phases → dispatch（Task YAML書き → inbox_write → SendMessage）
-5. Spawn: **mode="bypassPermissions" 必須**（省略=デッドロック）
-6. bloom L1-L3 → model="sonnet", L4-L6 → model="opus"
-7. 完了報告受信 → subtask done → phase advance
-
-### Hybrid通信
-- inbox_write.sh **先** → SendMessage **後**
-- SendMessage失敗 → inbox_writeが既に配信済み。壊れない。
+4. phases → dispatch（Task YAML書き → inbox_write.sh）
+5. bloom L1-L3 → model="sonnet", L4-L6 → model="opus"
+6. 完了報告受信 → subtask done → phase advance
 
 ### echo（DISPLAY_MODE=shout時のみ）
 | タイミング | echo |

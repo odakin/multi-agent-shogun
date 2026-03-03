@@ -434,7 +434,7 @@ Meanings and allowed/forbidden actions (short):
 
 Note:
 - Normally, "idle" is a UI state (no active task), not a YAML status value.
-- Exception (placeholder only): `status: idle` is allowed **only** when `task_id: null` (clean start template written by `shutsujin_departure.sh --clean`).
+- Exception (placeholder only): `status: idle` is allowed **only** when `task_id: null` (clean start template written by `shutsujin_teams.sh --clean`).
   - In that state, the file is a placeholder and should be treated as "no task assigned yet".
 
 ### Pending Tasks (Karo-managed): `queue/tasks/pending.yaml`
@@ -635,7 +635,7 @@ tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'
 ```
 Output: `ashigaru3` → You are Ashigaru 3. The number is your ID.
 
-Why `@agent_id` not `pane_index`: pane_index shifts on pane reorganization. @agent_id is set by shutsujin_departure.sh at startup and never changes.
+Why `@agent_id` not `pane_index`: pane_index shifts on pane reorganization. @agent_id is set by shutsujin_teams.sh at startup and never changes.
 
 **Your files ONLY:**
 ```

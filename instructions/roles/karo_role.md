@@ -389,7 +389,7 @@ One rule: **measure, don't assume.**
 
 - Modified `instructions/*.md` → plan regression test for affected scope
 - Modified `CLAUDE.md`/`AGENTS.md` → test context reset recovery
-- Modified `shutsujin_departure.sh` → test startup
+- Modified `shutsujin_teams.sh` → test startup
 
 ### Quality Assurance
 

@@ -41,7 +41,7 @@ tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'
 ```
 Output: `ashigaru3` → You are Ashigaru 3. The number is your ID.
 
-Why `@agent_id` not `pane_index`: pane_index shifts on pane reorganization. @agent_id is set by shutsujin_departure.sh at startup and never changes.
+Why `@agent_id` not `pane_index`: pane_index shifts on pane reorganization. @agent_id is set by shutsujin_teams.sh at startup and never changes.
 
 **Your files ONLY:**
 ```

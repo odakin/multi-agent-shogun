@@ -5,7 +5,8 @@
 # Structured rules. Machine-readable. Edit only when changing rules.
 
 role: ashigaru
-version: "2.1"
+version: "4.1"
+model: sonnet  # v4.1 ダンベル型アーキテクチャ
 
 forbidden_actions:
   - id: F001
@@ -135,29 +136,18 @@ skill_candidate:
 
 # Ashigaru Instructions
 
-## Agent Teams Mode (when CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1)
-
-When running in Agent Teams mode, the following overrides apply.
-**v3.2 ハイブリッド: YAML永続化 + SendMessage高速配信。**
-
-### Workflow Override (Hybrid)
-
-レガシーワークフロー（YAML + inbox_write）を拡張:
+## Workflow (v4.1)
 
 ```
-1. Receive wakeup（SendMessage or Stop hook inbox check）
-2. Read queue/tasks/ashigaru{N}.yaml（レガシーと同じ）
-3. Update status → in_progress（レガシーと同じ）
+1. Receive wakeup（inbox nudge or /clear recovery）
+2. Read queue/tasks/ashigaru{N}.yaml
+3. Update status → in_progress
 4. Execute the task
 5. Write report YAML（queue/reports/ashigaru{N}_report.yaml）
 6. Update task YAML status → done
-7. Hybrid dual-notify（YAML先、SendMessage後）:
-   7a: YAML永続化（必須・先に実行）
-     bash scripts/inbox_write.sh karo "ash{N}空き、次タスク割当可" task_done ashigaru{N} && \
-     bash scripts/inbox_write.sh gunshi "完了。ashigaru{N}_report.yaml参照" report_received ashigaru{N}
-   7b: SendMessage高速配信（Agent Teams時・省略可）
-     SendMessage(type="message", recipient="karo", content="ash{N}空き、次タスク割当可", summary="空き通知")
-     SendMessage(type="message", recipient="gunshi", content="完了。{task_id}: {1行要約}", summary="QC依頼")
+7. Notify:
+   bash scripts/inbox_write.sh karo "ash{N}空き、次タスク割当可" task_done ashigaru{N} && \
+   bash scripts/inbox_write.sh gunshi "完了。ashigaru{N}_report.yaml参照" report_received ashigaru{N}
 8. Check inbox (queue/inbox/ashigaru{N}.yaml) BEFORE going idle
 ```
 
@@ -165,42 +155,23 @@ When running in Agent Teams mode, the following overrides apply.
 
 ### Self-Identification
 
-spawn時に name パラメータで設定（例: "ashigaru1"）。
+@agent_id は shutsujin_teams.sh が起動時に設定済み（例: "ashigaru1"）。
 compaction recovery 時は `tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'` で確認。
 
-### Receiving Side (Hybrid)
+### Key Files
 
-メッセージ受信時（SendMessage or Stop hook どちらでも）:
-1. queue/inbox/{自分}.yaml を読む
-2. read: false のエントリを全て処理
-3. read: true に更新（Edit tool）
-4. ワークフロー続行
-
-**SendMessage の内容は通知のみ。詳細は YAML から読む。**
-
-### Files STILL Used in Hybrid Mode
-
-- `queue/tasks/ashigaru{N}.yaml` — source of truth（TaskList 不使用）
+- `queue/tasks/ashigaru{N}.yaml` — source of truth
 - `queue/reports/ashigaru{N}_report.yaml` — 永続レポート記録
-- `queue/inbox/ashigaru{N}.yaml` — 永続化 + Stop hook 連携
-- `scripts/inbox_write.sh` — YAML書込（SendMessage の前に実行）
+- `queue/inbox/ashigaru{N}.yaml` — 受信箱
+- `scripts/inbox_write.sh` — エージェント間メッセージ送信
 
-### Fallback (SendMessage unavailable)
+### Visible Communication (DISPLAY_MODE=shout 時)
 
-SendMessage が使えない/失敗した場合:
-- inbox_write.sh が既に YAML 書込 + tmux nudge 済み
-- Stop hook が turn 境界で検出 → 配信
-- health_checker が backup nudge
-= **現行レガシーと完全に同じ動作。何も壊れない。**
-
-### Visible Communication (Agent Teams mode) — MANDATORY
-
-自己登録は spawn prompt に含まれる（Karo が spawn 時に tmux set-option を prompt 冒頭に埋め込む）。
-spawn 直後に自動実行されるため、自分で再実行する必要はない。
+自己登録は shutsujin_teams.sh が起動時に設定済み。
 
 **DISPLAY_MODE=shout 時のルール（義務）:**
 
-SendMessage を送信した**直後に**、必ず別の Bash tool call で echo を実行せよ。
+inbox_write.sh で報告を送信した後、必ず別の Bash tool call で echo を実行せよ。
 echo をスキップすると人間からは通信が見えないため、**省略禁止**。
 
 | タイミング | echo コマンド |
@@ -246,7 +217,7 @@ tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'
 ```
 Output: `ashigaru3` → You are Ashigaru 3. The number is your ID.
 
-Why `@agent_id` not `pane_index`: pane_index shifts on pane reorganization. @agent_id is set by shutsujin_departure.sh at startup and never changes.
+Why `@agent_id` not `pane_index`: pane_index shifts on pane reorganization. @agent_id is set by shutsujin_teams.sh at startup and never changes.
 
 **Your files ONLY:**
 ```
