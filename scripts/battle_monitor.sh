@@ -245,6 +245,12 @@ render() {
     local raw
     raw=$(fetch_all_data)
 
+    # Fetch model names from tmux @model_name pane option
+    declare -A AGENT_MODEL=()
+    while IFS=' ' read -r ag_id ag_model; do
+        [[ -n "$ag_id" && -n "$ag_model" ]] && AGENT_MODEL["$ag_id"]="${ag_model,,}"
+    done < <(tmux list-panes -a -F '#{@agent_id} #{@model_name}' 2>/dev/null)
+
     # Parse output
     declare -a LORD_ITEMS=() CMD_ITEMS=()
     declare -A AGENT_TASK_ID=() AGENT_TASK_STATUS=()
@@ -360,13 +366,13 @@ render() {
             case "$g_agent" in
                 karo)      g_icon="🏯"; g_name="家老" ;;
                 gunshi)    g_icon="🧠"; g_name="軍師" ;;
-                ashigaru1) $g_active && g_icon="⚔" || g_icon="💤"; g_name="足軽１" ;;
-                ashigaru2) $g_active && g_icon="⚔" || g_icon="💤"; g_name="足軽２" ;;
-                ashigaru3) $g_active && g_icon="⚔" || g_icon="💤"; g_name="足軽３" ;;
-                ashigaru4) $g_active && g_icon="⚔" || g_icon="💤"; g_name="足軽４" ;;
-                ashigaru5) $g_active && g_icon="⚔" || g_icon="💤"; g_name="足軽５" ;;
-                ashigaru6) $g_active && g_icon="⚔" || g_icon="💤"; g_name="足軽６" ;;
-                ashigaru7) $g_active && g_icon="⚔" || g_icon="💤"; g_name="足軽７" ;;
+                ashigaru1) [[ "${AGENT_MODEL[ashigaru1]:-}" == opus* ]] && { $g_active && g_icon="⚡" || g_icon="💤"; } || { $g_active && g_icon="⚔" || g_icon="💤"; }; g_name="足軽１" ;;
+                ashigaru2) [[ "${AGENT_MODEL[ashigaru2]:-}" == opus* ]] && { $g_active && g_icon="⚡" || g_icon="💤"; } || { $g_active && g_icon="⚔" || g_icon="💤"; }; g_name="足軽２" ;;
+                ashigaru3) [[ "${AGENT_MODEL[ashigaru3]:-}" == opus* ]] && { $g_active && g_icon="⚡" || g_icon="💤"; } || { $g_active && g_icon="⚔" || g_icon="💤"; }; g_name="足軽３" ;;
+                ashigaru4) [[ "${AGENT_MODEL[ashigaru4]:-}" == opus* ]] && { $g_active && g_icon="⚡" || g_icon="💤"; } || { $g_active && g_icon="⚔" || g_icon="💤"; }; g_name="足軽４" ;;
+                ashigaru5) [[ "${AGENT_MODEL[ashigaru5]:-}" == opus* ]] && { $g_active && g_icon="⚡" || g_icon="💤"; } || { $g_active && g_icon="⚔" || g_icon="💤"; }; g_name="足軽５" ;;
+                ashigaru6) [[ "${AGENT_MODEL[ashigaru6]:-}" == opus* ]] && { $g_active && g_icon="⚡" || g_icon="💤"; } || { $g_active && g_icon="⚔" || g_icon="💤"; }; g_name="足軽６" ;;
+                ashigaru7) [[ "${AGENT_MODEL[ashigaru7]:-}" == opus* ]] && { $g_active && g_icon="⚡" || g_icon="💤"; } || { $g_active && g_icon="⚔" || g_icon="💤"; }; g_name="足軽７" ;;
                 *)         g_icon="?";  g_name="$g_agent" ;;
             esac
 
@@ -402,9 +408,15 @@ render() {
                     && g_colored="${C_CYAN}${C_BOLD}${g_display}${C_RESET}" \
                     || g_colored="${C_DIM}${g_display}${C_RESET}"
             else
-                $g_active \
-                    && g_colored="${C_GREEN}${g_display}${C_RESET}" \
-                    || g_colored="${C_DIM}${g_display}${C_RESET}"
+                if $g_active; then
+                    if [[ "${AGENT_MODEL[$g_agent]:-}" == opus* ]]; then
+                        g_colored="${C_YELLOW}${C_BOLD}${g_display}${C_RESET}"
+                    else
+                        g_colored="${C_GREEN}${g_display}${C_RESET}"
+                    fi
+                else
+                    g_colored="${C_DIM}${g_display}${C_RESET}"
+                fi
             fi
 
             row_str+=" ${g_colored}"
