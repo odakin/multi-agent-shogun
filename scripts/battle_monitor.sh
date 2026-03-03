@@ -12,15 +12,13 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # ─── 排他起動: flock で1インスタンスのみ許可 ───
+# 既に動いている場合は起動拒否。右ペインで Ctrl+C してから再実行。
 LOCKFILE="$SCRIPT_DIR/.battle_monitor.lock"
 exec 9>"$LOCKFILE"
 if ! flock -n 9; then
-    echo "battle_monitor is already running. Killing old instance..." >&2
-    # ロック保持者のPIDを取得して kill
-    old_pid=$(cat "$LOCKFILE" 2>/dev/null)
-    [ -n "$old_pid" ] && kill "$old_pid" 2>/dev/null
-    sleep 1
-    flock -n 9 || { echo "Cannot acquire lock. Exiting." >&2; exit 1; }
+    echo "ERROR: battle_monitor is already running (PID $(cat "$LOCKFILE" 2>/dev/null))." >&2
+    echo "Right pane で Ctrl+C してから再実行してください。" >&2
+    exit 1
 fi
 echo $$ > "$LOCKFILE"
 PYTHON="$SCRIPT_DIR/.venv/bin/python3"
