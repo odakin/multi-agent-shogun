@@ -119,6 +119,10 @@ ESCALATE_COOLDOWN=${ESCALATE_COOLDOWN:-300}
 # Used to detect permanently-stuck codex/copilot/kimi agents (ISSUE-3 fix).
 # Reset to 0 when agent becomes idle.
 BUSY_SINCE=${BUSY_SINCE:-0}
+# CONTEXT_CLEAR_TS: tracks when /clear was last sent due to context exhaustion.
+# Prevents /clear spam when context stays ≤5%.
+CONTEXT_CLEAR_TS=${CONTEXT_CLEAR_TS:-0}
+CONTEXT_CLEAR_COOLDOWN=${CONTEXT_CLEAR_COOLDOWN:-60}
 
 # ─── Nudge throttle ───
 # Avoid spamming the same "inboxN" into the pane every timeout tick.
@@ -777,6 +781,48 @@ session_has_client() {
 #   1. If agent has active inotifywait self-watch → skip (agent wakes itself)
 #   2. If agent is busy (Working) → skip (nudge during Working loses Enter)
 #   3. tmux send-keys (短いnudgeのみ、timeout 5s)
+# ─── Context exhaustion detection ───
+# Captures pane content and checks for "Context left until auto-compact: N%".
+# If N ≤ 5, sends /clear immediately (instead of nudge) and returns 0 (handled).
+# Returns 1 if context is OK or check is not applicable (caller should nudge).
+check_context_exhaustion() {
+    local now="$1"
+
+    # Shogun pane: human-operated, not targeted
+    [ "$AGENT_ID" = "shogun" ] && return 1
+
+    # Only apply to claude agents (context tracking is a Claude Code feature)
+    local cli
+    cli=$(get_effective_cli_type)
+    [[ "$cli" != "claude" ]] && return 1
+
+    # Cooldown: avoid /clear spam
+    if [ "$CONTEXT_CLEAR_TS" -gt 0 ] && [ "$((now - CONTEXT_CLEAR_TS))" -lt "$CONTEXT_CLEAR_COOLDOWN" ]; then
+        echo "[$(date)] [SKIP] context-clear cooldown for $AGENT_ID ($((now - CONTEXT_CLEAR_TS))s/${CONTEXT_CLEAR_COOLDOWN}s)" >&2
+        return 1
+    fi
+
+    # Capture last 10 lines of pane (context bar is at the bottom)
+    local pane_content
+    pane_content=$(tmux capture-pane -t "$PANE_TARGET" -p 2>/dev/null | tail -10) || return 1
+
+    # Extract percentage from "Context left until auto-compact: N%"
+    local ctx_pct
+    ctx_pct=$(printf '%s' "$pane_content" | grep -oE 'Context left until auto-compact: [0-9]+%' | grep -oE '[0-9]+' | tail -1)
+    [ -z "$ctx_pct" ] && return 1  # No context message in pane
+
+    if [ "$ctx_pct" -le 5 ]; then
+        echo "[$(date)] [CTX-EXHAUSTED] $AGENT_ID context=${ctx_pct}% (≤5%) — sending /clear instead of nudge" >&2
+        send_cli_command "/clear"
+        CONTEXT_CLEAR_TS=$now
+        FIRST_UNREAD_SEEN=0
+        NEW_CONTEXT_SENT=0
+        return 0  # handled: /clear sent
+    fi
+
+    return 1  # context OK, proceed with normal nudge
+}
+
 send_wakeup() {
     local unread_count="$1"
     local nudge="inbox${unread_count}"
@@ -1096,6 +1142,12 @@ for s in data.get('specials', []):
         # Track when we first saw unread messages
         if [ "$FIRST_UNREAD_SEEN" -eq 0 ]; then
             FIRST_UNREAD_SEEN=$now
+        fi
+
+        # Context exhaustion check: if "Context left until auto-compact: N%" ≤ 5%,
+        # send /clear immediately instead of nudge to recover the agent.
+        if check_context_exhaustion "$now"; then
+            return 0
         fi
 
         if [ "${ASW_DISABLE_ESCALATION:-0}" = "1" ]; then
