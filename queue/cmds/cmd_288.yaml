@@ -57,7 +57,7 @@ phases:
           【完了条件】grep -r で「大御所様」「上様」がゼロ。構文エラーなし。git commit済み
         target_path: "/Users/odakin/Claude/multi-agent-shogun/scripts/"
         bloom_level: L2
-        status: assigned
+        status: done
       - id: s288c
         description: |
           【目的】config/, queue/, その他全ファイルの「大御所様」→「大御所様」置換 + 「上様」調査
@@ -72,7 +72,7 @@ phases:
           【注意】queue/archive/ は除外。RACE-001: s288a/s288bと同一ファイルを触らないこと
         target_path: "/Users/odakin/Claude/multi-agent-shogun/config/"
         bloom_level: L2
-        status: assigned
+        status: done
   - phase: 2
     mode: qc
     qc_for: [s288a, s288b, s288c]
