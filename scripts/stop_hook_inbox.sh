@@ -47,7 +47,7 @@ if [ -z "$AGENT_ID" ]; then
     exit 0
 fi
 
-# Shogun: 大殿様が直接操作するペイン。Stop hookによるinbox通知を抑制。
+# Shogun: 大御所様が直接操作するペイン。Stop hookによるinbox通知を抑制。
 # 将軍は自分のタイミングでinboxを読む。
 if [ "$AGENT_ID" = "shogun" ]; then
     exit 0

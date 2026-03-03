@@ -1,6 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-# battle_monitor.sh — 「大殿様の執務室」リアルタイム戦況モニター
+# battle_monitor.sh — 「大御所様の執務室」リアルタイム戦況モニター
 # ═══════════════════════════════════════════════════════════════
 # 4セクション: 🚨裁可待ち / 📋指令 / ⚔稼働状況 / 📜直近
 #
@@ -349,13 +349,13 @@ render() {
     local buf=""
 
     # ════ Header ════
-    # " 🏯 大殿様の執務室" vw=18: " "(1)+"🏯"(2)+" "(1)+"大殿様の執務室"(14)
+    # " 🏯 大御所様の執務室" vw=20: " "(1)+"🏯"(2)+" "(1)+"大御所様の執務室"(16)
     # "HH:MM:SS" vw=8
-    local hpad_n=$(( term_w - 18 - 8 ))
+    local hpad_n=$(( term_w - 20 - 8 ))
     [[ $hpad_n -lt 0 ]] && hpad_n=0
     local hpad
     hpad=$(printf '%*s' "$hpad_n" '')
-    buf+=" ${C_BOLD}${C_CYAN}🏯 大殿様の執務室${C_RESET}${hpad}${C_DIM}${now}${C_RESET}\n"
+    buf+=" ${C_BOLD}${C_CYAN}🏯 大御所様の執務室${C_RESET}${hpad}${C_DIM}${now}${C_RESET}\n"
     buf+=" ${C_GREEN}⚔稼働${active_count}${C_RESET}  ${C_DIM}💤待機${idle_count}${C_RESET}  ${C_DIM}📭未読${unread_count}${C_RESET}\n"
     buf+="${C_DIM}${sep}${C_RESET}\n"
 

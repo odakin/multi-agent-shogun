@@ -856,7 +856,7 @@ send_wakeup() {
         return 0
     fi
 
-    # Shogunペインは大殿様（人間）が直接操作するため、ナッジ送信を除外
+    # Shogunペインは大御所様（人間）が直接操作するため、ナッジ送信を除外
     # （inbox_write.sh によるファイル書き込みは継続 — 将軍は自分のタイミングで読む）
     if [ "$AGENT_ID" = "shogun" ]; then
         echo "[$(date)] [SKIP] Shogun pane: suppressing nudge (Lord operates directly)" >&2
@@ -904,7 +904,7 @@ send_wakeup_with_escape() {
     effective_cli=$(get_effective_cli_type)
     local c_ctrl_state="skipped"
 
-    # Shogunペインは大殿様（人間）が直接操作するため、全ナッジ（通常・エスカレーション）を除外
+    # Shogunペインは大御所様（人間）が直接操作するため、全ナッジ（通常・エスカレーション）を除外
     if [ "$AGENT_ID" = "shogun" ]; then
         echo "[$(date)] [SKIP] shogun: suppressing all nudges (Lord operates directly)" >&2
         return 0
