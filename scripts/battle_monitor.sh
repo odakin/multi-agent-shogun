@@ -46,6 +46,7 @@ NCOLS=3    # Grid column count (overridden dynamically in render)
 declare -a ACTIVITY_LOG=()
 declare -A PREV_MSG_COUNT=()
 MAX_ACTIVITY=100
+TRIM_LINE_BUF=""  # _trim_line() 出力バッファ（fork/subshell ゼロ）
 
 setup_terminal() {
     tput civis 2>/dev/null
@@ -99,6 +100,47 @@ trim_ansi_line() {
         (( j++ ))
     done
     printf '%s\033[K\n' "$result"
+}
+
+# ─── ANSI-aware line trim — no-fork version (writes to TRIM_LINE_BUF) ───
+# trim_ansi_line のfork不要版。出力を global TRIM_LINE_BUF に書く。
+_trim_line() {
+    local line="$1" max="$2"
+    local j=0 w=0 result="" in_esc=0 esc_seq=""
+    while [[ $j -lt ${#line} ]]; do
+        local c="${line:$j:1}"
+        if (( in_esc )); then
+            esc_seq+="$c"
+            if [[ "$c" =~ [A-Za-z] ]]; then
+                result+="$esc_seq"
+                in_esc=0
+                esc_seq=""
+            fi
+            (( j++ ))
+            continue
+        fi
+        if [[ "$c" == $'\033' ]]; then
+            in_esc=1
+            esc_seq="$c"
+            (( j++ ))
+            continue
+        fi
+        local cw=1
+        if [[ "$c" != [[:ascii:]] ]]; then
+            case "$c" in
+                ─|┌|┬|┐|│|└|┴|┘) cw=1 ;;
+                *) cw=2 ;;
+            esac
+        fi
+        if (( w + cw > max )); then
+            TRIM_LINE_BUF="${result}"$'\033[0m\033[K\n'
+            return
+        fi
+        result+="$c"
+        (( w += cw ))
+        (( j++ ))
+    done
+    TRIM_LINE_BUF="${result}"$'\033[K\n'
 }
 
 # ─── Single Python data fetch (all sections) ───
@@ -475,24 +517,18 @@ render() {
         done
     fi
 
-    # Output — 全フレーム一括出力（チラツキ完全防止 v3）
-    # 1. 全行を /dev/shm 一時ファイルに書き出す（trim_ansi_line fork ゼロ）
-    # 2. \033[J で画面末尾まで一括消去 → 末尾\nループ不要 + $(<file)末尾ストリップ問題を解消
-    #    ※ $(< file) は末尾連続\nを全削除するため、空行埋めループを\033[J に替えた
-    # 3. printf '%s' 1回 write(2) で端末へ転送 → 分割フレームが端末に届かない
-    # ★ 先頭に \033[?25l でカーソル非表示を毎フレーム保証（setup_terminal補強）
-    local _tmpf _frame
-    _tmpf=$(mktemp /dev/shm/bmon_XXXXXX 2>/dev/null || mktemp)
-    {
-        printf '\033[?25l\033[H'  # カーソル非表示 + 左上へ
-        while IFS= read -r _ln; do
-            trim_ansi_line "$_ln" "$term_w"
-        done < <(printf '%b' "$buf")
-        printf '\033[J'  # カーソル位置から画面末尾まで一括消去（末尾\nなし）
-    } > "$_tmpf"
-    _frame=$(< "$_tmpf")   # bash組み込み: fork なし。\033[J で末尾\nなし → ストリップなし
-    rm -f "$_tmpf"
-    printf '%s' "$_frame"  # 1回 write(2): 端末が分割フレームを受け取らない
+    # ── チラツキ根本解消 v4: bash変数でフレーム構築 → printf '%s' 1回 write ──
+    # tmpfile/mktemp 廃止。_trim_line が TRIM_LINE_BUF に書き、+=で連結。
+    # printf '%s' "$_outframe" = 1回 write(2) → 端末が分割フレームを受け取らない。
+    local _outframe=''
+    _outframe+=$'\033[?25l\033[H'  # カーソル非表示 + 左上へ
+    local _ln
+    while IFS= read -r _ln; do
+        _trim_line "$_ln" "$term_w"
+        _outframe+="$TRIM_LINE_BUF"
+    done < <(printf '%b' "$buf")
+    _outframe+=$'\033[J'  # カーソル位置から画面末尾まで一括消去
+    printf '%s' "$_outframe"  # 1回 write(2): 端末が分割フレームを受け取らない
 }
 
 # ─── Main ───
