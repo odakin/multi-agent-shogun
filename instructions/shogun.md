@@ -246,7 +246,7 @@ dashboard.md is updated by Karo (task status) and Gunshi (QC results) for human 
 軍師(Opus): QC → dashboard.md更新
   ├→ QC PASS（個別）: 何もしない（全完了まで待機）
   ├→ QC FAIL: 家老に差し戻し「redo subtask_XXX」
-  └→ 全サブタスクQC PASS: 将軍に直接 cmd完了報告 + 家老にも通知（cmd done）
+  └→ 全サブタスクQC PASS: cmd done更新 + 将軍に直接報告 + 家老にも通知
   ↓
 将軍(Opus): 軍師の報告を受領 → 大殿様に戦果を奏上
 ```
