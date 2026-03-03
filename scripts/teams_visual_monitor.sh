@@ -905,18 +905,18 @@ check_unresponsive_panes() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 動的リサイズ — コンテンツスコアベースで高さを動的に追従（列独立）
+# 動的リサイズ — 出力行数連動方式（列独立・60%収束）
 # ═══════════════════════════════════════════════════════════════════════════════
-# cursor_y と history_size のデルタでコンテンツスコアを累積管理。
-# スコアが高いペインを大きく、idle+無増加ペインは25%減衰で縮小。
+# cursor_y + history_size の今サイクルデルタを直接出力行数として計測。
+# 前サイクル比で増加した行数に比例して目標高さを算出（累積なし）。
+# 目標高さへは60%収束で即追従（前回適用高さ + (目標-前回)*0.6）。
 # select-layout + 列ファースト構造で各列独立リサイズを保証。
 # ═══════════════════════════════════════════════════════════════════════════════
-MIN_PANE_HEIGHT=6
+MIN_PANE_HEIGHT=5
 PREV_RESIZE_STATE=""
 RESIZE_DEBUG_COUNTER=0
-declare -A PANE_CONTENT_SCORE=()      # 各ペインのコンテンツスコア（累積）
-declare -A PANE_PREV_CURSOR_Y=()      # 前サイクルの cursor_y
-declare -A PANE_PREV_HISTORY_SIZE=()  # 前サイクルの history_size
+declare -A PANE_PREV_TOTAL_LINES=()  # 前サイクルの cursor_y + history_size
+declare -A PANE_TARGET_HEIGHT=()     # 前サイクルに適用した高さ（60%収束の基準）
 
 dynamic_resize_by_content() {
     local session="$1"
@@ -951,12 +951,12 @@ dynamic_resize_by_content() {
     pane_list=$(_tmux list-panes -t "$win_id" -F '#{pane_id} #{@agent_id}' 2>/dev/null)
     [ -z "$pane_list" ] && return
 
-    local pane_ids=() pane_nums=() scores_arr=()
+    local pane_ids=() pane_nums=() deltas_arr=() busy_arr=()
     while IFS=' ' read -r pid aid; do
         pane_ids+=("$pid")
         pane_nums+=("${pid#%}")    # %5 → 5
 
-        # cursor_y と history_size を1回で取得
+        # cursor_y + history_size = 総出力行数の代理指標（軽量・1回のtmux呼び出し）
         local metrics
         metrics=$(_tmux display-message -t "$pid" -p '#{cursor_y} #{history_size}' 2>/dev/null)
         local cur_y="${metrics%% *}"
@@ -966,73 +966,76 @@ dynamic_resize_by_content() {
         [[ "$cur_y" =~ ^[0-9]+$ ]] || cur_y=0
         [[ "$hist_size" =~ ^[0-9]+$ ]] || hist_size=0
 
-        # デルタ計算（負値は無視: カーソル上移動・リサイズ起因の変化を除外）
-        local prev_y="${PANE_PREV_CURSOR_Y[$pid]:-$cur_y}"
-        local prev_hist="${PANE_PREV_HISTORY_SIZE[$pid]:-$hist_size}"
-        local dy=$(( cur_y - prev_y ))
-        local dh=$(( hist_size - prev_hist ))
-        [ "$dy" -lt 0 ] && dy=0
-        [ "$dh" -lt 0 ] && dh=0
-        local delta=$(( dy + dh ))
+        # 今サイクルの総行数 = cursor_y (現在行位置) + history_size (スクロールバック行数)
+        local total_lines=$(( cur_y + hist_size ))
 
-        # スコア更新
-        local score="${PANE_CONTENT_SCORE[$pid]:-0}"
-        # busy 判定（delta に関わらず先に取得）
-        local is_busy=false
+        # 今サイクルに新たに出力された行数（負値=リサイズ起因の減少は0扱い）
+        local prev_total="${PANE_PREV_TOTAL_LINES[$pid]:-$total_lines}"
+        local delta=$(( total_lines - prev_total ))
+        [ "$delta" -lt 0 ] && delta=0
+
+        PANE_PREV_TOTAL_LINES[$pid]=$total_lines
+        deltas_arr+=("$delta")
+
+        # busy 判定（delta=0時の目標高さ算出に使用）
+        local is_busy=0
         if [ -n "$aid" ] && [ "$aid" != "..." ]; then
-            agent_is_busy_check "$pid" 2>/dev/null && is_busy=true
+            agent_is_busy_check "$pid" 2>/dev/null && is_busy=1
         fi
-
-        if [ "$delta" -gt 0 ]; then
-            # コンテンツ増加 → スコア加算
-            score=$(( score + delta ))
-        elif [ "$is_busy" = "true" ]; then
-            # busy だが delta==0（thinking/API待ち）→ busy ボーナスでスコア維持・拡大
-            score=$(( score + 2 ))
-        else
-            # idle かつ delta==0 → スコア25%減衰
-            score=$(( score * 3 / 4 ))
-        fi
-
-        PANE_CONTENT_SCORE[$pid]=$score
-        PANE_PREV_CURSOR_Y[$pid]=$cur_y
-        PANE_PREV_HISTORY_SIZE[$pid]=$hist_size
-        scores_arr+=("$score")
+        busy_arr+=("$is_busy")
     done <<< "$pane_list"
 
     [ "${#pane_ids[@]}" -ne 9 ] && return
 
     # 高さ計算（列ごと独立）
-    # 各ペインに MIN_PANE_HEIGHT を確保後、残りをスコア比例で配分
+    # 各ペインに MIN_PANE_HEIGHT を確保後、残りをデルタ比例で配分
     local usable_h=$(( win_height - 2 ))
     local remaining=$(( usable_h - MIN_PANE_HEIGHT * 3 ))
     [ "$remaining" -lt 0 ] && remaining=0
 
     local heights=()
     for col in 0 1 2; do
-        local col_scores=()
+        # 列内3ペインのデルタ・busy状態を取得
+        local col_deltas=() col_busy=()
         for row in 0 1 2; do
-            col_scores+=("${scores_arr[$((col * 3 + row))]}")
+            col_deltas+=("${deltas_arr[$((col * 3 + row))]}")
+            col_busy+=("${busy_arr[$((col * 3 + row))]}")
         done
 
-        # 列内スコア合計
-        local total_score=0
-        for s in "${col_scores[@]}"; do
-            total_score=$(( total_score + s ))
-        done
+        # 列内デルタ合計
+        local total_delta=$(( col_deltas[0] + col_deltas[1] + col_deltas[2] ))
 
-        local col_h=()
-        if [ "$total_score" -le 0 ]; then
-            # 全員スコア0 → 均等配分
-            local eq=$(( usable_h / 3 ))
-            col_h=("$eq" "$eq" "$eq")
-        else
+        # 各ペインの目標高さを算出
+        local col_desired=()
+        if [ "$total_delta" -le 0 ]; then
+            # 今サイクル出力なし → busy=average, idle=MIN
             for row in 0 1 2; do
-                local s="${col_scores[$row]}"
-                local extra=$(( remaining * s / total_score ))
-                col_h+=("$(( MIN_PANE_HEIGHT + extra ))")
+                if [ "${col_busy[$row]}" -eq 1 ]; then
+                    col_desired+=("$(( usable_h / 3 ))")
+                else
+                    col_desired+=("$MIN_PANE_HEIGHT")
+                fi
+            done
+        else
+            # 出力行数比例で目標高さを算出
+            for row in 0 1 2; do
+                local extra=$(( remaining * col_deltas[row] / total_delta ))
+                col_desired+=("$(( MIN_PANE_HEIGHT + extra ))")
             done
         fi
+
+        # 60%収束: new_h = prev_applied + (desired - prev_applied) * 6/10
+        # 即応しつつガタガタを防止（前回適用高さから60%だけ目標に近づく）
+        local col_h=()
+        for row in 0 1 2; do
+            local pid="${pane_ids[$((col * 3 + row))]}"
+            local prev_applied="${PANE_TARGET_HEIGHT[$pid]:-$(( usable_h / 3 ))}"
+            local desired="${col_desired[$row]}"
+            local converged=$(( prev_applied + (desired - prev_applied) * 6 / 10 ))
+            [ "$converged" -lt "$MIN_PANE_HEIGHT" ] && converged=$MIN_PANE_HEIGHT
+            PANE_TARGET_HEIGHT[$pid]=$converged
+            col_h+=("$converged")
+        done
 
         # 端数を最終ペインで吸収（合計を usable_h に）
         local col_sum=$(( col_h[0] + col_h[1] + col_h[2] ))
@@ -1069,7 +1072,7 @@ dynamic_resize_by_content() {
     # 定期デバッグログ（10回select-layoutごと）
     RESIZE_DEBUG_COUNTER=$((RESIZE_DEBUG_COUNTER + 1))
     if [ "$((RESIZE_DEBUG_COUNTER % 10))" -eq 0 ]; then
-        log "dynamic_resize_by_content: scores=${scores_arr[*]} heights=${heights[*]}"
+        log "dynamic_resize_by_content: deltas=${deltas_arr[*]} heights=${heights[*]}"
     fi
 }
 
