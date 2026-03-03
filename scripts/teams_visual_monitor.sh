@@ -29,7 +29,7 @@ POLL_INTERVAL=3
 LAYOUT_APPLIED=false
 BORDER_APPLIED=false
 # pane-border-format の目標値（差分更新用）。先頭スペースで罫線と文字の間にパディング挿入。
-TARGET_BORDER_FORMAT=' #{?pane_active,#[fg=colour255,bold],#[fg=colour240]}#{?#{@agent_name_ja},#{@agent_name_ja},#{@agent_id}}#[default] #[dim](#{@model_name})#[default]#{?#{==:Opus,#{@model_name}}, #[fg=colour63,bold]★#[default],} #{@current_task}'
+TARGET_BORDER_FORMAT=' #{?pane_active,#[fg=colour16,bold],#[fg=colour240]}#{?#{@agent_name_ja},#{@agent_name_ja},#{@agent_id}}#[default] #[dim](#{@model_name})#[default]#{?#{==:Opus,#{@model_name}}, #[fg=colour63,bold]★#[default],} #{@current_task}'
 
 # pane-border-lines スタイル: heavy は tmux 3.2+ 必須。バージョン検出して自動選択。
 _detect_border_line_style() {
@@ -530,8 +530,8 @@ apply_border_format() {
             continue
         fi
         _tmux set-option -w -t "$win" pane-border-status top 2>/dev/null
-        _tmux set-option -w -t "$win" pane-border-style "fg=colour240" 2>/dev/null
-        _tmux set-option -w -t "$win" pane-active-border-style "fg=colour33" 2>/dev/null
+        _tmux set-option -w -t "$win" pane-border-style "fg=colour240,bg=default" 2>/dev/null
+        _tmux set-option -w -t "$win" pane-active-border-style "fg=colour255,bg=colour33" 2>/dev/null
         # heavy: 太線で9ペイン密集時の境界が明確。tmux 3.2+ のみ対応。
         # 起動時にバージョン検出済み（BORDER_LINE_STYLE）→ フォント非対応なら "single" を使用。
         _tmux set-option -w -t "$win" pane-border-lines "$BORDER_LINE_STYLE" 2>/dev/null
