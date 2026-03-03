@@ -1,5 +1,5 @@
 id: cmd_286
-status: in_progress
+status: done
 timestamp: "2026-03-03T14:50:00+09:00"
 purpose: "battle_monitorのチラツキを完全解消する（cmd_281では直らなかった）"
 acceptance_criteria:

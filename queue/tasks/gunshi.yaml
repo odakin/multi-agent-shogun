@@ -1,34 +1,31 @@
 task:
-  task_id: gunshi_qc_cmd_285
-  parent_cmd: cmd_285
+  task_id: gunshi_qc_cmd_286
+  parent_cmd: cmd_286
   type: quality_check
   status: done
-  priority: medium
+  priority: high
   bloom_level: L2
   description: |
-    【QC】cmd_285 の品質確認
+    【QC】cmd_286 Phase 2 の品質確認（再QC - ashigaru2完了確認）
 
     【成果物】
-    【cmd_285】裁可待ちセクション色分け改善
-    - ashigaru6 による修正: battle_monitor.sh (commit 0019cba)
-    - 修正内容:
-      (1) 見出し「🚨 裁可待ち」→ 黄色太字維持
-      (2) 各項目行 → C_RESET後にデフォルト色で出力
-      (3) 既存レイアウト・チラツキ対策を維持
-      (4) bash -n 構文チェック PASS
+    【cmd_286】battle_monitorのチラツキ完全解消
+    - ashigaru2: s286a修正完了（commit 3701270）
+    - 修正方針: cat→printf '%s' '...'（1回write）+ カーソル非表示毎フレーム保証
 
     【Acceptance Criteria】
-    1. 見出しのみ黄色（太字）であること
-    2. 各項目の本文がデフォルト色（黒）で表示されること
-    3. 裁可待ち0件の場合に影響しないこと
-    4. チラツキが発生しないこと（一括出力維持）
+    1. 右ペインに「一瞬表示→消滅」現象が発生しないこと
+    2. 1秒間隔の更新で画面が安定していること（目視確認）
+    3. 既存の表示内容・レイアウトが壊されていないこと
+    4. bash -n 構文チェック PASS
+    5. git commit (3701270) が確認できること
 
     【検証手順】
-    1. git log で commit 0019cba (s285a) 確認
-    2. battle_monitor.sh の色分けロジック確認
-    3. bash -n 構文チェック PASS
-    4. 実機テスト: 見出し黄色・本文黒で表示されることを確認
+    1. git log で commit 3701270 確認
+    2. battle_monitor.sh の printf '%s' ロジック確認
+    3. bash -n 構文チェック
+    4. 実機テスト: チラツキが解消されていることを確認
 
-  timestamp: '2026-03-03T14:50:00+09:00'
+  timestamp: '2026-03-03T14:46:30+09:00'
   ashigaru_report_ids:
-    - ashigaru6_s285a
+    - ashigaru2_s286a

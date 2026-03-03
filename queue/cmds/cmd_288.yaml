@@ -1,5 +1,5 @@
 id: cmd_288
-status: in_progress
+status: done
 timestamp: "2026-03-03T15:00:00+09:00"
 purpose: "全システムで「大御所様」→「大御所様」に統一変更。「上様」残存も調査・報告"
 acceptance_criteria:
