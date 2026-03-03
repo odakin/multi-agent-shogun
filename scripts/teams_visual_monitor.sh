@@ -513,7 +513,7 @@ apply_border_format() {
         # 起動時にバージョン検出済み（BORDER_LINE_STYLE）→ フォント非対応なら "single" を使用。
         _tmux set-option -w -t "$win" pane-border-lines "$BORDER_LINE_STYLE" 2>/dev/null
         _tmux set-option -w -t "$win" pane-border-format \
-            '#{?pane_active,#[fg=colour33,bold],#[fg=colour240]}#{@agent_name_ja}#[default] #[dim](#{@model_name})#[default] #{@current_task}' \
+            '#{?pane_active,#[fg=colour33,bold],#[fg=colour240]}#{?#{@agent_name_ja},#{@agent_name_ja},#{@agent_id}}#[default] #[dim](#{@model_name})#[default] #{@current_task}' \
             2>/dev/null
     done
 }
