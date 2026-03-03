@@ -1,0 +1,58 @@
+worker_id: gunshi
+task_id: gunshi_qc_cmd_292_followup
+parent_cmd: cmd_292
+timestamp: "2026-03-03T16:18:00+09:00"
+status: done
+result:
+  type: quality_check
+  qa_decision: pass
+  commits: ["2df72b9"]
+  based_on: "e9ebe9b (s292a3 QC PASS版)"
+  files_changed:
+    - scripts/battle_monitor.sh
+  changes: "_trim_line() 条件付き\\033[K — 末尾文字消去バグ修正"
+  subtasks_reviewed:
+    - task_id: s292a (followup)
+      worker: ashigaru7
+      qa_decision: pass
+      notes: |
+        e9ebe9b(s292a3)で追加された_trim_line()のバグを発見・修正。
+        47列端末で47文字出力後、\033[K(Erase to End of Line)が
+        最終列の文字を消去していた。
+        修正: w>=maxの時は\033[K省略、w<maxの時のみ適用。
+        実機検証: 47x50ペイン、capture-pane 2回差分なし、hexdumpで末尾文字保持確認。
+  acceptance_criteria_check:
+    ac1_commit_2df72b9: true
+    ac2_conditional_erase: true
+    ac3_ashigaru7_report: true
+    ac4_47col_grid: true
+    ac5_bash_n_syntax: true
+    ac6_live_verification: true
+  scope_match: complete
+  issues_found: []
+  detail: |
+    ## cmd_292 Followup QC — _trim_line 末尾文字消去バグ修正
+
+    ### バグの詳細
+    _trim_line() で47文字を47列端末に書くとカーソルはcol=47に留まる。
+    その直後の\033[K(EL)がcol=47の文字を消去。
+    影響: ヘッダー時刻 "16:04:2"(7桁→6桁)、ボーダー末尾の+/|消失。
+
+    ### 修正 (commit 2df72b9)
+    ```bash
+    if (( w >= max )); then
+        TRIM_LINE_BUF="${result}"$'\n'        # \033[K省略
+    else
+        TRIM_LINE_BUF="${result}"$'\033[K\n'  # 短行のみEL
+    fi
+    ```
+
+    ### 実機検証
+    - 環境: shogun-teams:bmon_test 47列×50行
+    - capture-pane 2回: 構造同一(チラツキなし)
+    - hexdump: 47文字+0x0A = 末尾文字保持確認
+    - 全9エージェント2列グリッド表示確認
+
+  skill_candidate:
+    found: false
+files_modified: ["dashboard.md"]

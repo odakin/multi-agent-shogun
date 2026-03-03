@@ -1,0 +1,55 @@
+task:
+  task_id: gunshi_qc_cmd_292_followup
+  parent_cmd: cmd_292
+  type: quality_check
+  status: done
+  priority: critical
+  bloom_level: L3
+  description: |
+    【QC FOLLOWUP】cmd_292 Phase 2b — ashigaru7 追加バグ修正の検証
+
+    【背景】
+    cmd_292 Phase 2 QC (s292a3/e9ebe9b) を PASS した後に、
+    ashigaru7 が追加バグを発見・修正しました（commit 2df72b9）。
+    本QCはこの追加修正を検証します。
+
+    【バグの詳細】
+    関数: _trim_line() (scripts/battle_monitor.sh line 143)
+    問題: \033[K が最終列の文字を消去
+    影響: ヘッダー秒の1の位、グリッド末尾の+/|が消える
+    原因: 47列端末で47文字出力後、カーソル位置col=47のまま\033[Kで消去
+    修正: w>=max時は\033[K省略、w<max時のみ\033[K適用
+
+    【修正の概要】
+    1. 条件付き \033[K 出力
+    2. if (( w >= max )): TRIM_LINE_BUF="${result}"$'\n'  # \033[K省略
+    3. else:               TRIM_LINE_BUF="${result}"$'\033[K\n'  # 短行のみEL
+
+    【Acceptance Criteria】
+    1. commit 2df72b9 の修正内容を確認
+    2. _trim_line() 関数の条件付き\033[Kロジックを確認
+    3. ashigaru7_report (s292a_ashigaru7) の実機検証を確認
+       - 47x50 ペインでの検証結果
+       - チラツキなし確認
+       - 末尾文字保持確認（hexdump検証含む）
+    4. 47列グリッド全エージェント表示確認
+    5. bash -n 構文チェック PASS
+    6. 実機検証ログ確認
+       - 2回のcapture-pane差分なし
+       - 最終文字消去なし
+
+    【検証手順】
+    1. git show 2df72b9 で修正内容確認
+    2. queue/reports/s292a_ashigaru7.yaml の検証セクション確認
+    3. scripts/battle_monitor.sh の _trim_line() の条件判定を確認
+    4. bash -n scripts/battle_monitor.sh で構文チェック
+    5. レポートの hexdump テスト結果確認
+
+    【重要度】
+    Critical: 既に QC PASS した実装に隠れたバグがあったため、
+    確実な検証が必須。最終列の文字表示は見た目に影響大。
+
+  timestamp: '2026-03-03T16:13:30+09:00'
+  ashigaru_report_ids:
+    - s292a_ashigaru7
+  notes: "ashigaru7 auto-assigned after health_checker restart; discovered bug in e9ebe9b implementation"

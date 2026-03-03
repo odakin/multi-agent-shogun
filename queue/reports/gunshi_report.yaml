@@ -1,26 +1,27 @@
 worker_id: gunshi
-task_id: gunshi_qc_cmd_292
+task_id: gunshi_qc_cmd_292_followup
 parent_cmd: cmd_292
-timestamp: "2026-03-03T16:05:00+09:00"
+timestamp: "2026-03-03T16:18:00+09:00"
 status: done
 result:
   type: quality_check
   qa_decision: pass
-  commits: ["e9ebe9b"]
+  commits: ["2df72b9"]
+  based_on: "e9ebe9b (s292a3 QC PASS版)"
   files_changed:
     - scripts/battle_monitor.sh
-  changes: "battle_monitor チラツキ完全解消 v4 (pure bash _trim_line + _outframe 1回write)"
+  changes: "_trim_line() 条件付き\\033[K — 末尾文字消去バグ修正"
   subtasks_reviewed:
-    - task_id: s292a3
-      worker: ashigaru2
+    - task_id: s292a (followup)
+      worker: ashigaru7
       qa_decision: pass
-      notes: "TRIM_LINE_BUF+_trim_line() fork廃止、_outframe +=構築、printf 1回write(2)。実機検証済み。"
+      notes: "w>=maxで\\033[K省略。hexdumpで末尾文字保持確認。実機検証PASS。"
   acceptance_criteria_check:
-    ac1_ashigaru2_report: true
-    ac2_commit_e9ebe9b: true
-    ac3_code_review: true
-    ac4_bash_n_syntax: true
-    ac5_47col_grid: true
+    ac1_commit_2df72b9: true
+    ac2_conditional_erase: true
+    ac3_ashigaru7_report: true
+    ac4_47col_grid: true
+    ac5_bash_n_syntax: true
     ac6_live_verification: true
   scope_match: complete
   issues_found: []
