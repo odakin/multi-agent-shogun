@@ -47,6 +47,12 @@ if [ -z "$AGENT_ID" ]; then
     exit 0
 fi
 
+# Shogun: 大殿様が直接操作するペイン。Stop hookによるinbox通知を抑制。
+# 将軍は自分のタイミングでinboxを読む。
+if [ "$AGENT_ID" = "shogun" ]; then
+    exit 0
+fi
+
 # ─── Analyze last_assistant_message (v2.1.47+) ───
 # Shogun skips karo notification (shogun doesn't report to karo)
 # but still falls through to inbox check below.

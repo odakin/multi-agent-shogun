@@ -342,8 +342,7 @@ render() {
             IFS=$'\t' read -r lcmd ltitle lsummary lage <<< "$li"
             local age_str=""
             [[ -n "$lage" ]] && age_str=" ${C_DIM}(${lage})${C_RESET}"
-            buf+="${C_YELLOW}${C_BOLD} 📋 ${lcmd}  ${ltitle}${C_RESET}${age_str}\n"
-            [[ -n "$lsummary" ]] && buf+=" ${C_DIM}  └ ${lsummary}${C_RESET}\n"
+            buf+="${C_YELLOW}${C_BOLD} → ${ltitle}${C_RESET}${age_str}\n"
         done
     else
         buf+=" ${C_DIM}🚨 裁可待ち${C_RESET}\n"
