@@ -28,6 +28,8 @@ TEAM_CONFIG_DIR="$HOME/.claude/teams"
 POLL_INTERVAL=3
 LAYOUT_APPLIED=false
 BORDER_APPLIED=false
+# pane-border-format の目標値（差分更新用）。先頭スペースで罫線と文字の間にパディング挿入。
+TARGET_BORDER_FORMAT=' #{?pane_active,#[fg=colour33,bold],#[fg=colour240]}#{?#{@agent_name_ja},#{@agent_name_ja},#{@agent_id}}#[default] #[dim](#{@model_name})#[default] #{@current_task}'
 
 # pane-border-lines スタイル: heavy は tmux 3.2+ 必須。バージョン検出して自動選択。
 _detect_border_line_style() {
@@ -52,6 +54,7 @@ STALE_TASK_THRESHOLD=600     # 10分でタスク滞留 ⏰ 表示
 TMUX_SOCKET=""               # -L オプションの値（空なら デフォルトサーバー）
 declare -A TASK_DESC_CACHE   # agent名 → description冒頭テキスト
 declare -A TASK_ID_CACHE     # agent名 → 前回のtask_id
+declare -A BORDER_FORMAT_WIN_CACHE  # window_id → 適用済みborder format（差分更新・フリッカー防止用）
 
 mkdir -p "$LOG_DIR"
 
@@ -502,19 +505,23 @@ style_pane() {
 apply_border_format() {
     local session="$1"
 
-    # 全ウィンドウに適用
+    # 全ウィンドウに差分更新（変更がある時だけ set-option → フリッカー防止）
     local windows
     windows=$(_tmux list-windows -t "$session" -F '#{window_id}' 2>/dev/null)
     for win in $windows; do
+        # 前回適用値と同じならスキップ（毎サイクル再設定しない）
+        if [ "${BORDER_FORMAT_WIN_CACHE[$win]:-}" = "$TARGET_BORDER_FORMAT" ]; then
+            continue
+        fi
         _tmux set-option -w -t "$win" pane-border-status top 2>/dev/null
         _tmux set-option -w -t "$win" pane-border-style "fg=colour240" 2>/dev/null
         _tmux set-option -w -t "$win" pane-active-border-style "fg=colour33,bold" 2>/dev/null
         # heavy: 太線で9ペイン密集時の境界が明確。tmux 3.2+ のみ対応。
         # 起動時にバージョン検出済み（BORDER_LINE_STYLE）→ フォント非対応なら "single" を使用。
         _tmux set-option -w -t "$win" pane-border-lines "$BORDER_LINE_STYLE" 2>/dev/null
-        _tmux set-option -w -t "$win" pane-border-format \
-            '#{?pane_active,#[fg=colour33,bold],#[fg=colour240]}#{?#{@agent_name_ja},#{@agent_name_ja},#{@agent_id}}#[default] #[dim](#{@model_name})#[default] #{@current_task}' \
-            2>/dev/null
+        _tmux set-option -w -t "$win" pane-border-format "$TARGET_BORDER_FORMAT" 2>/dev/null
+        BORDER_FORMAT_WIN_CACHE[$win]="$TARGET_BORDER_FORMAT"
+        log "pane-border-format updated for window $win (padding+diff-update)"
     done
 }
 
@@ -1173,11 +1180,10 @@ while true; do
         fi
     done <<< "$pane_list"
 
-    # pane-border-format を適用（ペイン数変化時 or 初回）
+    # pane-border-format を適用（ペイン数変化時 or 初回。差分更新なので重複設定なし）
     if [ "$BORDER_APPLIED" = false ] || [ "$pane_count" -ne "$PREV_PANE_COUNT" ]; then
         apply_border_format "$local_session"
         BORDER_APPLIED=true
-        log "pane-border-format applied (panes: $pane_count)"
     fi
 
     # レイアウト適用（ペイン数変化時のみ）
