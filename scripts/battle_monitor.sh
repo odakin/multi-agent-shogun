@@ -50,7 +50,6 @@ declare -A PREV_MSG_COUNT=()
 MAX_ACTIVITY=100
 
 setup_terminal() {
-    tput smcup 2>/dev/null
     tput civis 2>/dev/null
     tput clear 2>/dev/null
     printf '\033[?7l'  # Disable DECAWM (auto-wrap) as safety net
@@ -59,7 +58,6 @@ setup_terminal() {
 cleanup_terminal() {
     printf '\033[?7h'  # Re-enable DECAWM (auto-wrap)
     tput cnorm 2>/dev/null
-    tput rmcup 2>/dev/null
 }
 
 trap cleanup_terminal EXIT INT TERM
