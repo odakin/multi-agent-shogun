@@ -1033,10 +1033,23 @@ for s in data.get('specials', []):
             local busy_cli
             busy_cli=$(get_effective_cli_type)
             if [[ "$busy_cli" == "claude" ]]; then
-                # Claude Code: Stop hook will catch unread messages when the agent's
-                # turn ends. No nudge needed at all — just log and skip completely.
-                # Don't reset FIRST_UNREAD_SEEN so idle-nudge works if hook misses.
-                echo "[$(date)] $normal_count unread for $AGENT_ID but agent is busy (claude) — Stop hook will deliver" >&2
+                # Claude Code: Stop hook catches unread when turn ends — normally no nudge needed.
+                # However if Stop hook silently fails, the agent stays stuck forever.
+                # BUSY_TIMEOUT_CLAUDE: after this many seconds of continuous busy, force a nudge
+                # (risk: Enter may be lost mid-turn, but infinite deadlock is worse).
+                local claude_busy_timeout="${CLAUDE_BUSY_TIMEOUT:-120}"
+                if [ "$BUSY_SINCE" -eq 0 ]; then
+                    BUSY_SINCE=$now
+                fi
+                local busy_duration=$((now - BUSY_SINCE))
+                if [ "$busy_duration" -lt "$claude_busy_timeout" ]; then
+                    echo "[$(date)] $normal_count unread for $AGENT_ID but agent is busy (claude) — Stop hook will deliver (${busy_duration}s/${claude_busy_timeout}s)" >&2
+                else
+                    # Stop hook may have failed — force nudge as fallback
+                    echo "[$(date)] $normal_count unread for $AGENT_ID busy (claude) ${busy_duration}s — Stop hook silent fail suspected, sending force nudge" >&2
+                    BUSY_SINCE=0  # Reset so next cycle restarts the timer
+                    send_wakeup "$normal_count"
+                fi
             else
                 # Codex/Copilot/Kimi: No Stop hook. Pause escalation timer while busy,
                 # but allow escalation after ESCALATE_PHASE2 of continuous busy to detect
