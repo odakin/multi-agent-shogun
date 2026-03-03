@@ -12,7 +12,10 @@ language: ja
 shell: zsh
 
 # Bloom Routing（cli_adapter.sh が top-level から読み取る）
-bloom_routing: manual  # off | manual | auto — タスク難度に基づくモデル動的選択
+# off: Bloom分析なし、モデル固定
+# manual: bloom_analysis_required: true のタスクのみ軍師Bloom分析
+# auto: 全タスクに軍師Bloom分析（L1-L3→sonnet, L4-L6→opus）
+bloom_routing: manual
 
 # エージェント設定（レガシー — cli.agents を使用せよ）
 agents:
@@ -25,6 +28,8 @@ cli:
       model: haiku
     gunshi:
       model: opus
+    ashigaru:
+      model: sonnet  # 全足軽の基本モデル（bloom_level L4-L6タスク時はOpusに動的切替）
 
 # スキル設定
 skill:
