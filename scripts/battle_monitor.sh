@@ -59,7 +59,15 @@ C_BG_NONE=$'\033[49m'
 declare -a ACTIVITY_LOG=()       # ring buffer of "[HH:MM] from: content"
 declare -A PREV_MSG_COUNT=()     # per-agent inbox message count tracker
 MAX_ACTIVITY=200                 # max entries to keep
-FEED_INITIALIZED=false           # skip existing msgs on first run, load last N
+
+# ─── Agent Japanese name map ───
+declare -A AGENT_JA=(
+    [shogun]="将軍" [karo]="家老" [gunshi]="軍師"
+    [ashigaru1]="足軽１" [ashigaru2]="足軽２" [ashigaru3]="足軽３"
+    [ashigaru4]="足軽４" [ashigaru5]="足軽５" [ashigaru6]="足軽６"
+    [ashigaru7]="足軽７"
+)
+agent_ja() { echo "${AGENT_JA[$1]:-$1}"; }
 
 # ─── Terminal setup ───
 setup_terminal() {
@@ -145,38 +153,43 @@ for agent in agents:
     except: pass
     result[agent] = {'task_id': str(tid), 'status': str(status), 'unread': unread}
 
-# Current cmd (per-cmd files + recent archive)
+# Cmd table data (active cmds + last 5 archived, sorted ascending)
 try:
     import glob
-    all_cmds = []
-    for cf in sorted(glob.glob(f'{root}/queue/cmds/*.yaml')):
-        with open(cf) as f:
-            cmd = yaml.safe_load(f) or {}
-        if isinstance(cmd, dict):
-            cid = cmd.get('id') or '?'
-            purpose = cmd.get('purpose') or cmd.get('description', '?') or '?'
-            if isinstance(purpose, str): purpose = purpose.strip().replace('\n', ' ')
-            status = cmd.get('status', '?') or '?'
-            all_cmds.append({'id': cid, 'status': status, 'purpose': purpose, 'archived': False})
-    for cf in sorted(glob.glob(f'{root}/queue/archive/cmd_*.yaml')):
-        with open(cf) as f:
-            cmd = yaml.safe_load(f) or {}
-        if isinstance(cmd, dict):
-            cid = cmd.get('id') or '?'
-            purpose = cmd.get('purpose') or cmd.get('description', '?') or '?'
-            if isinstance(purpose, str): purpose = purpose.strip().replace('\n', ' ')
-            status = cmd.get('status', '?') or '?'
-            all_cmds.append({'id': cid, 'status': status, 'purpose': purpose, 'archived': True})
-    def cmd_num(c):
-        try: return int(c['id'].replace('cmd_',''))
+    def _cmd_num(cid):
+        try: return int(str(cid).replace('cmd_',''))
         except: return 0
-    all_cmds.sort(key=cmd_num, reverse=True)
-    result['_cmds'] = all_cmds[:10]
-    active_parts = [f"{c['id']}: {c['purpose'][:40]}" for c in all_cmds if not c['archived']]
+    active_cmds = []
+    for cf in sorted(glob.glob(f'{root}/queue/cmds/*.yaml')):
+        try:
+            with open(cf) as f:
+                cmd = yaml.safe_load(f) or {}
+            if not isinstance(cmd, dict) or not cmd.get('id'): continue
+            purpose = str(cmd.get('purpose') or cmd.get('description','') or '').strip().replace('\n',' ')
+            active_cmds.append({'id': str(cmd['id']), 'num': _cmd_num(cmd['id']),
+                'purpose': purpose, 'status': str(cmd.get('status','?'))})
+        except: pass
+    seen_ids = set(c['id'] for c in active_cmds)
+    archive_cmds = []
+    for cf in sorted(glob.glob(f'{root}/queue/archive/cmd_*.yaml')):
+        try:
+            with open(cf) as f:
+                cmd = yaml.safe_load(f) or {}
+            if not isinstance(cmd, dict) or not cmd.get('id'): continue
+            if str(cmd['id']) in seen_ids: continue
+            purpose = str(cmd.get('purpose') or cmd.get('description','') or '').strip().replace('\n',' ')
+            archive_cmds.append({'id': str(cmd['id']), 'num': _cmd_num(cmd['id']),
+                'purpose': purpose, 'status': str(cmd.get('status','?'))})
+        except: pass
+    archive_cmds.sort(key=lambda c: c['num'])
+    cmd_rows = archive_cmds[-5:] + active_cmds
+    cmd_rows.sort(key=lambda c: c['num'])
+    result['_cmd_table'] = cmd_rows
+    active_parts = [f"{c['id']}: {c['purpose'][:40]}" for c in active_cmds]
     result['_cmd'] = ' / '.join(active_parts) if active_parts else '(指令なし)'
 except:
     result['_cmd'] = '(指令なし)'
-    result['_cmds'] = []
+    result['_cmd_table'] = []
 
 # Collect inbox events from ALL agents + shogun
 new_events = []
@@ -292,6 +305,31 @@ truncate_str() {
     echo "$str"
 }
 
+# ─── Render cmd table with box-drawing borders (s256b design) ───
+# Requires: CMD_TABLE_ROWS array, buf variable (from caller render())
+render_cmd_table() {
+    local tw="$1"
+    local C1=3 C3=12
+    local C2=$(( tw - C1 - C3 - 10 ))
+    [[ $C2 -lt 8 ]] && { buf+="  ${C_DIM}(端末幅が狭すぎます)${C_RESET}\n"; return; }
+    local h1 h2 h3
+    h1=$(printf '─%.0s' $(seq 1 $((C1+2))))
+    h2=$(printf '─%.0s' $(seq 1 $((C2+2))))
+    h3=$(printf '─%.0s' $(seq 1 $((C3+2))))
+    # CJK-aware header padding: "内容"=4disp "状態"=4disp
+    local hdr2; hdr2="内容$(printf '%*s' $((C2-4)) '')"
+    local hdr3; hdr3="状態$(printf '%*s' $((C3-4)) '')"
+    buf+="${C_DIM}┌${h1}┬${h2}┬${h3}┐${C_RESET}\n"
+    buf+="${C_DIM}│${C_RESET} cmd ${C_DIM}│${C_RESET} ${hdr2} ${C_DIM}│${C_RESET} ${hdr3} ${C_DIM}│${C_RESET}\n"
+    buf+="${C_DIM}├${h1}┼${h2}┼${h3}┤${C_RESET}\n"
+    local row
+    for row in "${CMD_TABLE_ROWS[@]}"; do
+        IFS=$'\t' read -r cnum cpurp cstat <<< "$row"
+        buf+="${C_DIM}│${C_RESET} ${C_BOLD}${cnum}${C_RESET} ${C_DIM}│${C_RESET} ${cpurp} ${C_DIM}│${C_RESET} ${cstat} ${C_DIM}│${C_RESET}\n"
+    done
+    buf+="${C_DIM}└${h1}┴${h2}┴${h3}┘${C_RESET}\n"
+}
+
 # ─── Render one cycle ───
 render() {
     local term_width term_height
@@ -322,20 +360,32 @@ for k, v in data.get('_msg_counts', {}).items():
 # Lord pending items
 for item in data.get('_lord_pending', []):
     print(f\"_lord\t{item['cmd_id']}\t{item['title']}\t{item['summary']}\t{item['age']}\")
-# Cmd table items
-_STATUS_EMOJI = {'pending': '⏳', 'in_progress': '🔄', 'done': '✅', 'qc_pass': '✅', 'failed': '❌', 'deferred': '⏸'}
-for c in data.get('_cmds', []):
-    cid = str(c.get('id', '?'))
-    cstat = str(c.get('status', '?'))
-    cpurp = str(c.get('purpose', '?'))[:25]
-    emoji = _STATUS_EMOJI.get(cstat, cstat)
-    print(f'_cmds\t{cid}\t{emoji}\t{cpurp}')
+# Cmd table rows with CJK-aware padding (s256b design)
+import unicodedata as _ud
+def _dw(s): return sum(2 if _ud.east_asian_width(c) in ('W','F') else 1 for c in s)
+def _pad(s, w):
+    r, used = '', 0
+    for c in s:
+        cw = 2 if _ud.east_asian_width(c) in ('W','F') else 1
+        if used + cw > w: r += '…'; used += 1; break
+        r += c; used += cw
+    return r + ' ' * (w - used)
+_SEMOJI = {'pending':'⏳ 待機中','in_progress':'🔄 処理中','done':'✅ 完了  ',
+    'qc_pass':'✅ 完了QC','failed':'❌ 失敗  ','deferred':'⏸ 保留  '}
+_C1, _C3 = 3, 12
+_C2 = max(8, ${term_width} - _C1 - _C3 - 10)
+for c in data.get('_cmd_table', []):
+    cnum = str(c.get('num',0)).zfill(3)[-3:]
+    cpurp = _pad(str(c.get('purpose','?')), _C2)
+    cstat_r = str(c.get('status','?'))
+    cstat = _pad(_SEMOJI.get(cstat_r, cstat_r), _C3)
+    print(f'_ctbl\t{cnum}\t{cpurp}\t{cstat}')
 " <<< "$yaml_json" 2>/dev/null)
 
     # Parse into arrays
     declare -A TASK_ID TASK_STATUS UNREAD
     declare -a LORD_ITEMS=()
-    declare -a CMD_ITEMS=()
+    declare -a CMD_TABLE_ROWS=()
     local CMD_LINE=""
     while IFS=$'\t' read -r key v1 v2 v3 v4; do
         case "$key" in
@@ -343,7 +393,7 @@ for c in data.get('_cmds', []):
             _event) [[ -n "$v1" ]] && ACTIVITY_LOG+=("$v1") ;;
             _count) [[ -n "$v1" && -n "$v2" ]] && PREV_MSG_COUNT["$v1"]="$v2" ;;
             _lord)  [[ -n "$v1" ]] && LORD_ITEMS+=("${v1}	${v2}	${v3}	${v4}") ;;
-            _cmds)  [[ -n "$v1" ]] && CMD_ITEMS+=("${v1}	${v2}	${v3}") ;;
+            _ctbl)  [[ -n "$v1" ]] && CMD_TABLE_ROWS+=("${v1}	${v2}	${v3}") ;;
             *)
                 TASK_ID["$key"]="$v1"
                 TASK_STATUS["$key"]="$v2"
@@ -352,9 +402,11 @@ for c in data.get('_cmds', []):
         esac
     done <<< "$parsed"
     local lord_count=${#LORD_ITEMS[@]}
-    local cmd_count=${#CMD_ITEMS[@]}
+    local lord_lines=0
+    [[ $lord_count -gt 0 ]] && lord_lines=$(( 2 + lord_count * 2 ))
+    local cmd_table_count=${#CMD_TABLE_ROWS[@]}
     local cmd_table_lines=0
-    [[ $cmd_count -gt 0 ]] && cmd_table_lines=$(( cmd_count + 2 ))
+    [[ $cmd_table_count -gt 0 ]] && cmd_table_lines=$(( cmd_table_count + 4 ))
 
     # Trim activity log to max
     while [[ ${#ACTIVITY_LOG[@]} -gt $MAX_ACTIVITY ]]; do
@@ -378,10 +430,10 @@ for c in data.get('_cmds', []):
     # Calculate lines available for busy agents
     local busy_count=${#busy_agents[@]}
     local idle_count=${#idle_agents[@]}
-    # Fixed lines: header(2) + separator(1) + idle section(~ceil(idle_count/3)+1) + footer(2) + separators(busy_count)
-    local idle_rows=$(( (idle_count + 2) / 3 ))  # 3 agents per row
-    [[ $idle_count -gt 0 ]] && idle_rows=$((idle_rows + 1))  # +1 for separator
-    local fixed_lines=$((2 + 1 + cmd_table_lines + idle_rows + 2 + busy_count))
+    # Fixed lines: header(2) + sep(1) + cmd_table + lord_pending + idle(2-col) + busy sections
+    local idle_rows=$(( (idle_count + 1) / 2 ))  # 2 agents per row (s256c)
+    [[ $idle_count -gt 0 ]] && idle_rows=$((idle_rows + 1))  # +1 for blank line
+    local fixed_lines=$((2 + 1 + cmd_table_lines + lord_lines + idle_rows + 2 + busy_count))
     local avail_for_busy=$((term_height - fixed_lines))
     local lines_per_busy=$BUSY_LINES
     if [[ $busy_count -gt 0 ]]; then
@@ -408,16 +460,9 @@ for c in data.get('_cmds', []):
     buf+=" ${C_GREEN}稼働${busy_count}${C_RESET} │ ${C_DIM}待機${idle_count}${C_RESET} │ 未読$(( $(for a in "${AGENTS[@]}"; do echo "${UNREAD[$a]:-0}"; done | paste -sd+ | bc 2>/dev/null || echo 0) ))${lord_badge}  ${C_DIM}${now}${C_RESET}\n"
     buf+="${C_DIM}${sep_line}${C_RESET}\n"
 
-    # Cmd table (OPT-A: sep_line直後、lord_pending前)
-    if [[ $cmd_count -gt 0 ]]; then
-        buf+=" ${C_BOLD}📋 cmd一覧${C_RESET}\n"
-        for cmd_item in "${CMD_ITEMS[@]}"; do
-            IFS=$'\t' read -r cid cemoji cpurpose <<< "$cmd_item"
-            local cpurp_short
-            cpurp_short=$(truncate_str "$cpurpose" $((term_width - 16)))
-            buf+="  ${C_BOLD}${cid}${C_RESET} ${cemoji}  ${C_DIM}${cpurp_short}${C_RESET}\n"
-        done
-        buf+="${C_DIM}${thin_sep}${C_RESET}\n"
+    # Cmd table (box-drawing, s256b design: sep_line直後、lord_pending前)
+    if [[ $cmd_table_count -gt 0 ]]; then
+        render_cmd_table "$term_width"
     fi
 
     # Lord pending (裁可待ち) section — P1:awk廃止 P2:視認性強化 P4:経過時間 P5:summary表示 P6:幅制限
@@ -468,27 +513,35 @@ for c in data.get('_cmds', []):
         buf+="${C_DIM}${thin_sep}${C_RESET}\n"
     done
 
-    # Idle agents (1 per line, clean format)
+    # Idle agents (Japanese name, 2-col layout — s256c design)
     if [[ ${#idle_agents[@]} -gt 0 ]]; then
         buf+="\n"
-        local max_tid_len=$((term_width - 16))
-        [[ $max_tid_len -lt 6 ]] && max_tid_len=6
-        for agent in "${idle_agents[@]}"; do
-            local tid="${TASK_ID[$agent]:----}"
-            local tstat="${TASK_STATUS[$agent]:----}"
-            local unread="${UNREAD[$agent]:-0}"
-            local icon
-            icon=$(task_icon "$tstat")
-            local short_name="$agent"
-            [[ "$agent" =~ ^ashigaru ]] && short_name="ash${agent#ashigaru}"
-
-            local tid_short
-            tid_short=$(truncate_str "$tid" "$max_tid_len")
-
-            local unread_mark=""
-            [[ "$unread" -gt 0 ]] && unread_mark=" ${C_YELLOW}✉${unread}${C_RESET}"
-
-            buf+="  ${C_DIM}⚪${short_name}${C_RESET} ${icon}${C_DIM}${tid_short}${C_RESET}${unread_mark}\n"
+        local _i=0
+        while [[ $_i -lt ${#idle_agents[@]} ]]; do
+            local _ag_l="${idle_agents[$_i]}"
+            local _ag_r="${idle_agents[$((_i+1))]:-}"
+            # Build left cell
+            local _ja_l _icon_l _tid_l _unr_l _cell_l
+            _ja_l=$(agent_ja "$_ag_l")
+            _icon_l=$(task_icon "${TASK_STATUS[$_ag_l]:----}")
+            _tid_l=$(truncate_str "${TASK_ID[$_ag_l]:----}" 8)
+            _unr_l="${UNREAD[$_ag_l]:-0}"
+            _cell_l="${_ja_l} ${_icon_l} ${_tid_l}"
+            [[ "$_unr_l" -gt 0 ]] && _cell_l+=" ✉${_unr_l}"
+            if [[ -z "$_ag_r" ]]; then
+                buf+="  ${C_DIM}${_cell_l}${C_RESET}\n"
+            else
+                # Build right cell
+                local _ja_r _icon_r _tid_r _unr_r _cell_r
+                _ja_r=$(agent_ja "$_ag_r")
+                _icon_r=$(task_icon "${TASK_STATUS[$_ag_r]:----}")
+                _tid_r=$(truncate_str "${TASK_ID[$_ag_r]:----}" 8)
+                _unr_r="${UNREAD[$_ag_r]:-0}"
+                _cell_r="${_ja_r} ${_icon_r} ${_tid_r}"
+                [[ "$_unr_r" -gt 0 ]] && _cell_r+=" ✉${_unr_r}"
+                buf+="  ${C_DIM}${_cell_l}${C_RESET}    ${C_DIM}${_cell_r}${C_RESET}\n"
+            fi
+            _i=$((_i + 2))
         done
     fi
 
@@ -498,11 +551,10 @@ for c in data.get('_cmds', []):
     # Count lines used so far (count \n in buf)
     local tmp="${buf//[!\\]/}"
     # Approximate: header(3) + busy(busy_count*(lines_per_busy+2)) + idle(1+idle_count) + separator(1)
-    local used_lines=$((3 + cmd_table_lines + busy_count * (lines_per_busy + 2) + idle_count + 2))
-    [[ ${#idle_agents[@]} -gt 0 ]] && used_lines=$((used_lines + 1))  # blank line before idle
+    local used_lines=$((3 + cmd_table_lines + lord_lines + busy_count * (lines_per_busy + 2) + idle_rows + 2))
     local feed_lines=$((term_height - used_lines))
     [[ $feed_lines -lt 1 ]] && feed_lines=1
-    [[ $feed_lines -gt 30 ]] && feed_lines=30  # cap at 30
+    [[ $feed_lines -gt 6 ]] && feed_lines=6  # cap: ログを最下部に約5行表示 (s256c)
 
     local log_count=${#ACTIVITY_LOG[@]}
     if [[ $log_count -eq 0 ]]; then
