@@ -428,21 +428,25 @@ render() {
         done
     fi
 
-    # Output — バッファに全行を溜めて一括出力（チラツキ防止）
-    local _out=""
-    _out+='\033[H'  # カーソルホーム
-    local _ln
-    local _line_num=0
-    while IFS= read -r _ln; do
-        _out+="$(trim_ansi_line "$_ln" "$term_w")\033[K\n"
-        (( _line_num++ ))
-    done < <(printf '%b' "$buf")
-    # 残りの行をクリア（前回より行数が減った場合の残像除去）
-    while [ "$_line_num" -lt "$term_h" ]; do
-        _out+="\033[K\n"
-        (( _line_num++ ))
-    done
-    printf '%b' "$_out"
+    # Output — 一時ファイル経由一括出力（subshell fork排除・チラツキ防止）
+    # $() サブシェルなしで trim_ansi_line を直接呼び出し → 行ごとの fork ゼロ
+    # /dev/shm（メモリ上）優先で書き込み → cat で端末に一括転送
+    local _tmpf
+    _tmpf=$(mktemp /dev/shm/bmon_XXXXXX 2>/dev/null || mktemp)
+    {
+        printf '\033[H'
+        local _line_num=0
+        while IFS= read -r _ln; do
+            trim_ansi_line "$_ln" "$term_w"
+            (( _line_num++ )) || true
+        done < <(printf '%b' "$buf")
+        while (( _line_num < term_h )); do
+            printf '\033[K\n'
+            (( _line_num++ )) || true
+        done
+    } > "$_tmpf"
+    cat "$_tmpf"
+    rm -f "$_tmpf"
 }
 
 # ─── Main ───
