@@ -840,7 +840,7 @@ check_permission_deadlock() {
 declare -A PANE_LAST_ACTIVITY
 declare -A PANE_LAST_CLEAR
 declare -A LAST_RENUDGE_TS
-declare -A PANE_LAST_OVERFLOW_CLEAR   # prompt_overflow /clear cooldown (300s)
+# PANE_LAST_OVERFLOW_CLEAR は廃止。共有ロック (overflow_clear_acquire_lock) に移行。
 
 check_unresponsive_panes() {
     local session="$1"
@@ -861,13 +861,11 @@ check_unresponsive_panes() {
         # "Prompt is too long" を検知したら即座に /clear → inbox で復旧指示
         if type agent_prompt_overflow_check &>/dev/null; then
             if agent_prompt_overflow_check "$pane_id" 2>/dev/null; then
-                local last_overflow_clear="${PANE_LAST_OVERFLOW_CLEAR[$pane_id]:-0}"
-                if [ "$((now - last_overflow_clear))" -ge "$CLEAR_COOLDOWN" ]; then
+                if overflow_clear_acquire_lock "$agent_id" "$CLEAR_COOLDOWN"; then
                     log "PROMPT-OVERFLOW: $agent_id ($pane_id) — sending /clear + inbox recovery"
                     _tmux send-keys -t "$pane_id" "/clear" 2>/dev/null
                     sleep 1
                     _tmux send-keys -t "$pane_id" Enter 2>/dev/null
-                    PANE_LAST_OVERFLOW_CLEAR[$pane_id]=$now
                     # 3秒待ってから inbox で復旧指示
                     (
                         sleep 3
@@ -880,7 +878,7 @@ check_unresponsive_panes() {
                         "【モニタ自動復旧】${agent_id} が Prompt is too long のため /clear を送信した。" \
                         escalation monitor 2>/dev/null &
                 else
-                    log "PROMPT-OVERFLOW: $agent_id ($pane_id) — cooldown active (last clear ${last_overflow_clear}s ago)"
+                    log "PROMPT-OVERFLOW: $agent_id ($pane_id) — cooldown active (another process already sent /clear)"
                 fi
                 continue  # overflow handled — skip normal unresponsive check
             fi

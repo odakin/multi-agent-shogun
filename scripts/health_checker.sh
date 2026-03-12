@@ -30,8 +30,9 @@ log() { echo "[$(date '+%H:%M:%S')] $LOG_PREFIX $*" >&2; }
 declare -A LAST_NUDGE_TIME=()
 NUDGE_COOLDOWN=90  # seconds — don't re-nudge same agent within 90s
 
-# ─── Prompt overflow /clear cooldown (prevent repeated /clear) ───
-declare -A LAST_OVERFLOW_CLEAR=()
+# ─── Prompt overflow /clear cooldown ───
+# 実際のクールダウンは lib/agent_status.sh の overflow_clear_acquire_lock() が
+# 共有ファイルロックで管理。OVERFLOW_CLEAR_COOLDOWN は設定値として残す。
 OVERFLOW_CLEAR_COOLDOWN=300  # 5 minutes
 
 # ─── Stale task detection (nudged but YAML unchanged) ───
@@ -187,15 +188,11 @@ check_agent() {
     # "Prompt is too long" = fatal. Agent cannot self-recover. Send /clear + inbox.
     if type agent_prompt_overflow_check &>/dev/null; then
         if agent_prompt_overflow_check "$pane"; then
-            local now_ts
-            now_ts=$(date +%s)
-            local last_oc="${LAST_OVERFLOW_CLEAR[$agent]:-0}"
-            if (( now_ts - last_oc >= OVERFLOW_CLEAR_COOLDOWN )); then
+            if overflow_clear_acquire_lock "$agent" "$OVERFLOW_CLEAR_COOLDOWN"; then
                 log "PROMPT-OVERFLOW $agent: detected 'Prompt is too long' — sending /clear"
                 timeout 2 tmux send-keys -t "$pane" "/clear" 2>/dev/null
                 sleep 1
                 timeout 2 tmux send-keys -t "$pane" Enter 2>/dev/null
-                LAST_OVERFLOW_CLEAR[$agent]=$now_ts
                 # 3秒後に inbox で復旧指示
                 (
                     sleep 3
@@ -208,7 +205,7 @@ check_agent() {
                     "【ヘルスチェッカ自動復旧】${agent} が Prompt is too long のため /clear を送信した。" \
                     escalation health_checker 2>/dev/null &
             else
-                log "PROMPT-OVERFLOW $agent: cooldown active (${last_oc})"
+                log "PROMPT-OVERFLOW $agent: cooldown active (another process already sent /clear)"
             fi
             return 0
         fi

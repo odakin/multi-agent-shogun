@@ -203,6 +203,52 @@ agent_prompt_overflow_check() {
     return 1  # normal
 }
 
+# ═══════════════════════════════════════════════════════════════
+# Overflow /clear 共有クールダウン
+# ═══════════════════════════════════════════════════════════════
+# monitor と health_checker が独立プロセスなので、プロセス内変数では
+# 二重 /clear を防げない。共有タイムスタンプファイルで排他制御する。
+#
+# overflow_clear_acquire_lock <agent_id> [cooldown_sec]
+#   → 0: ロック取得成功（/clear を送ってよい）
+#   → 1: クールダウン中（他プロセスが先に /clear 済み）
+#
+# overflow_clear_release <agent_id>
+#   タイムスタンプファイルを現在時刻で更新（/clear 送信後に呼ぶ）
+# ═══════════════════════════════════════════════════════════════
+OVERFLOW_LOCK_DIR="/tmp/shogun_overflow"
+
+overflow_clear_acquire_lock() {
+    local agent_id="$1"
+    local cooldown="${2:-300}"
+    local lock_file="${OVERFLOW_LOCK_DIR}/${agent_id}.ts"
+    mkdir -p "$OVERFLOW_LOCK_DIR" 2>/dev/null
+
+    # flock で排他 — 同時呼び出し時に片方だけ通す
+    (
+        flock -n 200 || exit 1  # 他プロセスがロック中なら即失敗
+        local now
+        now=$(date +%s)
+        if [[ -f "$lock_file" ]]; then
+            local last_ts
+            last_ts=$(cat "$lock_file" 2>/dev/null || echo 0)
+            if (( now - last_ts < cooldown )); then
+                exit 1  # クールダウン中
+            fi
+        fi
+        echo "$now" > "$lock_file"
+        exit 0
+    ) 200>"${OVERFLOW_LOCK_DIR}/${agent_id}.lock"
+    return $?
+}
+
+overflow_clear_release() {
+    local agent_id="$1"
+    local lock_file="${OVERFLOW_LOCK_DIR}/${agent_id}.ts"
+    mkdir -p "$OVERFLOW_LOCK_DIR" 2>/dev/null
+    date +%s > "$lock_file"
+}
+
 # get_pane_state_label <pane_target>
 # 人間が読めるラベルを返す。
 get_pane_state_label() {
