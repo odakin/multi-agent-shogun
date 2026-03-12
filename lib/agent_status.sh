@@ -2,8 +2,9 @@
 # lib/agent_status.sh — エージェント稼働状態検出の共有ライブラリ
 #
 # 提供関数:
-#   agent_is_busy_check <pane_target>   → 0=busy, 1=idle, 2=pane不在
-#   get_pane_state_label <pane_target>  → "稼働中" / "待機中" / "不在"
+#   agent_is_busy_check <pane_target>   → 0=busy, 1=idle, 2=pane不在, 3=prompt_overflow
+#   agent_prompt_overflow_check <pane>  → 0=overflow detected, 1=normal, 2=pane不在
+#   get_pane_state_label <pane_target>  → "稼働中" / "待機中" / "不在" / "溢れ"
 #
 # 使用例:
 #   source lib/agent_status.sh
@@ -12,7 +13,7 @@
 
 # agent_is_busy_check <pane_target>
 # tmux paneの末尾5行からCLI固有のidle/busyパターンを検出する。
-# Returns: 0=busy, 1=idle, 2=pane不在
+# Returns: 0=busy, 1=idle, 2=pane不在, 3=prompt_overflow
 #
 # Detection strategy:
 #   1. Status bar check (last non-empty line): 'esc to' only appears in
@@ -40,6 +41,13 @@ agent_is_busy_check() {
     # Pane doesn't exist or truly empty (no content in bottom 20 lines)
     if [[ -z "$pane_tail" ]]; then
         return 2
+    fi
+
+    # ── Prompt overflow check (HIGHEST PRIORITY) ──
+    # "Prompt is too long" = fatal API error. Agent cannot self-recover.
+    # Must be checked before busy/idle — the pane may also show idle prompt.
+    if echo "$pane_tail" | grep -qiF 'Prompt is too long'; then
+        return 3  # prompt_overflow — requires external /clear recovery
     fi
 
     # ── Status bar check (last non-empty line = most reliable) ──
@@ -170,6 +178,31 @@ agent_stuck_check() {
     return 1  # not stuck
 }
 
+# ═══════════════════════════════════════════════════════════════
+# agent_prompt_overflow_check — 「Prompt is too long」専用検知
+# ═══════════════════════════════════════════════════════════════
+# agent_is_busy_check の return 3 と同等だが、他のチェックを一切
+# 行わず高速に overflow だけを検知する軽量版。
+# monitor/health_checker が overflow 専用チェックに使う。
+#
+# Returns: 0=overflow detected, 1=normal, 2=pane absent
+# ═══════════════════════════════════════════════════════════════
+agent_prompt_overflow_check() {
+    local pane_target="$1"
+    local pane_tail
+    pane_tail=$(timeout 2 tmux capture-pane -t "$pane_target" -p 2>/dev/null | tail -20 | grep -v '^[[:space:]]*$' | tail -5)
+
+    if [[ -z "$pane_tail" ]]; then
+        return 2
+    fi
+
+    if echo "$pane_tail" | grep -qiF 'Prompt is too long'; then
+        return 0  # overflow detected
+    fi
+
+    return 1  # normal
+}
+
 # get_pane_state_label <pane_target>
 # 人間が読めるラベルを返す。
 get_pane_state_label() {
@@ -180,5 +213,6 @@ get_pane_state_label() {
         0) echo "稼働中" ;;
         1) echo "待機中" ;;
         2) echo "不在" ;;
+        3) echo "溢れ" ;;
     esac
 }

@@ -30,6 +30,10 @@ log() { echo "[$(date '+%H:%M:%S')] $LOG_PREFIX $*" >&2; }
 declare -A LAST_NUDGE_TIME=()
 NUDGE_COOLDOWN=90  # seconds — don't re-nudge same agent within 90s
 
+# ─── Prompt overflow /clear cooldown (prevent repeated /clear) ───
+declare -A LAST_OVERFLOW_CLEAR=()
+OVERFLOW_CLEAR_COOLDOWN=300  # 5 minutes
+
 # ─── Stale task detection (nudged but YAML unchanged) ───
 declare -A NUDGE_COUNT=()         # per-agent nudge count for same stale task
 declare -A NUDGE_TASK_ID=()       # task_id at first nudge
@@ -177,6 +181,37 @@ check_agent() {
     # 将軍は人間が直接操作するため、全自動ナッジを抑制（inbox nudge・compact-recovery含む）
     if [ "$agent" = "shogun" ]; then
         return 0
+    fi
+
+    # 0. Prompt overflow detection (HIGHEST PRIORITY)
+    # "Prompt is too long" = fatal. Agent cannot self-recover. Send /clear + inbox.
+    if type agent_prompt_overflow_check &>/dev/null; then
+        if agent_prompt_overflow_check "$pane"; then
+            local now_ts
+            now_ts=$(date +%s)
+            local last_oc="${LAST_OVERFLOW_CLEAR[$agent]:-0}"
+            if (( now_ts - last_oc >= OVERFLOW_CLEAR_COOLDOWN )); then
+                log "PROMPT-OVERFLOW $agent: detected 'Prompt is too long' — sending /clear"
+                timeout 2 tmux send-keys -t "$pane" "/clear" 2>/dev/null
+                sleep 1
+                timeout 2 tmux send-keys -t "$pane" Enter 2>/dev/null
+                LAST_OVERFLOW_CLEAR[$agent]=$now_ts
+                # 3秒後に inbox で復旧指示
+                (
+                    sleep 3
+                    bash "$SCRIPT_DIR/scripts/inbox_write.sh" "$agent" \
+                        "【自動復旧】Prompt is too long エラーにより /clear を実行した。CLAUDE.md を読んでタスクを再開せよ。" \
+                        prompt_overflow_recovery health_checker 2>/dev/null
+                ) &
+                # 将軍にも通知
+                bash "$SCRIPT_DIR/scripts/inbox_write.sh" shogun \
+                    "【ヘルスチェッカ自動復旧】${agent} が Prompt is too long のため /clear を送信した。" \
+                    escalation health_checker 2>/dev/null &
+            else
+                log "PROMPT-OVERFLOW $agent: cooldown active (${last_oc})"
+            fi
+            return 0
+        fi
     fi
 
     # 1. Stuck detection (feedback prompts, session end dialogs, etc.)

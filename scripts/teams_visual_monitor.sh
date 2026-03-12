@@ -693,9 +693,17 @@ except Exception:
         local desc_suffix=""
         [ -n "$display_val" ] && [ -n "$task_desc" ] && desc_suffix=" $task_desc"
 
+        # 💥 prompt_overflow 検知 — 最優先表示
+        local overflow=""
+        if type agent_prompt_overflow_check &>/dev/null; then
+            if agent_prompt_overflow_check "$pane_id" 2>/dev/null; then
+                overflow=" 💥"
+            fi
+        fi
+
         # idle + inbox未読チェック（📬）— 将軍・家老は対象外
         local mailbox=""
-        if [[ "$agent_name" != "shogun" && "$agent_name" != "team-lead" && "$agent_name" != "karo" ]]; then
+        if [[ -z "$overflow" && "$agent_name" != "shogun" && "$agent_name" != "team-lead" && "$agent_name" != "karo" ]]; then
             local inbox_file="$SCRIPT_DIR/queue/inbox/${agent_name}.yaml"
             if [ -f "$inbox_file" ]; then
                 local unread
@@ -710,7 +718,7 @@ except Exception:
             fi
         fi
 
-        _tmux set-option -p -t "$pane_id" @current_task "${display_val}${desc_suffix}${mailbox}" 2>/dev/null
+        _tmux set-option -p -t "$pane_id" @current_task "${display_val}${desc_suffix}${overflow}${mailbox}" 2>/dev/null
     done
 }
 
@@ -832,6 +840,7 @@ check_permission_deadlock() {
 declare -A PANE_LAST_ACTIVITY
 declare -A PANE_LAST_CLEAR
 declare -A LAST_RENUDGE_TS
+declare -A PANE_LAST_OVERFLOW_CLEAR   # prompt_overflow /clear cooldown (300s)
 
 check_unresponsive_panes() {
     local session="$1"
@@ -847,6 +856,35 @@ check_unresponsive_panes() {
 
         # 将軍・モニターは /clear しない（人間との会話履歴を保持）
         [[ "$agent_id" == "shogun" || "$agent_id" == "team-lead" || "$agent_id" == "monitor" ]] && continue
+
+        # ── Prompt overflow 自動復旧（最優先） ──
+        # "Prompt is too long" を検知したら即座に /clear → inbox で復旧指示
+        if type agent_prompt_overflow_check &>/dev/null; then
+            if agent_prompt_overflow_check "$pane_id" 2>/dev/null; then
+                local last_overflow_clear="${PANE_LAST_OVERFLOW_CLEAR[$pane_id]:-0}"
+                if [ "$((now - last_overflow_clear))" -ge "$CLEAR_COOLDOWN" ]; then
+                    log "PROMPT-OVERFLOW: $agent_id ($pane_id) — sending /clear + inbox recovery"
+                    _tmux send-keys -t "$pane_id" "/clear" 2>/dev/null
+                    sleep 1
+                    _tmux send-keys -t "$pane_id" Enter 2>/dev/null
+                    PANE_LAST_OVERFLOW_CLEAR[$pane_id]=$now
+                    # 3秒待ってから inbox で復旧指示
+                    (
+                        sleep 3
+                        bash "$SCRIPT_DIR/scripts/inbox_write.sh" "$agent_id" \
+                            "【自動復旧】Prompt is too long エラーにより /clear を実行した。CLAUDE.md を読んでタスクを再開せよ。" \
+                            prompt_overflow_recovery monitor 2>/dev/null
+                    ) &
+                    # 将軍にも通知
+                    bash "$SCRIPT_DIR/scripts/inbox_write.sh" shogun \
+                        "【モニタ自動復旧】${agent_id} が Prompt is too long のため /clear を送信した。" \
+                        escalation monitor 2>/dev/null &
+                else
+                    log "PROMPT-OVERFLOW: $agent_id ($pane_id) — cooldown active (last clear ${last_overflow_clear}s ago)"
+                fi
+                continue  # overflow handled — skip normal unresponsive check
+            fi
+        fi
 
         # タスクなしの正当な idle 状態なら /clear 不要（idle /clear ループ防止）
         local task_yaml="$SCRIPT_DIR/queue/tasks/${agent_id}.yaml"
