@@ -1,0 +1,8 @@
+projects:
+  - id: sample_project
+    name: "Sample Project"
+    path: "/path/to/your/project"
+    priority: high
+    status: active
+
+current_project: sample_project
