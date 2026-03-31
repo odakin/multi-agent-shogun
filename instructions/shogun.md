@@ -469,7 +469,7 @@ Phase 3: QC（mode: qc — ★義務★）
     - "旧荒川上流接続線と同等以上の滑らかさで描画されていること"
     - "旧荒川側の表示を壊さないこと"
   command: |
-    リポジトリ: /Users/odakin/tmp/ishida-tsutsumi-map
+    リポジトリ: ~/tmp/ishida-tsutsumi-map
     大御所様のレビュー: 「利根川の点が少なすぎる。カクカク。データ容量は気にしない」
   project: ishida-tsutsumi-map
   priority: high
@@ -481,28 +481,28 @@ Phase 3: QC（mode: qc — ★義務★）
         - id: s300a
           description: |
             【目的】既存の addNakaAyaseUpstreamExt() の座標データと描画ロジックを解析
-            【入力】/Users/odakin/tmp/ishida-tsutsumi-map/src/（全ソースファイル）
+            【入力】~/tmp/ishida-tsutsumi-map/src/（全ソースファイル）
             【出力】現在の座標点数・データソース・simplify設定を記載したレポート
             【完了条件】queue/reports/ashigaru{N}_report.yaml に調査結果を記載済み
-          target_path: "/Users/odakin/tmp/ishida-tsutsumi-map/src/"
+          target_path: "~/tmp/ishida-tsutsumi-map/src/"
           bloom_level: L2
           status: pending
         - id: s300b
           description: |
             【目的】旧利根川上流部の高密度座標データを取得・特定
-            【入力】/Users/odakin/tmp/ishida-tsutsumi-map/（既存座標データを確認）
+            【入力】~/tmp/ishida-tsutsumi-map/（既存座標データを確認）
             【出力】高密度座標データと既存座標の接続点・取得範囲をレポート
             【完了条件】queue/reports/ashigaru{N}_report.yaml に座標データを記載済み
-          target_path: "/Users/odakin/tmp/ishida-tsutsumi-map/"
+          target_path: "~/tmp/ishida-tsutsumi-map/"
           bloom_level: L2
           status: pending
         - id: s300c
           description: |
             【目的】現在の座標点数と旧荒川の品質比較で合格基準を定量化
-            【入力】/Users/odakin/tmp/ishida-tsutsumi-map/（現在11点と旧荒川15点のデータ）
+            【入力】~/tmp/ishida-tsutsumi-map/（現在11点と旧荒川15点のデータ）
             【出力】「十分な滑らかさ」の定量基準を記載したレポート
             【完了条件】queue/reports/ashigaru{N}_report.yaml に定量基準を記載済み
-          target_path: "/Users/odakin/tmp/ishida-tsutsumi-map/"
+          target_path: "~/tmp/ishida-tsutsumi-map/"
           bloom_level: L2
           status: pending
     - phase: 2
@@ -512,10 +512,10 @@ Phase 3: QC（mode: qc — ★義務★）
           description: |
             【目的】Phase 1 の調査結果を統合し、座標データを高密度版に置換
             【入力】s300a・s300b・s300c のレポート（queue/reports/ashigaru*_report.yaml, parent_cmd:cmd_300）
-            【出力】/Users/odakin/tmp/ishida-tsutsumi-map/src/ の座標データを更新済みファイル
+            【出力】~/tmp/ishida-tsutsumi-map/src/ の座標データを更新済みファイル
             【完了条件】描画の滑らかさが旧荒川と同等以上、git commit・push済み
           depends_on: [s300a, s300b, s300c]
-          target_path: "/Users/odakin/tmp/ishida-tsutsumi-map/src/"
+          target_path: "~/tmp/ishida-tsutsumi-map/src/"
           bloom_level: L3
           status: pending
     - phase: 3
