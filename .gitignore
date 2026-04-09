@@ -27,6 +27,7 @@ node_modules/
 # Claude Code settings (spinner verbs only, no secrets)
 !.claude/
 !.claude/settings.json
+!.claude/public-repo.marker
 
 # Instructions (core OSS)
 !instructions/
