@@ -18,6 +18,7 @@ node_modules/
 !.gitattributes
 !.gitleaks.toml
 !CLAUDE.md
+!DESIGN.md
 !LICENSE
 !README.md
 !README_en.md
