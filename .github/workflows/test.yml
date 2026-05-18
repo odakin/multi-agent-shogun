@@ -7,6 +7,10 @@ on:
       - 'feature/**'  # feature/で始まる全ブランチ
   pull_request:
 
+permissions:
+  contents: read
+
+
 jobs:
   unit-tests:
     name: Unit Tests (bats)
