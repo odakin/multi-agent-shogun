@@ -1,3 +1,5 @@
+# yamllint disable
+# ↑ 過去 snapshot の凍結 archive (dup key 含むが史実として保存、 lint 対象外)
 - id: cmd_200
   timestamp: "2026-02-28T14:00:00+09:00"
   purpose: "ishida-tsutsumi-map の河川表示を3点修正し、1590年頃の利根川・荒川の流路を正確に表現する"
