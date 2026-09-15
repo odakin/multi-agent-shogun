@@ -1,0 +1,9 @@
+# public-tree-accept.txt — scan-public-tree.sh の棚卸しで「見た上で残す」 と決めた token。
+#
+# ⚠️ pre-commit gate には効かない (= 新しい書き込みは今までどおり止まる)。 効くのは
+#    claude-config/scripts/scan-public-tree.sh の棚卸しだけ。
+# ⚠️ ここに書けるのは **既に tree の他の場所に在る文字列** だけ (= 走査が検査する)。
+
+/Users/odakin   # owner の GitHub handle と同じ語 = 識別子の増分なし。 在るのは first_setup.sh が
+                # 展開して書いた config/settings.yaml と、 凍結された実行記録 (queue/) だけ。
+                # settings.yaml の追跡を外すと、 pull した別マシンでは手元の設定が消えるので外さない
